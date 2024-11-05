@@ -1,0 +1,145 @@
+syntax = "proto3";
+import "google/protobuf/any.proto";
+package dd_proto;
+
+message Hash {
+  optional string type = 1;
+  optional string value = 2;
+}
+
+message Buffer {
+  optional bytes data = 1;
+  optional int64 size = 2;
+  optional Hash hash = 3;
+}
+
+message CtrlPktPatchInfo {
+  int64 offset = 1;
+  int64 size = 2;
+  int64 xrt_arg_idx = 3;
+  int64 bo_offset = 4;
+}
+
+message BinFile {
+  optional string file = 1;
+  optional int64 size = 2;
+  optional Hash hash = 3;
+}
+
+message IntVector {
+  repeated int32 data = 1;
+}
+
+message FloatVector {
+  repeated float data = 1;
+}
+
+message StringVector {
+  repeated string data = 1;
+}
+
+message UInt32 {
+  uint32 data = 1;
+}
+
+message OpInfo {
+  string name = 1;
+  string type = 2;
+  repeated string in_args = 3;
+  repeated string const_args = 4;
+  repeated string out_args = 5;
+  optional Buffer txn_bin = 6;
+  map<string, google.protobuf.Any> attrs = 7;
+  uint32 pdi_id = 8;
+  repeated CtrlPktPatchInfo ctrl_pkt_patch_info = 9;
+}
+
+message TensorInfo {
+  int64 size = 1;
+  int64 xrt_arg_idx = 2;
+  repeated string packed_tensors = 3;
+}
+
+message OffsetInfo {
+  string parent_name = 1;  // Parent packed tensor's name
+  int64 offset = 2;        // Offset in the parent tensor}
+  int64 xrt_arg_idx = 3;
+  string dtype = 4;
+  repeated int64 shape = 5;
+  int64 size_in_bytes = 6;  // Final size as per kernel's reqs.
+  optional string file_name = 7;
+  optional int64 file_size = 8;
+}
+
+message Span {
+  int64 offset = 1;
+  int64 size = 2;
+}
+
+message Partition {
+  int64 start_idx = 1;
+  int64 end_idx = 2;
+  int64 pdi_id = 3;
+}
+
+message DDConfig {
+  optional uint32 profile = 1;
+  optional bool pm_swap = 2;
+  optional bool optimize_scratch = 3;
+  optional bool eager_mode = 4;
+  optional string cache_dir = 5;
+  optional string model_name = 6;
+}
+
+message OpPDIMap {
+  map<string, uint32> op_to_pdi_id_map = 1;
+  map<uint32, string> pdi_id_to_kernel_map = 2;
+};
+
+message MetaState {
+  uint32 major_version = 1;
+  uint32 minor_version = 2;
+
+  repeated OpInfo op_list = 11;
+
+  // fused_tensor.name --> TensorInfo
+  map<string, TensorInfo> fused_tensors = 12;
+
+  // onnxtensor.name --> OffsetInfo
+  map<string, OffsetInfo> tensor_map = 13;
+
+  // op.name --> Op's super buffer
+  map<string, Span> super_instr_map = 14;
+
+  // op.name --> Op's const buffer
+  map<string, Span> const_map = 15;
+
+  // set of ops which require internal scratch pad
+  repeated string scratch_op_set = 16;
+
+  // op.name --> Op's ctrl pkt buffer
+  map<string, Span> control_pkt_map = 17;
+
+  // max internal scratch pad for all op
+  int64 max_op_scratch_pad_size = 31;
+
+  // max padding for input tensor of op
+  int64 max_tensor_padding_sz = 32;
+
+  string json_path = 33;
+
+  // Information on PDI partitioning
+  repeated Partition partitions = 34;
+
+  // session data
+  optional BinFile const_bo = 35;
+  optional BinFile superinstr_bo = 36;
+  optional BinFile input_bo = 37;
+  optional DDConfig dd_config = 38;
+  optional bool use_xclbin_parse_data = 39;
+  optional OpPDIMap op_pdi_map = 40;
+  optional BinFile ctrl_pkt_bo = 41;
+
+  // Placeholder to keep any extra info
+  // map<string, ??> aux_info = 51;
+}

@@ -1,0 +1,7 @@
+DD-PDI-OP-TABLE-VERSION,1.0
+Model Identifier,mxpzi
+Op Name,PDI ID
+MatMul,mxpzi_0
+MatMulAddGelu,mxpzi_0
+QMHAWINDOW,mxpzi_1
+QMatMulAdd,mxpzi_1

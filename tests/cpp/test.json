@@ -1,0 +1,630 @@
+{
+  "run_dir": ".",
+  "owner": "z1_acas_test",
+  "setup": [
+    "cmake -S . -B build -DENABLE_DD_TESTS=ON -DPERF_LOGGING_EN=ON -DCMAKE_INSTALL_PREFIX=build/Release",
+    "cmake --build build --config=Release --target install --parallel",
+    "pip install -e ext\\dd_helper"
+  ],
+  "test_steps": [
+    {
+      "name": "fwd_compatibility_test",
+      "command": "build\\Release\\tests\\test_fwd_compatibility.exe",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_mladfmatmulbias",
+      "command": "python tests\\cpp\\single_mladfmatmulbias\\model.py && build\\Release\\tests\\test_mladfmatmul.exe test_mladfmatmul\\model_mladfmatmul_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_mladfmatmulbias_tile",
+      "command": "python tests\\cpp\\single_mladfmatmulbias_tile\\model.py && build\\Release\\tests\\test_mladfmatmul_tile.exe test_mladfmatmul_tile\\model_mladfmatmul_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_BMM_2048",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*BMM_Testa16w16_2048*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_mlp",
+      "command": "python tests\\cpp\\mlp\\model.py && build\\Release\\tests\\test_mlp.exe test_mlp_abf16\\model_mlp_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_BMM_1024",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*BMM_Testa16w16_1024*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_BMM_all",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*BMM*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_RMSNorm_RAND_4096",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*MLADFRMSNORM_RAND*v1*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_RMSNorm_all",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*RMSNORM*",
+      "run_type": [
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_mdsqrv1_0",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*mdsqrv1_0*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_mxpzi",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=mxpzi*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_mxganv1_1",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*mxganv1_1*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_mxganv1_2",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*mxganv1_2*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_m3uec",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=m3uec*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_mtea0a",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*mtea0a*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_m7h4xjg",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*m7h4xjg*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_mzdk54x4",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=C4mzdk5*:-C4mzdk5_ELWADDTILE_Testa16w8*:C4mzdk5_GEMMTILE_Testa16w8*:C4mzdk5_DEQUANT_Testa16.Kernel1:C4mzdk5_DEQUANT_Testa16.Kernel2:C4mzdk5_DEQUANT_Testa16.Kernel3:C4mzdk5_DEQUANT_Testa16.Kernel4:C4mzdk5_DEQUANT_Testa16.Kernel5:C4mzdk5_DEQUANT_Testa16.Kernel6:C4mzdk5_DEQUANT_Testa16.Kernel7:C4mzdk5_DEQUANT_Testa16.Kernel8:C4mzdk5_DEQUANT_Testa16.Kernel11:C4mzdk5_DEQUANT_Testa16.Kernel12:C4mzdk5_DEQUANT_Testa16.Kernel13:C4mzdk5_DEQUANT_Testa16.Kernel16:C4mzdk5_QUANT_Testa16.Kernel1:C4mzdk5_QUANT_Testa16.Kernel2:C4mzdk5_QUANT_Testa16.Kernel3:C4mzdk5_QUANT_Testa16.Kernel4:C4mzdk5_QUANT_Testa16.Kernel5:C4mzdk5_QUANT_Testa16.Kernel6:C4mzdk5_QUANT_Testa16.Kernel7:C4mzdk5_QUANT_Testa16.Kernel8:C4mzdk5_QUANT_Testa16.Kernel9:C4mzdk5_QUANT_Testa16.Kernel10:C4mzdk5_QUANT_Testa16.Kernel11:C4mzdk5_QUANT_Testa16.Kernel12:C4mzdk5_QUANT_Testa16.Kernel13:C4mzdk5_QUANT_Testa16.Kernel14:C4mzdk5_QUANT_Testa16.Kernel16:C4mzdk5_QUANT_Testa16.Kernel17:C4mzdk5_QUANT_Testa16.Kernel18:C4mzdk5_QUANT_Testa16.Kernel19:C4mzdk5_QUANT_Testa16.Kernel20:C4mzdk5_QUANT_Testa16.Kernel21",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_mdsqrv1_1",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*mdsqrv1_1*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_Start_Tail_Ops_PS_Models",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=START_TAIL_*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_SILU",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=LLAMA2_SILU_Testa16*",
+      "run_type": [
+        "pr"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_ELWMUL",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=LLAMA2_ELWMUL_V1_Testa16*",
+      "run_type": [
+        "pr"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_MLADFADD",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=LLAMA2_MLADFADD_Testa16*",
+      "run_type": [
+        "pr"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_MASKEDSOFTMAX",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=LLAMA2_MASKEDSOFTMAX_Testa16*",
+      "run_type": [
+        "pr"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_MLADFMHAROPE",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=LLAMA2_MLADFMHAROPE_Testa16*",
+      "run_type": [
+        "pr"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_parallel_mladfmatmulbias",
+      "command": "python tests\\cpp\\parallel_mladfmatmulbias\\model.py && build\\Release\\tests\\test_parallel_mladfmatmul.exe test_parallel_mladfmatmul\\model_parallel_mladfmatmul_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_MLADFGEMM",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*Qlinear_2Testw3a16.Kernel4mladf*int4*",
+      "run_type": [
+        "pr"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_MLADFGEMM_high_time",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*Qlinear_2Testw3a16_high_time.Kernel4mladf*int4*",
+      "run_type": [
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_MLADFGEMMTILE",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*QlinearTile_2Testw3a16*",
+      "run_type": [
+        "pr"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_mladfelwadd",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*MLADFELWADD*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_bmm1",
+      "command": "python tests\\cpp\\single_bmm1\\model.py && build\\Release\\tests\\test_bmm1.exe test_bmm1_abf16\\model_bmm1_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_mladfelwadd",
+      "command": "python tests\\cpp\\single_mladfelwadd\\model.py --dtype a16w16 && build\\Release\\tests\\test_mladfelwadd.exe test_mladfelwadd\\model_mladfelwadd_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_matmul_a8w8",
+      "command": "python tests\\cpp\\single_matmul\\model.py --dtype a8w8 && build\\Release\\tests\\test_single.exe test_matmul_a8w8\\model_matmul1_meta_a8w8.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_parallel_matmul_a8w8",
+      "command": "python tests\\cpp\\parallel_matmul\\model.py && build\\Release\\tests\\test_parallel_matmul.exe test_parallel_matmul_a8w8\\model_parallel_matmul_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_matmul_a16w8",
+      "command": "python tests\\cpp\\single_matmul\\model.py --dtype a16w8 && build\\Release\\tests\\test_single.exe test_matmul_a16w8\\model_matmul1_meta_a16w8.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_elwadd_a16w8",
+      "command": "python tests\\cpp\\single_add\\model.py --dtype a16w8 && build\\Release\\tests\\test_add.exe test_add_a16w8\\model_add_meta_a16w8.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_elwadd_a8w8",
+      "command": "python tests\\cpp\\single_add\\model.py --dtype a8w8 && build\\Release\\tests\\test_add.exe test_add_a8w8\\model_add_meta_a8w8.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_lrn_a16w8",
+      "command": "python tests\\cpp\\single_lrn\\model.py --dtype a16w8 && build\\Release\\tests\\test_lrn.exe test_lrn_a16w8\\model_lrn_meta_a16w8.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_lrn_a8w8",
+      "command": "python tests\\cpp\\single_lrn\\model.py --dtype a8w8 && build\\Release\\tests\\test_lrn.exe test_lrn_a8w8\\model_lrn_meta_a8w8.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_matmuladdgelu_a16w8",
+      "command": "python tests\\cpp\\single_matmuladdgelu\\model.py --dtype a16w8 && build\\Release\\tests\\test_mataddgelu.exe test_matmuladdgelu_a16w8\\model_matmuladdgelu_meta_a16w8.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_matmuladdgelu_a16w8",
+      "command": "python tests\\cpp\\single_matmuladdgelu\\model.py --dtype a8w8 && build\\Release\\tests\\test_mataddgelu.exe test_matmuladdgelu_a8w8\\model_matmuladdgelu_meta_a8w8.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_mha",
+      "command": "python tests\\cpp\\single_mha\\model.py  && build\\Release\\tests\\test_mha.exe test_mha\\mha.onnx.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_elwmul",
+      "command": "python tests\\cpp\\elwmul\\model.py  && build\\Release\\tests\\test_elwmul.exe test_elwmul_abf16\\model_elwmul_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_elwmul_tile",
+      "command": "python tests\\cpp\\elwmul_tile\\model.py  && build\\Release\\tests\\test_elwmul_tile.exe test_elwmul_tile_abf16\\model_elwmul_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_mladfadd",
+      "command": "python tests\\cpp\\single_mladfadd\\model.py  && build\\Release\\tests\\test_mladfadd.exe test_mladfadd_abf16\\model_mladfadd_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_mladfadd_tile",
+      "command": "python tests\\cpp\\single_mladfadd_tile\\model.py  && build\\Release\\tests\\test_mladfadd_tile.exe test_mladfadd_tile_abf16\\model_mladfadd_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_silu",
+      "command": "python tests\\cpp\\silu\\model.py  && build\\Release\\tests\\test_silu.exe test_silu_abf16\\model_silu_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_silu_tile",
+      "command": "python tests\\cpp\\silu_tile\\model.py  && build\\Release\\tests\\test_silu_tile.exe test_silu_tile_abf16\\model_silu_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_maskedsoftmax",
+      "command": "python tests\\cpp\\maskedsoftmax\\model.py  && build\\Release\\tests\\test_maskedsoftmax.exe test_maskedsoftmax_abf16\\model_maskedsoftmax_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_mladfmharope",
+      "command": "python tests\\cpp\\single_mladfmharope\\model.py  && build\\Release\\tests\\test_mladfmharope.exe test_mladfmharope_abf16\\model_mladfmharope_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_mladfrmsnorm",
+      "command": "python tests\\cpp\\single_mladfrmsnorm\\model.py  && build\\Release\\tests\\test_mladfrmsnorm.exe test_mladfrmsnorm_abf16\\model_mladfrmsnorm_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_parallel_lrn_conv",
+      "command": "python tests\\cpp\\parallel_lrn_conv\\model.py && build\\Release\\tests\\test_parallel_lrn_conv.exe test_parallel_lrn_conv\\model_lrn_conv_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_mladfsoftmax",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*MLADFSOFTMAX*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_single_mladfsoftmax",
+      "command": "python tests\\cpp\\single_mladfsoftmax\\model.py --dtype a16 && build\\Release\\tests\\test_mladfsoftmax.exe test_mladfsoftmax\\model_mladfsoftmax_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_multi_thread_matmul",
+      "command": "python tests\\cpp\\multi_thread_matmul\\model.py && build\\Release\\tests\\test_multi_thread_matmul.exe 4 2 2 test_multi_thread_matmul_a8w8\\model_matmul1_meta_a8w8.json test_multi_thread_matmul_a16w8\\model_matmul1_meta_a16w8.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_multi_xrt_contexts",
+      "command": "build\\Release\\tests\\test_multi_xrt_contexts.exe",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_conv_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_CONV_Test.Kernel1",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_conv_fusion_test",
+      "command": "python tests\\cpp\\sd_conv\\model.py && build\\Release\\tests\\test_sd_conv.exe test_sdconv\\model_sdconv_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    }
+  ],
+  "cleanup": []
+}

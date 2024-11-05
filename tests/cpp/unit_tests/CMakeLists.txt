@@ -1,0 +1,76 @@
+# Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+
+add_executable(
+  cpp_tests
+  experimental/test_cube.cpp
+  experimental/test_elwadd_tile.cpp
+  experimental/test_matmul_tile.cpp
+  experimental/test_mladfmatmulbias_tile.cpp
+  experimental/test_square.cpp
+  test_act_act_matmul.cpp
+  test_act_const_add.cpp
+  test_act_matmul_softmax.cpp
+  test_AddTanhLPNorm.cpp
+  test_AttentionMaskPrePro.cpp
+  test_bmm.cpp
+  test_bmmB.cpp
+  test_bmmC.cpp
+  test_bmmD.cpp
+  test_concat.cpp
+  test_concateOps.cpp
+  test_conv.cpp
+  test_conv2matmul.cpp
+  test_convForMatmulAdd.cpp
+  test_dequant.cpp
+  test_DotProductSigmoid.cpp
+  test_elwadd.cpp
+  test_elwdiv_qdq.cpp
+  test_elwmul.cpp
+  test_elwmul_qdq.cpp
+  test_expand.cpp
+  test_gap.cpp
+  test_gelu.cpp
+  test_graphMode.cpp
+  test_groupnorm.cpp
+  test_iconv.cpp
+  test_is_supported.cpp
+  test_l2_norm.cpp
+  test_layernorm.cpp
+  test_lstm.cpp
+  test_maskedsoftmax.cpp
+  test_matmul.cpp
+  test_matmul_a16a16_mladf.cpp
+  test_matmul_a16w8_mladf.cpp
+  test_matmulbias.cpp
+  test_matmulgeluadd.cpp
+  test_matvecadd.cpp
+  test_mha.cpp
+  test_mhachannel.cpp
+  test_mhagprb.cpp
+  test_mhamzdk5.cpp
+  test_mhawindow.cpp
+  test_mladfadd.cpp
+  test_mladfelwadd.cpp
+  test_mladfelwmul.cpp
+  test_mladfmatmulbias.cpp
+  test_mladfmharope.cpp
+  test_mladfrmsnorm.cpp
+  test_mladfsoftmax.cpp
+  test_nni_resize.cpp
+  test_quant.cpp
+  test_ReduceSum.cpp
+  test_sd_conv.cpp
+  test_sigmoid.cpp
+  test_silu.cpp
+  test_silu_qdq.cpp
+  test_slice.cpp
+  test_softmax_qdq.cpp
+  test_transpose.cpp
+  test_xcom_conv2d.cpp
+)
+
+dd_configure_test(cpp_tests ON)
+if(UNIT_TEST_PERF_EN)
+  message(STATUS "Enabling performance checks in unit tests")
+  target_compile_definitions(cpp_tests PRIVATE UNIT_TEST_PERF)
+endif()

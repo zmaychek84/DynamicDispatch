@@ -1,0 +1,6 @@
+$env:TORCH_INSTALL_PREFIX = "$env:CONDA_PREFIX\Lib\site-packages\torch"
+$env:CMAKE_PREFIX_PATH = "$env:CMAKE_PREFIX_PATH;$PSScriptRoot;$env:TORCH_INSTALL_PREFIX"
+$env:PATH = "$env:PATH;$PSScriptRoot\build\aie-rt\Release;$env:TORCH_INSTALL_PREFIX/lib/"
+$env:FLEXML_OP_DIR = "$PSScriptRoot\tests\flexml"
+$env:DD_ROOT = "$PSScriptRoot"
+$env:DEVICE = "stx"

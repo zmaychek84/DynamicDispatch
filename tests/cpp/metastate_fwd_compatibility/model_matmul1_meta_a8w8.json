@@ -1,0 +1,130 @@
+{
+  "dd_meta_major_version": 1,
+  "dd_meta_minor_version": 0,
+  "op_list": [
+    {
+      "name": "mul1",
+      "type": "MatMul",
+      "in_args": [
+        "X"
+      ],
+      "const_args": [
+        "W0",
+        "qdq",
+        "qdq_params"
+      ],
+      "out_args": [
+        "Y"
+      ],
+      "attrs": {
+        "input_shape": {
+          "type": "int",
+          "value": [
+            "1",
+            "512",
+            "768"
+          ]
+        }
+      }
+    }
+  ],
+  "fused_tensors": {
+    "in": {
+      "buffer_size": 393216,
+      "xrt_arg_id": 0,
+      "packed_tensors": [
+        "X"
+      ]
+    },
+    "out": {
+      "buffer_size": 589824,
+      "xrt_arg_id": 1,
+      "packed_tensors": [
+        "Y"
+      ]
+    },
+    "scratch": {
+      "buffer_size": 0,
+      "xrt_arg_id": 2,
+      "packed_tensors": []
+    },
+    "const": {
+      "buffer_size": 894016,
+      "xrt_arg_id": 3,
+      "packed_tensors": [
+        "W0",
+        "qdq",
+        "qdq_params"
+      ]
+    },
+    "super_instr": {
+      "buffer_size": 0,
+      "xrt_arg_id": 4,
+      "packed_tensors": []
+    }
+  },
+  "tensor_map": {
+    "X": {
+      "packed_buffer_label": "in",
+      "xrt_arg_id": 0,
+      "dtype": "uint8",
+      "shape": [
+        1,
+        512,
+        768
+      ],
+      "size_in_bytes": 393216,
+      "offset": 0
+    },
+    "Y": {
+      "packed_buffer_label": "out",
+      "xrt_arg_id": 1,
+      "dtype": "uint8",
+      "shape": [
+        1,
+        512,
+        1152
+      ],
+      "size_in_bytes": 589824,
+      "offset": 0
+    },
+    "W0": {
+      "packed_buffer_label": "const",
+      "xrt_arg_id": 3,
+      "dtype": "uint8",
+      "shape": [
+        768,
+        1152
+      ],
+      "size_in_bytes": 884736,
+      "offset": 0,
+      "file_name": "C:\\Users\\tsiddaga\\Desktop\\tejuss\\DynamicDispatch\\test_matmul_a8w8\\0.const",
+      "file_size": 884736
+    },
+    "qdq": {
+      "packed_buffer_label": "const",
+      "xrt_arg_id": 3,
+      "dtype": "int64",
+      "shape": [
+        1152
+      ],
+      "size_in_bytes": 9216,
+      "offset": 884736,
+      "file_name": "C:\\Users\\tsiddaga\\Desktop\\tejuss\\DynamicDispatch\\test_matmul_a8w8\\1.const",
+      "file_size": 9216
+    },
+    "qdq_params": {
+      "packed_buffer_label": "const",
+      "xrt_arg_id": 3,
+      "dtype": "int32",
+      "shape": [
+        16
+      ],
+      "size_in_bytes": 64,
+      "offset": 893952,
+      "file_name": "C:\\Users\\tsiddaga\\Desktop\\tejuss\\DynamicDispatch\\test_matmul_a8w8\\2.const",
+      "file_size": 64
+    }
+  },
+  "aux_info": {}
+}
