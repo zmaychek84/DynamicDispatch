@@ -35,8 +35,9 @@ using json = nlohmann::json;
 namespace OpsFusion {
 
 namespace profile_ids {
-static uint32_t timer_id = 0;
-}
+static uint32_t timer_id_start = 100;
+static uint32_t timer_id = timer_id_start;
+} // namespace profile_ids
 
 static inline std::string shape_to_string(const std::vector<size_t> &shape) {
   std::string shape_str = "";
@@ -136,7 +137,7 @@ Metadata insert_record_timer_nodes(const Metadata &meta,
   json dd_ts;
 
   // if timer_id != 0, create new dd_json, else append to the existing file
-  if (profile_ids::timer_id != 0) {
+  if (profile_ids::timer_id != profile_ids::timer_id_start) {
     std::ifstream ifs(dd_timestamp_fname);
     dd_ts = json::parse(ifs);
   } else {
@@ -204,8 +205,8 @@ Metadata insert_record_timer_nodes(const Metadata &meta,
     if (profile_level >= 2) {
       // insert pdi_subgraph_end
       insert_timer_op_in_meta(
-          record_timer_meta, "pdi_partition_" + std::to_string(op2.pdi_id),
-          static_cast<uint8_t>(part), profile_ids::timer_id);
+          record_timer_meta, "pdi_partition_" + std::to_string(part),
+          static_cast<uint8_t>(op2.pdi_id), profile_ids::timer_id);
       dd_ts["events"].push_back(
           {{"id", profile_ids::timer_id},
            {"name", "pdi_partition_" + std::to_string(part)},

@@ -1,5 +1,6 @@
 /*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -395,32 +396,32 @@ int test_mhamzdk5(int M, int K, int N, bool debug = false,
 }
 
 // mhamzdk5 cross mzdk5 4x4
-TEST(C4mzdk5_mhamzdk5_Testa16w8, Kernel1) {
+TEST(C4mzdk5_mhamzdk5_Testa16w8, Kernel_64_77_64) {
   int err_count = test_mhamzdk5<uint16_t, uint8_t, uint16_t>(
       64, 77, 64, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_mhamzdk5_Testa16w8, Kernel2) {
+TEST(C4mzdk5_mhamzdk5_Testa16w8, Kernel_256_77_64) {
   int err_count = test_mhamzdk5<uint16_t, uint8_t, uint16_t>(
       256, 77, 64, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_mhamzdk5_Testa16w8, Kernel3) {
+TEST(C4mzdk5_mhamzdk5_Testa16w8, Kernel_1024_77_64) {
   int err_count = test_mhamzdk5<uint16_t, uint8_t, uint16_t>(
       1024, 77, 64, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_mhamzdk5_Testa16w8, Kernel4) {
+TEST(C4mzdk5_mhamzdk5_Testa16w8, Kernel_4096_77_64) {
   int err_count = test_mhamzdk5<uint16_t, uint8_t, uint16_t>(
       4096, 77, 64, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // mhamzdk5 self mzdk5 4x4
-TEST(C4mzdk5_mhamzdk5_Testa16w8, Kernel5) {
+TEST(C4mzdk5_mhamzdk5_Testa16w8, Kernel_64_64_64) {
   int err_count = test_mhamzdk5<uint16_t, uint8_t, uint16_t>(
       64, 64, 64, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;

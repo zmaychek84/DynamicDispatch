@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import zlib
 import fnmatch
+import multiprocessing as mp
+import time
 
 def get_var_name(file_path):
     file_name = file_path.name
@@ -12,8 +14,7 @@ def get_var_name(file_path):
     var_name = dir_name + '_' +  file_name.split('.')[0]
     return var_name
 
-def bin_to_cpp(file_path, txn_hdrf, txn_srcf):
-
+def bin_to_cpp(file_path):
     variable_name = get_var_name(file_path)
     decompressed_size = 0
 
@@ -26,6 +27,10 @@ def bin_to_cpp(file_path, txn_hdrf, txn_srcf):
         max_string_len = 16380
         hex_data = "\"\"".join(hex_data[i:i+max_string_len] for i in range(0, len(hex_data), max_string_len))
 
+    return file_path, variable_name, decompressed_size, len(compressed_data), hex_data
+
+def write_bin_to_file(txn_hdrf, txn_srcf, data):
+    file_path, variable_name, decompressed_size, len_compressed_data, hex_data = data
     with open(txn_hdrf, "a") as hdr:
         hdr.write(f'const std::string& get{variable_name.capitalize()}();\n')
 
@@ -33,14 +38,14 @@ def bin_to_cpp(file_path, txn_hdrf, txn_srcf):
         src.write(f'static char {variable_name}[] = "{hex_data}";\n')
         # write a function
         src.write(f"static std::string initialize_{variable_name}()" + "{\n")
-        src.write("std::string ret;\n")
+        src.write("std::string ret = \"\";\n")
         src.write("uLongf ret_size = 0;\n")
         src.write(f"ret.resize({decompressed_size});\n")
-        src.write("z_stream infstream;\n")
+        src.write("z_stream infstream = {};\n")
         src.write("infstream.zalloc = Z_NULL;\n")
         src.write("infstream.zfree = Z_NULL;\n")
         src.write("infstream.opaque = Z_NULL;\n")
-        src.write(f"infstream.avail_in = {len(compressed_data)};\n")
+        src.write(f"infstream.avail_in = {len_compressed_data};\n")
         src.write(f"infstream.next_in = reinterpret_cast<Bytef*>({variable_name});\n")
         src.write(f"infstream.avail_out = {decompressed_size};\n")
         src.write(f"infstream.next_out = reinterpret_cast<Bytef*>(&ret[0]);\n")
@@ -55,7 +60,9 @@ def bin_to_cpp(file_path, txn_hdrf, txn_srcf):
         src.write(f'return {variable_name}_str;\n')
         src.write('}\n')
 
-def write_transaction_src(out_dir, txn_list, quiet, txn_hdr):
+def write_transaction_src(out_dir, txn_data, quiet, txn_hdr):
+    # txn_list = [i[0] for i in txn_data]
+    txn_list = txn_data
     with open(Path(out_dir) / Path('transaction.cpp'), 'w') as txn_src:
         txn_src.write('#include "txn_container.hpp"\n')
         txn_src.write(f'#include "{txn_hdr}"\n')
@@ -92,17 +99,27 @@ def write_transaction_src(out_dir, txn_list, quiet, txn_hdr):
         if not quiet:
             print('transaction.cpp is generated')
 
-def get_bin_file():
+def get_bin_file(large_txn_ops):
     for root, dirs, files in os.walk(tr_path):
         for filename in fnmatch.filter(files, '*.bin'):
-            yield Path(root) / filename
+            file_path = Path(root) / filename
+            fname = str(file_path)
+            fname = fname.replace("\\", "/")
+            if any(map(lambda large_op: large_op in fname, large_txn_ops)):
+                continue
+            yield file_path
         for filename in fnmatch.filter(files, '*.json'):
-            yield Path(root) / filename
+            file_path = Path(root) / filename
+            fname = str(file_path)
+            fname = fname.replace("\\", "/")
+            if any(map(lambda large_op: large_op in fname, large_txn_ops)):
+                continue
+            yield file_path
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default="", type=Path)
-    parser.add_argument("--out-dir", required=True, type=Path)
+    parser.add_argument("--out-dir", required=False, type=Path)
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--disable-large-txn-ops", action="store_true")
@@ -120,6 +137,7 @@ if __name__ == "__main__":
     txn_hdr_fname = "all_txn_pkg.hpp"
     txn_src_fname = "all_txn_pkg.cpp"
 
+    start = time.time()
     if args.list:
         print("transaction.cpp")
         print(txn_src_fname)
@@ -139,14 +157,22 @@ if __name__ == "__main__":
             hdr.write('#include <string>\n')
             hdr.write('#include <tuple>\n')
 
-        for filepath in get_bin_file():
-            fname = str(filepath)
-            fname = fname.replace("\\", "/")
-            if any(map(lambda large_op: large_op in fname, large_txn_ops)):
-                continue
-            bin_to_cpp(filepath, txn_hdrf, txn_srcf)
-            txn_list.append(filepath)
+        # Process the files in parallel
+        # NOTE: pool.imap_unordered can improve performance further, but not tested yet
+        with mp.Pool(processes=8) as pool:
+            files_iter = get_bin_file(large_txn_ops)
+            txn_list_iter = pool.imap(bin_to_cpp, files_iter, chunksize=4)
+            txn_list = []
+            for data in txn_list_iter:
+                if(len(data) == 0): continue
+                write_bin_to_file(txn_hdrf, txn_srcf, data)
+                txn_list.append(data[0])
+
         write_transaction_src(out_dir, txn_list, args.quiet, txn_hdr_fname)
         if not args.quiet:
             print(f"Header generated: {txn_hdr_fname}")
             print(f"Source generated: {txn_src_fname}")
+    end = time.time()
+
+    if(not args.quiet):
+        print("Time elapsed (s) : ", end-start)

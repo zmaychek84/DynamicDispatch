@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "ctrl_pkt_patch_info": [
+    {
+      "offset": 2028,
+      "size": 6,
+      "xrt_arg_idx": 3,
+      "bo_offset": 0
+    },
+    {
+      "offset": 2076,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 0
+    },
+    {
+      "offset": 2124,
+      "size": 6,
+      "xrt_arg_idx": 0,
+      "bo_offset": 0
+    },
+    {
+      "offset": 2220,
+      "size": 6,
+      "xrt_arg_idx": 3,
+      "bo_offset": 0
+    },
+    {
+      "offset": 2268,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 2621440
+    },
+    {
+      "offset": 2316,
+      "size": 6,
+      "xrt_arg_idx": 0,
+      "bo_offset": 640
+    },
+    {
+      "offset": 2412,
+      "size": 6,
+      "xrt_arg_idx": 3,
+      "bo_offset": 0
+    },
+    {
+      "offset": 2484,
+      "size": 6,
+      "xrt_arg_idx": 3,
+      "bo_offset": 0
+    }
+  ]
+}

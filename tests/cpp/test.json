@@ -183,8 +183,30 @@
       ]
     },
     {
+      "name": "run_unittests_PSW1_0",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*PSW*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_unittests_PSU1_2",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=PSU*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
       "name": "run_unittests_mzdk54x4",
-      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=C4mzdk5*:-C4mzdk5_ELWADDTILE_Testa16w8*:C4mzdk5_GEMMTILE_Testa16w8*:C4mzdk5_DEQUANT_Testa16.Kernel1:C4mzdk5_DEQUANT_Testa16.Kernel2:C4mzdk5_DEQUANT_Testa16.Kernel3:C4mzdk5_DEQUANT_Testa16.Kernel4:C4mzdk5_DEQUANT_Testa16.Kernel5:C4mzdk5_DEQUANT_Testa16.Kernel6:C4mzdk5_DEQUANT_Testa16.Kernel7:C4mzdk5_DEQUANT_Testa16.Kernel8:C4mzdk5_DEQUANT_Testa16.Kernel11:C4mzdk5_DEQUANT_Testa16.Kernel12:C4mzdk5_DEQUANT_Testa16.Kernel13:C4mzdk5_DEQUANT_Testa16.Kernel16:C4mzdk5_QUANT_Testa16.Kernel1:C4mzdk5_QUANT_Testa16.Kernel2:C4mzdk5_QUANT_Testa16.Kernel3:C4mzdk5_QUANT_Testa16.Kernel4:C4mzdk5_QUANT_Testa16.Kernel5:C4mzdk5_QUANT_Testa16.Kernel6:C4mzdk5_QUANT_Testa16.Kernel7:C4mzdk5_QUANT_Testa16.Kernel8:C4mzdk5_QUANT_Testa16.Kernel9:C4mzdk5_QUANT_Testa16.Kernel10:C4mzdk5_QUANT_Testa16.Kernel11:C4mzdk5_QUANT_Testa16.Kernel12:C4mzdk5_QUANT_Testa16.Kernel13:C4mzdk5_QUANT_Testa16.Kernel14:C4mzdk5_QUANT_Testa16.Kernel16:C4mzdk5_QUANT_Testa16.Kernel17:C4mzdk5_QUANT_Testa16.Kernel18:C4mzdk5_QUANT_Testa16.Kernel19:C4mzdk5_QUANT_Testa16.Kernel20:C4mzdk5_QUANT_Testa16.Kernel21",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=C4mzdk5*:-C4mzdk5_ELWADDTILE_Testa16w8*:C4mzdk5_GEMMTILE_Testa16w8*",
       "run_type": [
         "pr",
         "daily"
@@ -247,7 +269,7 @@
     },
     {
       "name": "run_unittests_MASKEDSOFTMAX",
-      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=LLAMA2_MASKEDSOFTMAX_Testa16*",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*MASKEDSOFTMAX_Testa16*",
       "run_type": [
         "pr"
       ],
@@ -257,7 +279,7 @@
     },
     {
       "name": "run_unittests_MLADFMHAROPE",
-      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=LLAMA2_MLADFMHAROPE_Testa16*",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=*MLADFMHAROPE_Testa16*",
       "run_type": [
         "pr"
       ],
@@ -549,6 +571,17 @@
       ]
     },
     {
+      "name": "run_single_mladfrmsnorm_tile",
+      "command": "python tests\\cpp\\single_mladfrmsnorm_tile\\model.py  && build\\Release\\tests\\test_mladfrmsnorm_tile.exe test_mladfrmsnorm_abf16_tile\\model_mladfrmsnorm_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
       "name": "run_parallel_lrn_conv",
       "command": "python tests\\cpp\\parallel_lrn_conv\\model.py && build\\Release\\tests\\test_parallel_lrn_conv.exe test_parallel_lrn_conv\\model_lrn_conv_meta.json",
       "run_type": [
@@ -605,7 +638,18 @@
     },
     {
       "name": "run_sd_conv_unit_test",
-      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_CONV_Test.Kernel1",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_CONV_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_concat_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_CONCAT_Test.Random*",
       "run_type": [
         "pr",
         "daily"
@@ -617,6 +661,314 @@
     {
       "name": "run_sd_conv_fusion_test",
       "command": "python tests\\cpp\\sd_conv\\model.py && build\\Release\\tests\\test_sd_conv.exe test_sdconv\\model_sdconv_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_matmul_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_MATMUL_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_matmul_fusion_test",
+      "command": "python tests\\cpp\\sd_matmul\\model.py && build\\Release\\tests\\test_sd_matmul.exe test_sdmatmul\\model_sdmatmul_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_gelu_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_GELU_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_gelu_fusion_test",
+      "command": "python tests\\cpp\\sd_gelu\\model.py && build\\Release\\tests\\test_sd_gelu.exe test_sdgelu\\model_gelu_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_silu_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_SILU_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_silu_fusion_test",
+      "command": "python tests\\cpp\\sd_silu\\model.py && build\\Release\\tests\\test_sd_silu.exe test_sdsilu\\model_sdsilu_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_concat_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_CONCAT_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_concat_fusion_test",
+      "command": "python tests\\cpp\\sd_concat\\model.py && build\\Release\\tests\\test_sd_concat.exe test_sd_concat\\model_sd_concat_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_elwadd_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_ELWADD_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_elwadd_fusion_ifm_ifm_test",
+      "command": "python tests\\cpp\\sd_elwadd\\model.py && build\\Release\\tests\\test_sd_elwadd.exe test_sd_elwadd\\model_sd_elwadd_meta.json 0",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_elwadd_fusion_ifm_wts_test",
+      "command": "python tests\\cpp\\sd_elwadd\\model.py --wts && build\\Release\\tests\\test_sd_elwadd.exe test_sd_elwadd\\model_sd_elwadd_meta.json 1",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_elwmul_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_ELWMUL_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_elwmul_fusion_test",
+      "command": "python tests\\cpp\\sd_elwmul\\model.py && build\\Release\\tests\\test_sd_elwmul.exe test_sd_elwmul\\model_sd_elwmul_meta.json 0",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_resize_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_RESIZE_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_resize_fusion_test",
+      "command": "python tests\\cpp\\sd_resize\\model.py && build\\Release\\tests\\test_sd_resize.exe test_sd_resize\\model_sd_resize_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_layernorm_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_LAYERNORM_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_layernorm_fusion_test",
+      "command": "python tests\\cpp\\sd_layernorm\\model.py && build\\Release\\tests\\test_sd_layernorm.exe test_sdlayernorm\\model_sdlayernorm_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_mha_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_MHA_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_mha_fusion_test",
+      "command": "python tests\\cpp\\sd_mha\\model.py && build\\Release\\tests\\test_sd_mha.exe test_sdmha\\model_sdmha_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_slice_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_SLICE_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_group_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_GROUPNORM_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_groupnorm_fusion_test",
+      "command": "python tests\\cpp\\sd_groupnorm\\model.py && build\\Release\\tests\\test_sd_groupnorm.exe test_sdgroupnorm\\model_sdgroupnorm_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_flat_mlp_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=FLAT_MLP_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_flat_rms_add_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=FLAT_RMS_ADD_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_flat_mlp_fusion_test",
+      "command": "python tests\\cpp\\flat_mlp\\model.py && build\\Release\\tests\\test_flat_mlp.exe test_flat_mlp\\flat_mlp_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_gemm_unit_test",
+      "command": "build\\Release\\tests\\cpp_tests.exe --gtest_filter=SD_GEMM_Test.Random*",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_sd_gemm_fusion_test",
+      "command": "python tests\\cpp\\sd_gemm\\model.py && build\\Release\\tests\\test_sd_gemm.exe test_sdgemm\\model_sdgemm_meta.json",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "run_flat_rms_add_fusion_test",
+      "command": "python tests\\cpp\\flat_rms_add\\model.py && build\\Release\\tests\\test_flat_rms_add.exe test_flat_rms_add\\flat_rms_add_meta.json 0",
       "run_type": [
         "pr",
         "daily"

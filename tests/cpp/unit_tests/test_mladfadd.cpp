@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -53,7 +54,7 @@ int test_mladfadd(size_t M, size_t K, bool debug = false,
     shape_list.push_back({M, (int)K});
   }
   attr["op_version"] = op_version;
-  attr["shapes"] = shape_list;
+  // attr["shapes"] = shape_list;
   ryzenai::mladf_add mladfadd_ =
       ryzenai::mladf_add<LhsT, RhsT, OuT>(a_dtype, true, attr);
 
@@ -170,8 +171,45 @@ TEST(LLAMA2_MLADFADD_Testa16, Kernel1920x4096_v1) {
       1920, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
+
+TEST(LLAMA2_MLADFADD_Testa16, Test2047) {
+  int err_count = test_mladfadd<uint16_t, uint16_t, uint16_t>(
+      2047, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MLADFADD_Testa16, Test3071) {
+  int err_count = test_mladfadd<uint16_t, uint16_t, uint16_t>(
+      3071, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
 TEST(LLAMA2_MLADFADD_Testa16, Kernel2048x4096_v1) {
   int err_count = test_mladfadd<uint16_t, uint16_t, uint16_t>(
       2048, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MLADFADD_Testa16, Kernel300) {
+  int err_count = test_mladfadd<uint16_t, uint16_t, uint16_t>(
+      300, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MLADFADD_Testa16, Kernel600) {
+  int err_count = test_mladfadd<uint16_t, uint16_t, uint16_t>(
+      600, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MLADFADD_Testa16, Kernel767) {
+  int err_count = test_mladfadd<uint16_t, uint16_t, uint16_t>(
+      767, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MLADFADD_Testa16, Kernel850) {
+  int err_count = test_mladfadd<uint16_t, uint16_t, uint16_t>(
+      850, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

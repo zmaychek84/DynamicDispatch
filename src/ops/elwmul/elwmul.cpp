@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 #include <iostream>
 #include <map>
@@ -18,6 +19,7 @@
 
 #include <txn_container.hpp>
 #include <utils/instruction_registry.hpp>
+#include <xclbin_container.hpp>
 #include <xrt_context/xrt_context.hpp>
 
 #include <ops/elwmul/elwmul.hpp>
@@ -37,11 +39,13 @@ namespace ryzenai {
 
 namespace {
 std::string getXCLBinName(std::string op_version) {
-  return (op_version == "v1")
-             ? OpInterface::get_dd_base_dir() +
-                   LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_PATH
-             : OpInterface::get_dd_base_dir() +
-                   LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_PATH;
+  if (op_version == "v1") {
+    return LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  } else if (op_version == "flat") {
+    return LLAMA2_MLADF_2x4x4_BFP16_GEMM_SILU_MUL_FLAT_RMS_XCLBIN_NAME;
+  } else {
+    return LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  }
 }
 
 } // namespace
@@ -154,7 +158,7 @@ elw_mul<LhsT, RhsT, OutT>::elw_mul(
   op_version_ = "v1";
   if (attr.find("op_version") != attr.end()) {
     op_version_ = std::any_cast<std::string>(attr.find("op_version")->second);
-    if (op_version_ != "v1") {
+    if (op_version_ != "v1" && op_version_ != "flat") {
       throw std::runtime_error("The selected op version does not exist");
     }
   }
@@ -163,26 +167,28 @@ elw_mul<LhsT, RhsT, OutT>::elw_mul(
                       txnbin_operand_header.at(operand_dtype_) +
                       txnbin_operand_header.at(operand_dtype_);
   setup_supported_shapes();
+  std::sort(supported_shapes_.begin(), supported_shapes_.end(),
+            [](const std::tuple<int, int> &a, const std::tuple<int, int> &b) {
+              return std::get<0>(a) * std::get<1>(a) <
+                     std::get<0>(b) * std::get<1>(b);
+            });
   elw_mul_id_ = elw_mul_count++;
 
   tiled_shape_.clear();
   /* construct cost function */
-  std::map<int64_t, double> m_cost = {{1, 0.24},    {128, 1.0},  {256, 1.98},
-                                      {512, 3.92},  {1024, 7.8}, {2048, 15.5},
-                                      {4096, 30.8}, {3072, 21.5}};
-
   for (auto shape : supported_shapes_) {
-    if (m_cost.count(std::get<0>(shape))) {
-      tiling_cost_.insert(
-          {{std::get<0>(shape) * std::get<1>(shape),
-            m_cost.at(std::get<0>(shape)) * (std::get<1>(shape) / 4096)}});
-    }
+    tiling_cost_.insert({{std::get<0>(shape) * std::get<1>(shape),
+                          std::get<0>(shape) * std::get<1>(shape) * 1.0f}});
   }
   /*select xclbin based on the input/output types*/
   std::string XCLBIN_FNAME = getXCLBinName(op_version_);
 
   if (load_xrt) {
-    xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME);
+
+    xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(
+        XCLBIN_FNAME, 0, {},
+        XclbinContainer::getInstance().get_xclbin_content(XCLBIN_FNAME));
+
     if (op_version_ == "v1") {
       std::call_once(instr_reg_v1_flag_,
                      [this, &attr]() { setup_instr_init(); });
@@ -201,7 +207,10 @@ elw_mul<LhsT, RhsT, OutT>::elw_mul(
     // supporting M dimension up to 4096/twice the size of max size
     kernel_max_size_ = ryzenai::utils::to_next_multiple(
         (int)operand_num_elements, (int)bo_element_granularity);
+    skip_create_input_ = true;
+    skip_create_output_ = true;
     if (attr.find("skip_create_input") == attr.end()) {
+      skip_create_input_ = false;
       a_bo_ =
           xrt::bo(xrt_ctx_->get_device(), kernel_max_size_ * sizeof(LhsT),
                   XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(0));
@@ -210,6 +219,7 @@ elw_mul<LhsT, RhsT, OutT>::elw_mul(
                   XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(0));
     }
     if (attr.find("skip_create_output") == attr.end()) {
+      skip_create_output_ = false;
       c_bo_ =
           xrt::bo(xrt_ctx_->get_device(), kernel_max_size_ * sizeof(OutT),
                   XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(0));
@@ -240,6 +250,30 @@ elw_mul<LhsT, RhsT, OutT>::elw_mul(
                     ", (operand_dtype, b_dtype, c_dtype): (" + operand_dtype_ +
                     ", " + operand_dtype_ + ", " + operand_dtype_ + ")");
 }
+
+template <typename LhsT, typename RhsT, typename OutT>
+bool elw_mul<LhsT, RhsT, OutT>::create_bo(void *usr_ptr, size_t size,
+                                          int operand_index) {
+  std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(usr_ptr);
+  constexpr std::uint32_t MASK = ((1 << 12) - 1);
+  if ((addr & MASK) != 0) {
+    return false;
+  }
+  auto bo =
+      xrt::bo(xrt_ctx_->get_context(), usr_ptr, size, xrt::bo::flags::host_only,
+              xrt_ctx_->get_kernel().group_id(0));
+  if (operand_index == 0) {
+    a_bo_ = bo;
+  } else if (operand_index == 1) {
+    b_bo_ = bo;
+  } else if (operand_index == 2) {
+    c_bo_ = bo;
+  } else {
+    return false;
+  }
+  return true;
+}
+
 template <typename LhsT, typename RhsT, typename OutT>
 void elw_mul<LhsT, RhsT, OutT>::execute(std::vector<xrt::bo> &inputs,
                                         std::vector<xrt::bo> &outputs,
@@ -257,15 +291,11 @@ void elw_mul<LhsT, RhsT, OutT>::execute(std::vector<xrt::bo> &inputs,
   uint32_t instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
   auto kernel_ = xrt_ctx_->get_kernel();
   // launch the kernel
-  xrt::run run;
   // do we really need to sync before? c_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  run = kernel_(2, instr_bo, instr_bo_words,
-                inputs[0].address() + DDR_AIE_ADDR_OFFSET,
-                inputs[1].address() + DDR_AIE_ADDR_OFFSET,
-                outputs[0].address() + DDR_AIE_ADDR_OFFSET, 0, 0);
-  if (wait) {
-    run.wait2();
-  }
+
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, inputs[0], inputs[1], outputs[0], 0,
+      0, wait, false);
 }
 template <typename LhsT, typename RhsT, typename OutT>
 void elw_mul<LhsT, RhsT, OutT>::set_kernel_shape(std::vector<size_t> shape) {
@@ -303,12 +333,19 @@ void elw_mul<LhsT, RhsT, OutT>::set_kernel_shape(std::vector<size_t> shape) {
   if (padded_shape > kernel_max_size_) {
     RYZENAI_LOG_TRACE("BO size too small, alloacting dynamically");
     kernel_max_size_ = padded_shape;
-    a_bo_ = xrt::bo(xrt_ctx_->get_device(), kernel_max_size_ * sizeof(LhsT),
-                    XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(0));
-    b_bo_ = xrt::bo(xrt_ctx_->get_device(), kernel_max_size_ * sizeof(RhsT),
-                    XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(0));
-    c_bo_ = xrt::bo(xrt_ctx_->get_device(), kernel_max_size_ * sizeof(OutT),
-                    XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(0));
+    if (!skip_create_input_) {
+      a_bo_ =
+          xrt::bo(xrt_ctx_->get_device(), kernel_max_size_ * sizeof(LhsT),
+                  XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(0));
+      b_bo_ =
+          xrt::bo(xrt_ctx_->get_device(), kernel_max_size_ * sizeof(RhsT),
+                  XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(0));
+    }
+    if (!skip_create_output_) {
+      c_bo_ =
+          xrt::bo(xrt_ctx_->get_device(), kernel_max_size_ * sizeof(OutT),
+                  XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(0));
+    }
   }
 }
 
@@ -437,7 +474,9 @@ const std::vector<uint8_t> elw_mul<LhsT, RhsT, OutT>::get_transaction_bin(
                                   txn_fname_prefix_, arg_map);
   } else {
     Transaction &txn = Transaction::getInstance();
-    std::string txn_key = get_instr_key(txn_fname_prefix_, M, K);
+    std::vector<int64_t> tiled_shape = tiling_spec.info_.front().second;
+    std::string txn_key =
+        get_instr_key(txn_fname_prefix_, tiled_shape.at(0), tiled_shape.at(1));
     data = txn.get_txn_bvec(txn_key);
   }
   return data;

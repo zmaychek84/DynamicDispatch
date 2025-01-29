@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #pragma once
@@ -55,6 +56,8 @@ private:
   xrt::bo b_bo_;
   /* XRT BO for tiled output matrix */
   xrt::bo c_bo_;
+  /* XRT BO for ctrl packet */
+  xrt::bo ctrl_bo_;
   /* variables to store profile data */
   int64_t a_copy_time_;
   int64_t a_sync_time_;
@@ -77,6 +80,7 @@ private:
   std::string c_dtype_;
   std::string txn_fname_prefix_;
   std::string param_fname_prefix_;
+  bool is_ctrl_pkt_;
 
   /*
    * Utility function that setups the instruction registry with transaction
@@ -111,6 +115,12 @@ public:
   std::vector<OpArgMap> get_buffer_reqs(
       std::vector<Tensor> &input, std::vector<Tensor> &output,
       const std::map<std::string, std::any> &attr = {}) const override;
+  std::vector<uint8_t> get_ctrl_pkts(
+      std::vector<Tensor> &input, std::vector<Tensor> &output,
+      const std::map<std::string, std::any> &attr = {}) const override;
+  std::vector<CtrlPktPatchInfo> get_ctrl_pkt_patch_info(
+      std::vector<Tensor> &input, std::vector<Tensor> &output,
+      const std::map<std::string, std::any> &attr) const override;
 };
 
 } // namespace ryzenai

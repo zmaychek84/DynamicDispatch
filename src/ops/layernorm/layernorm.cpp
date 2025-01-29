@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <any>
@@ -17,9 +18,12 @@
 // dpu kernel metadata
 #include <utils/dpu_mdata.hpp>
 
+#include "ops/ops_common/help_file.hpp"
 #include "ops/ops_common/lrn_matrix.hpp"
+#include "utils/ctrl_pkt_utils.hpp"
 #include <ops/layernorm/layernorm.hpp>
 #include <ops/op_interface.hpp>
+#include <ops/ops_common/ctrlpkt.hpp>
 #include <txn_container.hpp>
 #include <txn_helper/txn_helper.hpp>
 #include <utils/instruction_registry.hpp>
@@ -139,6 +143,42 @@ const std::vector<uint8_t> layernorm<InT, WtT, OutT>::get_super_kernel_params(
 }
 
 template <typename InT, typename WtT, typename OutT>
+std::vector<uint8_t> layernorm<InT, WtT, OutT>::get_ctrl_pkts(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto [M, K] = extract_MK(input);
+  auto [Mo, Ko] = map_padded_shape(M, K);
+  // TODO: Add check to validate tensor shapes
+  std::string ctrl_key = get_instr_key(param_fname_prefix_, Mo, Ko) + "_ctrl";
+  // std::cout << "Super kernel params name : " << fname << std::endl;
+  try {
+    Transaction &txn = Transaction::getInstance();
+    return txn.get_txn_bvec(ctrl_key);
+  } catch (...) {
+    return {};
+  }
+}
+
+template <typename InT, typename WtT, typename OutT>
+std::vector<CtrlPktPatchInfo>
+layernorm<InT, WtT, OutT>::get_ctrl_pkt_patch_info(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto [M, K] = extract_MK(input);
+  auto [Mo, Ko] = map_padded_shape(M, K);
+  try {
+    auto ctrl_pkt_meta =
+        get_instr_key(param_fname_prefix_, Mo, Ko) + "_ctrl_meta";
+    Transaction &txn = Transaction::getInstance();
+    return json_str_to_ctrlpkt_patch_info(txn.get_txn_bvec(ctrl_pkt_meta));
+  } catch (...) {
+    // throw std::runtime_error(
+    //     "layernorm : Can not file the ctrl_meta.json file");
+    return {};
+  }
+}
+
+template <typename InT, typename WtT, typename OutT>
 std::vector<OpArgMap> layernorm<InT, WtT, OutT>::get_buffer_reqs(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
@@ -156,13 +196,15 @@ std::vector<OpArgMap> layernorm<InT, WtT, OutT>::get_buffer_reqs(
   size_t input_bo_size = (Mo * No * sizeof(InT));
   size_t output_bo_size = (Mo * No * sizeof(OutT));
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
+  size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
 
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, const_params_bo_size},
       {OpArgMap::OpArgType::OUTPUT, 0, 4, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
-       super_kernel_size}};
+       super_kernel_size},
+      {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};
   return arg_map;
 };
 
@@ -232,6 +274,7 @@ layernorm<InT, WtT, OutT>::layernorm(
   default_shapes_["lrn_4x4_a16acc16"].push_back(std::make_tuple(256, 1280));
   default_shapes_["lrn_4x4_a16acc16"].push_back(std::make_tuple(1024, 640));
   default_shapes_["lrn_4x4_a16acc16"].push_back(std::make_tuple(4096, 320));
+  default_shapes_["lrn_4x4_a16acc16"].push_back(std::make_tuple(64, 768));
 
   // raw shape is the actual shape from ONNX, sequence needs to match with
   // default_shape
@@ -268,6 +311,7 @@ layernorm<InT, WtT, OutT>::layernorm(
   raw_shapes_["lrn_4x4_a16acc16"].push_back(std::make_tuple(256, 1280));
   raw_shapes_["lrn_4x4_a16acc16"].push_back(std::make_tuple(1024, 640));
   raw_shapes_["lrn_4x4_a16acc16"].push_back(std::make_tuple(4096, 320));
+  raw_shapes_["lrn_4x4_a16acc16"].push_back(std::make_tuple(64, 768));
 
   a_dtype_ = a_dtype;
   b_dtype_ = b_dtype;
@@ -320,6 +364,30 @@ layernorm<InT, WtT, OutT>::layernorm(
                           txnbin_acc_header.at(c_dtype_);
   }
 
+  if (attr.count("input_shape") &&
+      attr.at("input_shape").type() == typeid(std::vector<int>)) {
+    const auto &input_shape_vector =
+        std::any_cast<const std::vector<int> &>(attr.at("input_shape"));
+
+    if (input_shape_vector.size() ==
+        3) { // PSW case. input_shape_vector[0] is 1
+      a_shape_[0] = input_shape_vector[1];
+      a_shape_[1] = input_shape_vector[2];
+    } else if (input_shape_vector.size() == 2) {
+      a_shape_[0] = input_shape_vector[0];
+      a_shape_[1] = input_shape_vector[1];
+    } else if (input_shape_vector.size() == 4) {
+      a_shape_[0] = input_shape_vector[1] * input_shape_vector[2];
+      a_shape_[1] = input_shape_vector[3];
+    } else {
+      DD_THROW("Input Shape attribute does not have the expected number of "
+               "elements, Expected 3");
+    }
+    RYZENAI_LOG_TRACE(
+        "LayerNorm: InputShape: " + std::to_string(input_shape_vector[0]) +
+        ", " + std::to_string(input_shape_vector[1]));
+  }
+
   KERNEL_M_MAX = 512;
 
   w_shape_[0] = KERNEL_M_MAX;
@@ -339,6 +407,7 @@ layernorm<InT, WtT, OutT>::layernorm(
   run_aie_time_ = 0;
   cpu_acc_time_ = 0;
   num_run_aie_ = 0;
+  is_ctrl_pkt_ = 0;
 
   std::call_once(logger_flag_, []() {
     std::string header = "layernorm_id M K N kernel_m kernel_k kernel_n Execute"
@@ -378,6 +447,7 @@ void layernorm<InT, WtT, OutT>::set_params(const std::string &model_name,
     XCLBIN_FNAME =
         OpInterface::get_dd_base_dir() + ryzenai::mzdk5_A16W8_QDQ_XCLBIN_PATH;
   } else if (model_name == "4x4mzdk5") {
+    is_ctrl_pkt_ = 1;
     XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
                    ryzenai::mzdk54x4_A16W8_QDQ_XCLBIN_PATH;
   } else if (model_name == "mdsqrv1.1") {
@@ -386,6 +456,10 @@ void layernorm<InT, WtT, OutT>::set_params(const std::string &model_name,
   } else if (model_name == "mxganv1.2") {
     XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
                    ryzenai::mxganv1_2_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "4x4PSW1.0") {
+    is_ctrl_pkt_ = 1;
+    XCLBIN_FNAME =
+        OpInterface::get_dd_base_dir() + ryzenai::PSW1_0_A16W8_QDQ_XCLBIN_PATH;
   } else {
     throw std::invalid_argument("model_name is not supported");
   }
@@ -426,21 +500,9 @@ void layernorm<InT, WtT, OutT>::initialize_const_params(
   size_t offset;
   auto qdq_params_size = lrn_matrix::QDQparam_size * sizeof(int32_t);
 
-  if (shape[0] == 768) {
-    int count = (int)(shape[0] * lrn_matrix::Mwgt);
-    offset = lrn_matrix::BiasVector<WtT, 1>::size(count);
-    auto buffer = io.get_buffer(0, offset);
-    lrn_matrix::BiasVector<WtT, 1> bias(count, buffer->ptr());
-    for (int k = 0; k < shape[0] / 8; ++k) { // 8x8 block
-      for (int j = 0; j < 8; ++j) {          // col
-        for (int i = 0; i < 8; ++i) {        // row
-          bias.gamma(k * 64 + j + i * 8) = gamma[k * 8 + j];
-          bias.beta(k * 64 + j + i * 8) = beta[k * 8 + j];
-        }
-      }
-    }
-
-  } else { // m3uec
+  if (attr.count("input_shape") &&
+      attr.at("input_shape").type() == typeid(std::vector<int>) &&
+      (a_shape_[0] == 64) && (a_shape_[1] == 768)) { // PSW 1.0
     int count = (int)shape[0];
     offset = lrn_matrix::BiasVector<WtT, 1>::size(count);
     auto buffer = io.get_buffer(0, offset);
@@ -449,8 +511,32 @@ void layernorm<InT, WtT, OutT>::initialize_const_params(
       bias.gamma((int)k) = gamma[k];
       bias.beta((int)k) = beta[k];
     }
-    auto offset = shape[0] * 2;
+  } else {
+    if (shape[0] == 768) {
+      int count = (int)(shape[0] * lrn_matrix::Mwgt);
+      offset = lrn_matrix::BiasVector<WtT, 1>::size(count);
+      auto buffer = io.get_buffer(0, offset);
+      lrn_matrix::BiasVector<WtT, 1> bias(count, buffer->ptr());
+      for (int k = 0; k < shape[0] / 8; ++k) { // 8x8 block
+        for (int j = 0; j < 8; ++j) {          // col
+          for (int i = 0; i < 8; ++i) {        // row
+            bias.gamma(k * 64 + j + i * 8) = gamma[k * 8 + j];
+            bias.beta(k * 64 + j + i * 8) = beta[k * 8 + j];
+          }
+        }
+      }
+    } else { // m3uec
+      int count = (int)shape[0];
+      offset = lrn_matrix::BiasVector<WtT, 1>::size(count);
+      auto buffer = io.get_buffer(0, offset);
+      lrn_matrix::BiasVector<WtT, 1> bias(count, buffer->ptr());
+      for (size_t k = 0; k < shape[0]; ++k) {
+        bias.gamma((int)k) = gamma[k];
+        bias.beta((int)k) = beta[k];
+      }
+    }
   }
+
   io.write(offset, (void *)qdq_params, qdq_params_size);
   const_pad_ = uint16_t(qdq_params[lrn_qdq_ifm_zp_idx]);
   RYZENAI_LOG_TRACE("Layernorm initialize_const_params(ptr) ... DONE");
@@ -500,6 +586,56 @@ void layernorm<InT, WtT, OutT>::initialize_const_params(
   c_bo_ = xrt::bo(xrt_ctx_->get_device(), C_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
                   xrt_ctx_->get_kernel().group_id(8));
 
+  auto Mo = kernel_x_shape_[0];
+  auto Ko = kernel_x_shape_[1];
+  if (is_ctrl_pkt_) {
+    // Based on the mapped_shape to get the meta json file
+    std::vector<uint8_t> json_data;
+    try {
+      auto json_key = get_instr_key(param_fname_prefix_, Mo, Ko) + "_ctrl_meta";
+      Transaction &txn = Transaction::getInstance();
+      json_data = txn.get_txn_bvec(json_key);
+    } catch (...) {
+      is_ctrl_pkt_ = 0;
+    }
+
+    if (is_ctrl_pkt_) {
+      std::cout << "ctrlpkt patching" << std::endl;
+      RYZENAI_LOG_TRACE("layernorm patch ctrlpkt ... START");
+      // get param_bo address
+      auto param_bo_key = get_instr_key(param_fname_prefix_, Mo, Ko) + "_param";
+      const xrt::bo &param_bo =
+          xrt_ctx_->get_registry().get_param_bo(param_bo_key).second;
+
+      // Get ctrl pkt patch info from json
+      std::vector<CtrlPktPatchInfo> ctrlpkt_info;
+      ctrlpkt_info = json_str_to_ctrlpkt_patch_info(json_data);
+
+      // Get the ctrl pkt
+      auto ctrl_bo_key = get_instr_key(param_fname_prefix_, Mo, Ko) + "_ctrl";
+      std::string ctrl_params =
+          Transaction::getInstance().get_txn_str(ctrl_bo_key);
+      std::vector<char> ctrl_buffer(ctrl_params.begin(), ctrl_params.end());
+
+      // ctrl pkt patch
+      std::vector<char> ctrl_pkt_new;
+      std::vector<uint64_t> buffer_addrs = {
+          uint64_t(c_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(a_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(b_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(param_bo.address() + DDR_AIE_ADDR_OFFSET)};
+      ctrl_pkt_new = patch_ctrl_bin(ctrl_buffer, ctrlpkt_info, buffer_addrs);
+
+      size_t ctrl_bo_words = ctrl_pkt_new.size();
+      ctrl_bo_ =
+          xrt::bo(xrt_ctx_->get_device(), ctrl_bo_words, XRT_BO_FLAGS_HOST_ONLY,
+                  xrt_ctx_->get_kernel().group_id(8));
+      ctrl_bo_.write(ctrl_pkt_new.data());
+      ctrl_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+      RYZENAI_LOG_TRACE("layernorm patch ctrlpkt ... DONE");
+    }
+  }
+
   // copy b_bo
   b_copy_time_ = 0;
   b_format_time_ = 0;
@@ -509,7 +645,7 @@ void layernorm<InT, WtT, OutT>::initialize_const_params(
   auto b_format_start = GET_ELAPSED_TIME_NS();
   WtT *b_bo_map = b_bo_.map<WtT *>();
   auto bo_const = BoConst(b_bo_map);
-  initialize_const_params(bo_const, const_params);
+  initialize_const_params(bo_const, const_params, attr);
   auto b_format_stop = GET_ELAPSED_TIME_NS();
   auto b_copy_stop = GET_ELAPSED_TIME_NS();
   b_format_time_ += static_cast<int64_t>(b_format_stop - b_format_start);
@@ -605,16 +741,12 @@ void layernorm<InT, WtT, OutT>::execute(std::vector<Tensor> &input,
   auto kernel_ = xrt_ctx_->get_kernel();
 
   // launch the kernel
-  xrt::run run;
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   c_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
 
-  run = kernel_(2, i_bo, i_bo_words, c_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                a_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                b_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                param_bo.address() + DDR_AIE_ADDR_OFFSET, 0);
-
-  run.wait2();
+  ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, i_bo, i_bo_words, c_bo_,
+                                            a_bo_, b_bo_, param_bo, ctrl_bo_,
+                                            true, is_ctrl_pkt_);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);
   num_run_aie_++;

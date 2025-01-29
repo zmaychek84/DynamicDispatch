@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -31,6 +32,18 @@ struct matrix_shapes {
 
   matrix_shapes(int64_t M, int64_t K, int64_t N) : M(M), K(K), N(N) {}
   matrix_shapes() : M(1), K(1), N(1) {}
+};
+
+struct batch_matrix_shapes {
+  // capture M, K, N of the shape supported.
+  int64_t B;
+  int64_t M;
+  int64_t K;
+  int64_t N;
+
+  batch_matrix_shapes(int64_t B, int64_t M, int64_t K, int64_t N)
+      : B(B), M(M), K(K), N(N) {}
+  batch_matrix_shapes() : B(1), M(1), K(1), N(1) {}
 };
 
 struct conv_shapes {
@@ -131,6 +144,20 @@ const std::string MLADF_ELWMUL_A16_QDQ_XCLBIN_PATH =
     "/xclbin/stx/mladf_2x4x2_matmul_softmax_mul_a16w16.xclbin";
 const std::string START_TAIL_4x2_MS_SHELL_QDQ_XCLBIN_PATH =
     "/xclbin/stx/4x2_ps_start_tail_ops_qdq.xclbin";
+const std::string PSW1_0_A16W8_QDQ_XCLBIN_PATH =
+    "/xclbin/stx/4x4_psw_v1.0_model_a16w8_qdq.xclbin";
+const std::string PSU_4x4_A16W8_QDQ_XCLBIN_PATH =
+    "/xclbin/stx/4x4_psu_model_a16w8_qdq.xclbin";
+
+// the name here appends folders after REPO_ROOT/xclbin
+const std::string
+    LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME =
+        "stx_llama2_mladf_2x4x4_gemmbfp16_silu_mul_mha_rms_rope";
+const std::string
+    LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME =
+        "stx_llama2_mladf_2x4x4_v1_gemmbfp16_silu_mul_mha_rms_rope";
+const std::string LLAMA2_MLADF_2x4x4_BFP16_GEMM_SILU_MUL_FLAT_RMS_XCLBIN_NAME =
+    "stx_llama2_mladf_2x4x4_bfp16_gemm_silu_mul_flat_rms";
 
 namespace utils {
 template <class Tuple,
@@ -175,7 +202,7 @@ Types max_element_count_with_skips(
 }
 
 inline int to_next_multiple(int number, int multiple) {
-  return number + (multiple - number % multiple);
+  return ((number + multiple - 1) / multiple) * multiple;
 }
 
 } // namespace utils

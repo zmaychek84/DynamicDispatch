@@ -1,16 +1,17 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <any>
 #include <cassert>
 #include <chrono>
+#include <cmath>
 #include <iostream>
 #include <map>
 #include <sstream>
 #include <tuple>
 #include <utility>
-
 // XRT headers
 #include "xrt/xrt_bo.h"
 #include "xrt/xrt_device.h"
@@ -19,7 +20,6 @@
 // dpu kernel metadata
 #include <utils/dpu_mdata.hpp>
 
-#include "txn_container.hpp"
 #include <ops/mladfmatmulbias/mladfmatmulbias.hpp>
 #include <ops/op_interface.hpp>
 #include <txn_container.hpp>
@@ -28,12 +28,26 @@
 #include <utils/meta_utils.hpp>
 #include <utils/tfuncs.hpp>
 #include <utils/utils.hpp>
+#include <xclbin_container.hpp>
 #include <xrt_context/xrt_context.hpp>
 
 #include "ops/ops_common/mladf_matmul_matrix.hpp"
 #include <txn_helper/txn_tiling_util.hpp>
 
 namespace ryzenai {
+
+namespace {
+std::string getXCLBinName(std::string op_version) {
+  if (op_version == "v1") {
+    return LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  } else if (op_version == "flat") {
+    return LLAMA2_MLADF_2x4x4_BFP16_GEMM_SILU_MUL_FLAT_RMS_XCLBIN_NAME;
+  } else {
+    return LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  }
+}
+} // namespace
+
 template <typename InT, typename WtT, typename AccT, typename OutT>
 void mladfmatmulbias<InT, WtT, AccT, OutT>::debug(bool enable) {
   debug_ = enable;
@@ -50,6 +64,11 @@ std::string mladfmatmulbias<InT, WtT, AccT, OutT>::get_instr_key(
     return "mladfmatmulbias_" + prefix + "_" + std::to_string(m) + "_" +
            std::to_string(k) + "_" + std::to_string(n);
   }
+}
+template <typename InT, typename WtT, typename AccT, typename OutT>
+std::vector<mladf_matrix_shapes> &
+mladfmatmulbias<InT, WtT, AccT, OutT>::get_supported_shapes() {
+  return supported_shapes_;
 }
 
 template <typename InT, typename WtT, typename AccT, typename OutT>
@@ -132,26 +151,6 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::setup_instr_registry(
       all_thresholds_[key].push_back(std::make_pair(0, iter->first));
     }
   }
-  // asscending sort
-  std::sort(supported_shapes_.begin(), supported_shapes_.end(),
-            [](const mladf_matrix_shapes &a, const mladf_matrix_shapes &b) {
-              if (a.M != b.M) {
-                return a.M < b.M;
-              }
-              if (a.K != b.K) {
-                return a.K < b.K;
-              }
-              if (a.N != b.N) {
-                return a.N < b.N;
-              }
-              return false;
-            });
-
-  max_a_bo_size_ = 0;
-  max_c_bo_size_ = 0;
-  max_m_ = 0;
-  max_k_ = 0;
-  max_n_ = 0;
 }
 
 template <typename InT, typename WtT, typename AccT, typename OutT>
@@ -226,16 +225,21 @@ mladfmatmulbias<InT, WtT, AccT, OutT>::mladfmatmulbias(
   c_dtype_ = c_dtype;
   a_dtype_size_ = sizeof(InT);
   initialized_ = false;
-  DPU_DIR = OpInterface::get_dd_base_dir() + "//transaction//" + "stx" +
-            "//mladfmatmulbias//";
+
   txnbin_a_header = {{"bfloat16", "a16f"}};
   txnbin_b_header = {{"uint4", "w4"}, {"int4", "w3"}};
   txnbin_acc_header = {{"bfloat16", "acc16f"}};
 
   op_version_ = "v1";
   if (attr.find("op_version") != attr.end()) {
-    op_version_ = std::any_cast<std::string>(attr.find("op_version")->second);
-    if (op_version_ != "v1") {
+    if (attr.at("op_version").type() == typeid(std::vector<std::string>)) {
+      const auto &attrs_vec = std::any_cast<const std::vector<std::string> &>(
+          attr.at("op_version"));
+      op_version_ = attrs_vec[0];
+    } else if (attr.at("op_version").type() == typeid(std::string)) {
+      op_version_ = std::any_cast<std::string>(attr.find("op_version")->second);
+    }
+    if (op_version_ != "v1" && op_version_ != "flat") {
       throw std::runtime_error("The selected op version does not exist");
     }
   }
@@ -270,18 +274,14 @@ mladfmatmulbias<InT, WtT, AccT, OutT>::mladfmatmulbias(
   // });
   setup_supported_shapes();
   /*select xclbin based on the input/output types*/
-  std::string XCLBIN_FNAME =
-      (op_version_ == "v1")
-          ? OpInterface::get_dd_base_dir() +
-                ryzenai::
-                    LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_PATH
-          : OpInterface::get_dd_base_dir() +
-                ryzenai::
-                    LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_PATH;
+  std::string XCLBIN_FNAME = getXCLBinName(op_version_);
+
   RYZENAI_LOG_TRACE(OpsFusion::dd_format("xclbin fname : {}", XCLBIN_FNAME));
 
   if (load_xrt) {
-    xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME);
+    xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(
+        XCLBIN_FNAME, 0, {},
+        XclbinContainer::getInstance().get_xclbin_content(XCLBIN_FNAME));
     if (op_version_ == "v1") {
       std::call_once(instr_reg_v1_flag_, [this]() { setup_instr_init(); });
     } else {
@@ -290,9 +290,30 @@ mladfmatmulbias<InT, WtT, AccT, OutT>::mladfmatmulbias(
     setup_instr_registry(attr);
   }
 
+  // asscending sort
+  std::sort(supported_shapes_.begin(), supported_shapes_.end(),
+            [](const mladf_matrix_shapes &a, const mladf_matrix_shapes &b) {
+              if (a.M != b.M) {
+                return a.M < b.M;
+              }
+              if (a.K != b.K) {
+                return a.K < b.K;
+              }
+              if (a.N != b.N) {
+                return a.N < b.N;
+              }
+              return false;
+            });
+
   // superkernel parameters not set through SHIM DDR
   params_bytes = 0;
   KERNEL_M_MAX = 4096;
+
+  max_a_bo_size_ = 0;
+  max_c_bo_size_ = 0;
+  max_m_ = 0;
+  max_k_ = 0;
+  max_n_ = 0;
 
   a_copy_time_ = 0;
   a_sync_time_ = 0;
@@ -358,24 +379,37 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::set_kernel_shapes_kn_mladf() const {
   }
 }
 
+// reformat const will take the constant tensors
+// and put them into packed tensor format
+// for model loading optimization, we have a flow where we want to
+// pre-process the weights, in which case we dont write to xrt::bo
+// this will be used as part of export_const_params flow where
+// is_online = false
+// const_vecs is a vector since this operator has some support for
+// host tiling, so there can be more than 1 set of packed tensor
 template <typename InT, typename WtT, typename AccT, typename OutT>
-void mladfmatmulbias<InT, WtT, AccT, OutT>::initialize_const_params(
+void mladfmatmulbias<InT, WtT, AccT, OutT>::reformat_const(
     const std::vector<Tensor> &const_params,
-    const std::map<std::string, std::any> &attr) {
+    const std::map<std::string, std::any> &attr,
+    std::vector<std::vector<std::uint8_t>> &const_vecs, bool is_online) {
+
   // get original arguments from const Tensors
   int8_t *weights = (int8_t *)const_params.at(0).data;
   int8_t *zeros = (int8_t *)const_params.at(3).data;
   float *scales = (float *)const_params.at(2).data;
   float *bias = (float *)const_params.at(1).data;
-  // a_bo, c_bo, a_bo_token, c_bo_token
-  std::array<bool, 4> need_realloc = {false, false, false, false};
+
   std::tuple<size_t, size_t> w_shape = {const_params.at(0).shape.at(0),
                                         const_params.at(0).shape.at(1)};
 
   int group_size = 128;
   std::string key = "group_size";
   if (attr.find(key) != attr.end()) {
-    group_size = std::any_cast<int>(attr.find(key)->second);
+    if (attr.at(key).type() == typeid(std::vector<int>)) {
+      group_size = (std::any_cast<const std::vector<int> &>(attr.at(key)))[0];
+    } else if (attr.at(key).type() == typeid(int)) {
+      group_size = std::any_cast<int>(attr.find(key)->second);
+    }
   }
   // Note: for mladf int8 gemm we had to change group id to 0
   const int group_id = 0;
@@ -423,11 +457,21 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::initialize_const_params(
           (group_size < 128) ? buff_B1.data_size : buff_B2.data_size;
 
       xrt::bo bo_;
-      bo_ = xrt::bo(xrt_ctx_->get_context(), block_size,
-                    xrt::bo::flags::host_only,
-                    xrt_ctx_->get_kernel().group_id(group_id));
-      auto bo_map = bo_.map<WtT *>();
-      memset((void *)bo_map, 0, block_size);
+      std::vector<std::uint8_t> bo_vec;
+
+      WtT *bo_map = nullptr;
+
+      if (is_online) {
+        bo_ = xrt::bo(xrt_ctx_->get_context(), block_size,
+                      xrt::bo::flags::host_only,
+                      xrt_ctx_->get_kernel().group_id(group_id));
+        bo_map = bo_.map<WtT *>();
+        memset((void *)bo_map, 0, block_size);
+      } else {
+        bo_vec = std::vector<std::uint8_t>(block_size, 0);
+        bo_map = (WtT *)bo_vec.data();
+      }
+
       buff_B1.data = (mladfCoreSubv<32, 32, 32> *)bo_map;
       buff_B2.data = (mladfCoreSubv<128, 32, 128> *)bo_map;
 
@@ -510,24 +554,149 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::initialize_const_params(
       b_format_time_ += static_cast<int64_t>(b_format_stop - b_format_start);
 
       auto b_sync_start = GET_ELAPSED_TIME_NS();
-      bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+      if (is_online) {
+        bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+      }
       auto b_sync_stop = GET_ELAPSED_TIME_NS();
       b_sync_time_ = static_cast<int64_t>(b_sync_stop - b_sync_start);
 
-      weights_bo_.push_back(bo_);
+      if (is_online) {
+        weights_bo_.push_back(bo_);
+      } else {
+        const_vecs.push_back(bo_vec);
+      }
     }
   }
+}
+template <typename InT, typename WtT, typename AccT, typename OutT>
+bool mladfmatmulbias<InT, WtT, AccT, OutT>::create_bo(void *usr_ptr,
+                                                      size_t size,
+                                                      int operand_index) {
+  std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(usr_ptr);
+  constexpr std::uint32_t MASK = ((1 << 12) - 1);
+  if ((addr & MASK) != 0) {
+    return false;
+  }
+  auto bo =
+      xrt::bo(xrt_ctx_->get_context(), usr_ptr, size, xrt::bo::flags::host_only,
+              xrt_ctx_->get_kernel().group_id(0));
+  if (operand_index == 0) {
+    a_bo_ = bo;
+
+  } else if (operand_index == 1) {
+    c_bo_ = bo;
+  } else {
+    return false;
+  }
+  return true;
+}
+
+template <typename InT, typename WtT, typename AccT, typename OutT>
+void mladfmatmulbias<InT, WtT, AccT, OutT>::initialize_const_params(
+    const std::vector<Tensor> &const_params,
+    const std::map<std::string, std::any> &attr) {
+
+  std::vector<std::vector<std::uint8_t>> const_vecs;
+
+  constexpr bool is_online = true;
+
+  int num_preformat_tensors = 0;
+
+  if (attr.find("num_preformat_tensors") != attr.end()) {
+    num_preformat_tensors =
+        std::any_cast<int>(attr.find("num_preformat_tensors")->second);
+  }
+  // tensor size is the max size for bo create, then share this single bo
+  // between ops
+  int share_tensor_size = 0;
+
+  if (attr.find("tensor_size") != attr.end()) {
+    share_tensor_size = std::any_cast<int>(attr.find("tensor_size")->second);
+  }
+
+  int use_host_buffer = 0;
+
+  if (attr.find("use_host_buffer") != attr.end()) {
+    use_host_buffer = std::any_cast<int>(attr.find("use_host_buffer")->second);
+  }
+
+  // Note: for mladf int8 gemm we had to change group id to 0
+  const int group_id = 0;
+
+  if (0 == num_preformat_tensors) {
+    reformat_const(const_params, attr, const_vecs, is_online);
+  } else {
+    constexpr int PACKED_TENSOR_OFFSET = 1;
+    for (int packed_tensor_idx = 0; packed_tensor_idx < num_preformat_tensors;
+         packed_tensor_idx++) {
+      const auto &const_tensor =
+          const_params.at(packed_tensor_idx + PACKED_TENSOR_OFFSET);
+
+      size_t const_tensor_size =
+          std::accumulate(const_tensor.shape.begin(), const_tensor.shape.end(),
+                          size_t{1}, std::multiplies{}) *
+          Utils::get_size_of_type(const_tensor.dtype);
+
+      std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(const_tensor.data);
+      // Need 4K alignment
+      constexpr std::uint32_t MASK = ((1 << 12) - 1);
+      bool is_aligned = ((addr & MASK) == 0);
+      size_t wts_tensor_size = const_tensor_size;
+      if (use_host_buffer && (is_aligned)) {
+
+        if (share_tensor_size) { // create bo with max size, share single bo and
+                                 // load wts just-in-time
+          weights_bo_.clear();
+          wts_tensor_size =
+              std::max((size_t)share_tensor_size, const_tensor_size);
+        }
+        xrt::bo const_bo = xrt::bo(xrt_ctx_->get_context(), const_tensor.data,
+                                   wts_tensor_size, xrt::bo::flags::host_only,
+                                   xrt_ctx_->get_kernel().group_id(group_id));
+        const_bo.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+
+        weights_bo_.push_back(const_bo);
+      } else {
+        xrt::bo const_bo = xrt::bo(xrt_ctx_->get_context(), const_tensor_size,
+                                   xrt::bo::flags::host_only,
+                                   xrt_ctx_->get_kernel().group_id(group_id));
+
+        constexpr int offset = 0;
+        const_bo.write(const_tensor.data, const_tensor_size, offset);
+        const_bo.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+        weights_bo_.push_back(const_bo);
+      }
+    }
+
+    // NOTE: Need to set these state parameters which are used
+    //       for xrt::bo allocation that happens below
+    std::tuple<size_t, size_t> w_shape = {const_params.at(0).shape.at(0),
+                                          const_params.at(0).shape.at(1)};
+    w_shape_[0] = std::get<0>(w_shape);
+    w_shape_[1] = std::get<1>(w_shape);
+
+    set_kernel_shapes_kn_mladf();
+  }
+
+  // a_bo, c_bo, a_bo_token, c_bo_token
+  std::array<bool, 4> need_realloc = {false, false, false, false};
 
   if (attr.find("max_m") != attr.end()) {
-    max_m_ = (size_t)std::any_cast<int>(attr.find("max_m")->second);
+    if (attr.at("max_m").type() == typeid(int)) {
+      max_m_ = (size_t)std::any_cast<int>(attr.find("max_m")->second);
+    } else if (attr.at("max_m").type() == typeid(std::vector<int>)) {
+      max_m_ = (std::any_cast<const std::vector<int> &>(attr.at("max_m")))[0];
+    }
     RYZENAI_LOG_TRACE("Updated max m to: " + std::to_string(max_m_));
   } else {
     max_m_ = KERNEL_M_MAX;
   }
   size_t a_bo_size = max_m_ * kernel_x_shape_[1];
+
   size_t c_bo_size = (kernel_x_shape_[1] <= 4096)
                          ? max_m_ * kernel_z_shape_[1]
                          : 2 * max_m_ * kernel_z_shape_[1];
+
   if (a_bo_size > max_a_bo_size_) {
     need_realloc.at(0) = true;
     max_a_bo_size_ = a_bo_size;
@@ -545,17 +714,19 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::initialize_const_params(
     max_n_ = c_bo_size / max_m_;
   }
   if ((std::count(need_realloc.begin(), need_realloc.end(), true) > 0)) {
+
     size_t A_BO_SIZE_TOKEN = max_k_ * a_dtype_size_;
     size_t C_BO_SIZE_TOKEN = max_n_ * sizeof(OutT);
     size_t A_BO_SIZE = max_a_bo_size_ * a_dtype_size_;
     size_t C_BO_SIZE = max_c_bo_size_ * sizeof(OutT);
     bool skip_input_creation = attr.find("skip_create_input") != attr.end();
     bool skip_output_creation = attr.find("skip_create_output") != attr.end();
-
+    bool skip_token_creation = attr.find("skip_create_token") != attr.end();
     RYZENAI_LOG_TRACE("A_BO_SIZE: " + std::to_string(A_BO_SIZE));
     RYZENAI_LOG_TRACE("C_BO_SIZE: " + std::to_string(C_BO_SIZE));
     RYZENAI_LOG_TRACE("A_BO_SIZE_TOKEN: " + std::to_string(A_BO_SIZE_TOKEN));
     RYZENAI_LOG_TRACE("C_BO_SIZE_TOKEN: " + std::to_string(C_BO_SIZE_TOKEN));
+
     if (need_realloc.at(0) && !skip_input_creation) {
       RYZENAI_LOG_TRACE("REALLOCATING for a_bo_");
       a_bo_ =
@@ -568,19 +739,34 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::initialize_const_params(
           xrt::bo(xrt_ctx_->get_context(), C_BO_SIZE, xrt::bo::flags::host_only,
                   xrt_ctx_->get_kernel().group_id(group_id));
     }
-    if (need_realloc.at(2) && !skip_input_creation) {
+    if (need_realloc.at(2) && !skip_token_creation) {
       RYZENAI_LOG_TRACE("REALLOCATING for a_bo_token_");
       a_bo_token_ = xrt::bo(xrt_ctx_->get_context(), A_BO_SIZE_TOKEN,
                             xrt::bo::flags::host_only,
                             xrt_ctx_->get_kernel().group_id(group_id));
     }
-    if (need_realloc.at(3) && !skip_output_creation) {
+    if (need_realloc.at(3) && !skip_token_creation) {
       RYZENAI_LOG_TRACE("REALLOCATING for c_bo_token_");
       c_bo_token_ = xrt::bo(xrt_ctx_->get_context(), C_BO_SIZE_TOKEN,
                             xrt::bo::flags::host_only,
                             xrt_ctx_->get_kernel().group_id(group_id));
     }
   }
+}
+
+template <typename InT, typename WtT, typename AccT, typename OutT>
+std::vector<std::vector<std::uint8_t>>
+mladfmatmulbias<InT, WtT, AccT, OutT>::export_const_params(
+    const std::vector<Tensor> &const_params,
+    const std::map<std::string, std::any> &attr) {
+
+  std::vector<std::vector<std::uint8_t>> const_vecs;
+
+  constexpr bool is_online = false;
+
+  reformat_const(const_params, attr, const_vecs, is_online);
+
+  return const_vecs;
 }
 
 // specialization for ML-ADF, invoked in set_kernel_shapes_m if is_mladf_enabled
@@ -693,18 +879,15 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::run_aie(InT *a, xrt::bo &w_bo,
 
   auto kernel_ = xrt_ctx_->get_kernel();
 
-  xrt::run run;
   // launch the GEMM kernel
   auto run_aie_start = GET_ELAPSED_TIME_NS();
 
   // kernel call for GEMM that supports transaction binary flow
-  run = kernel_(2, instr_bo, instr_bo_words,
-                a_bo_run_aie.address() + DDR_AIE_ADDR_OFFSET,
-                w_bo.address() + DDR_AIE_ADDR_OFFSET,
-                c_bo_run_aie.address() + DDR_AIE_ADDR_OFFSET,
-                c_bo_run_aie.address() + DDR_AIE_ADDR_OFFSET, 0);
+
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, a_bo_run_aie, w_bo, c_bo_run_aie,
+      c_bo_run_aie, 0, wait, false);
   if (wait) {
-    run.wait2();
     num_run_aie_++;
 
     auto run_aie_stop = GET_ELAPSED_TIME_NS();
@@ -789,18 +972,15 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::run_aie_2(InT *a, xrt::bo &w_bo,
 
   auto kernel_ = xrt_ctx_->get_kernel();
 
-  xrt::run run;
   // launch the GEMM kernel
   auto run_aie_start = GET_ELAPSED_TIME_NS();
 
   // kernel call for GEMM that supports transaction binary flow
-  run = kernel_(2, instr_bo, instr_bo_words,
-                a_bo_run_aie.address() + DDR_AIE_ADDR_OFFSET,
-                w_bo.address() + DDR_AIE_ADDR_OFFSET,
-                c_bo_run_aie.address() + DDR_AIE_ADDR_OFFSET,
-                c_bo_run_aie.address() + DDR_AIE_ADDR_OFFSET, 0);
+
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, a_bo_run_aie, w_bo, c_bo_run_aie,
+      c_bo_run_aie, 0, wait, false);
   if (wait) {
-    run.wait2();
     num_run_aie_++;
 
     auto run_aie_stop = GET_ELAPSED_TIME_NS();
@@ -897,15 +1077,10 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::execute_2(
 
   auto kernel_ = xrt_ctx_->get_kernel();
 
-  xrt::run run;
-
-  run = kernel_(2, instr_bo, instr_bo_words,
-                inputs[0].address() + DDR_AIE_ADDR_OFFSET,
-                inputs[1].address() + DDR_AIE_ADDR_OFFSET,
-                outputs[0].address() + DDR_AIE_ADDR_OFFSET,
-                outputs[0].address() + DDR_AIE_ADDR_OFFSET, 0);
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, inputs[0], inputs[1], outputs[0],
+      outputs[0], 0, wait, false);
   if (wait) {
-    run.wait2();
 
     if (c_shape_[1] < kernel_z_shape_[1]) {
       outputs[0].sync(XCL_BO_SYNC_BO_FROM_DEVICE);
@@ -960,15 +1135,10 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::execute(
 
   auto kernel_ = xrt_ctx_->get_kernel();
 
-  xrt::run run;
-
-  run = kernel_(2, instr_bo, instr_bo_words,
-                inputs[0].address() + DDR_AIE_ADDR_OFFSET,
-                inputs[1].address() + DDR_AIE_ADDR_OFFSET,
-                outputs[0].address() + DDR_AIE_ADDR_OFFSET,
-                outputs[0].address() + DDR_AIE_ADDR_OFFSET, 0);
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, inputs[0], inputs[1], outputs[0],
+      outputs[0], 0, wait, false);
   if (wait) {
-    run.wait2();
 
     if (c_shape_[1] < kernel_z_shape_[1]) {
       outputs[0].sync(XCL_BO_SYNC_BO_FROM_DEVICE);
@@ -1006,15 +1176,12 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::execute_2(
 
   auto kernel_ = xrt_ctx_->get_kernel();
 
-  xrt::run run;
-
   //  kernel call for GEMM that supports transaction binary flow
-  run = kernel_(2, instr_bo, instr_bo_words, inputs[0] + DDR_AIE_ADDR_OFFSET,
-                inputs[1] + DDR_AIE_ADDR_OFFSET,
-                outputs[0].address() + DDR_AIE_ADDR_OFFSET,
-                outputs[0].address() + DDR_AIE_ADDR_OFFSET, 0);
+
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, inputs[0], inputs[1], outputs[0],
+      outputs[0], 0, wait, false);
   if (wait) {
-    run.wait2();
     if (c_shape_[1] < kernel_z_shape_[1]) {
 
       outputs[0].sync(XCL_BO_SYNC_BO_FROM_DEVICE);
@@ -1069,15 +1236,12 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::execute(
 
   auto kernel_ = xrt_ctx_->get_kernel();
 
-  xrt::run run;
-
   //  kernel call for GEMM that supports transaction binary flow
-  run = kernel_(2, instr_bo, instr_bo_words, inputs[0] + DDR_AIE_ADDR_OFFSET,
-                inputs[1] + DDR_AIE_ADDR_OFFSET,
-                outputs[0].address() + DDR_AIE_ADDR_OFFSET,
-                outputs[0].address() + DDR_AIE_ADDR_OFFSET, 0);
+
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, inputs[0], inputs[1], outputs[0],
+      outputs[0], 0, wait, false);
   if (wait) {
-    run.wait2();
     if (c_shape_[1] < kernel_z_shape_[1]) {
 
       outputs[0].sync(XCL_BO_SYNC_BO_FROM_DEVICE);
@@ -1324,6 +1488,7 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::execute_internal(
   auto input_size = a_shape_[0] * kernel_x_shape_[1] * a_dtype_size_;
   int64_t input_1_size = std::min(a_shape_[1], kernel_x_shape_[1]);
   auto a_copy_start = GET_ELAPSED_TIME_NS();
+
   uint16_t *a_map = a_bo_run_aie.map<uint16_t *>();
 
   memset((void *)a_map, 0, input_size);
@@ -1335,6 +1500,7 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::execute_internal(
     memcpy((void *)&a_map[i * kernel_x_shape_[1]], (void *)&a[i * a_shape_[1]],
            input_1_size * a_dtype_size_);
   }
+
   auto a_copy_stop = GET_ELAPSED_TIME_NS();
 
   // sync input activation to device memory
@@ -1354,17 +1520,14 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::execute_internal(
     }
 
     auto kernel_ = xrt_ctx_->get_kernel();
-    xrt::run run;
     // launch the GEMM kernel
     auto run_aie_start = GET_ELAPSED_TIME_NS();
 
     // kernel call for GEMM that supports transaction binary flow
-    run = kernel_(2, instr_bo, instr_bo_words,
-                  a_bo_run_aie.address() + DDR_AIE_ADDR_OFFSET,
-                  weights_bo_[tile_idx].address() + DDR_AIE_ADDR_OFFSET,
-                  c_bo_run_aie.address() + DDR_AIE_ADDR_OFFSET,
-                  c_bo_run_aie.address() + DDR_AIE_ADDR_OFFSET, 0);
-    run.wait2();
+
+    ryzenai::dynamic_dispatch::execute_kernel(
+        kernel_, 2, instr_bo, instr_bo_words, a_bo_run_aie,
+        weights_bo_[tile_idx], c_bo_run_aie, c_bo_run_aie, 0, true, false);
     auto run_aie_stop = GET_ELAPSED_TIME_NS();
     num_run_aie_++;
     run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);
@@ -1461,7 +1624,9 @@ void mladfmatmulbias<InT, WtT, AccT, OutT>::initialize_const_params(
                                         const_params.at(0).shape.at(1)};
   int group_size = 128;
   std::string key = "group_size";
-  group_size = std::any_cast<std::vector<int>>(attr.find(key)->second)[0];
+  if (attr.at(key).type() == typeid(std::vector<int>)) {
+    group_size = (std::any_cast<const std::vector<int> &>(attr.at(key)))[0];
+  }
   // Note: for mladf int8 gemm we had to change group id to 0
   const int group_id = 0;
 
@@ -1656,7 +1821,9 @@ mladfmatmulbias<InT, WtT, AccT, OutT>::get_transaction_bin(
   auto [M, K, N] = fit_MKN(input);
   int group_size = 128;
   std::string key = "group_size";
-  group_size = std::any_cast<std::vector<int>>(attr.find(key)->second)[0];
+  if (attr.at(key).type() == typeid(std::vector<int>)) {
+    group_size = (std::any_cast<const std::vector<int> &>(attr.at(key)))[0];
+  }
 
   std::vector<uint8_t> data;
   auto [tiling_info, tiling_info_m, cost] = map_padded_shape(M, K, N);
@@ -1703,15 +1870,15 @@ std::vector<OpArgMap> mladfmatmulbias<InT, WtT, AccT, OutT>::get_buffer_reqs(
   // iterate over kernel shaped blocks of the weight matrix
   int group_size = 128;
   std::string key = "group_size";
-  group_size = std::any_cast<std::vector<int>>(attr.find(key)->second)[0];
+  if (attr.at(key).type() == typeid(std::vector<int>)) {
+    group_size = (std::any_cast<const std::vector<int> &>(attr.at(key)))[0];
+  }
   int block_size = (group_size < 128) ? buff_B1.data_size : buff_B2.data_size;
   size_t const_params_bo_size = block_size;
-  size_t input_bo_size =
-      (input.at(0).shape.at(2) * kernel_x_shape_[0] * sizeof(InT));
-  size_t output_bo_size =
-      (input.at(5).shape.at(2) * kernel_z_shape_[0] * sizeof(OutT));
+  size_t input_bo_size = (tiling_info.K * kernel_x_shape_[0] * sizeof(InT));
+  size_t output_bo_size = (tiling_info.N * kernel_z_shape_[0] * sizeof(OutT));
 
-  bool needs_scratch = input.at(0).shape.at(2) > 4096;
+  bool needs_scratch = tiling_info.K > 4096;
   size_t scratch_bo_size = (needs_scratch) ? 2 * output_bo_size : 0;
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
 

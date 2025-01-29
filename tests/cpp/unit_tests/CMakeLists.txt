@@ -1,4 +1,5 @@
-# Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+# Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+# Licensed under the MIT License.
 
 add_executable(
   cpp_tests
@@ -12,6 +13,8 @@ add_executable(
   test_act_matmul_softmax.cpp
   test_AddTanhLPNorm.cpp
   test_AttentionMaskPrePro.cpp
+  test_AttentionMaskPrePro_win25.cpp
+  test_batch_matmul.cpp
   test_bmm.cpp
   test_bmmB.cpp
   test_bmmC.cpp
@@ -20,6 +23,7 @@ add_executable(
   test_concateOps.cpp
   test_conv.cpp
   test_conv2matmul.cpp
+  test_conv2matmul_silu.cpp
   test_convForMatmulAdd.cpp
   test_dequant.cpp
   test_DotProductSigmoid.cpp
@@ -28,7 +32,11 @@ add_executable(
   test_elwmul.cpp
   test_elwmul_qdq.cpp
   test_expand.cpp
+  test_flat_mha_v2.cpp
+  test_flat_mlp.cpp
+  test_flat_rms_add.cpp
   test_gap.cpp
+  test_gatherqdqadd.cpp
   test_gelu.cpp
   test_graphMode.cpp
   test_groupnorm.cpp
@@ -41,6 +49,7 @@ add_executable(
   test_matmul.cpp
   test_matmul_a16a16_mladf.cpp
   test_matmul_a16w8_mladf.cpp
+  test_matmul_v_geluadd.cpp
   test_matmulbias.cpp
   test_matmulgeluadd.cpp
   test_matvecadd.cpp
@@ -48,6 +57,7 @@ add_executable(
   test_mhachannel.cpp
   test_mhagprb.cpp
   test_mhamzdk5.cpp
+  test_mhapsw.cpp
   test_mhawindow.cpp
   test_mladfadd.cpp
   test_mladfelwadd.cpp
@@ -57,9 +67,23 @@ add_executable(
   test_mladfrmsnorm.cpp
   test_mladfsoftmax.cpp
   test_nni_resize.cpp
+  test_qdq_mul.cpp
+  test_qdqadd.cpp
   test_quant.cpp
   test_ReduceSum.cpp
+  test_sd_concat.cpp
   test_sd_conv.cpp
+  test_sd_elwadd.cpp
+  test_sd_elwmul.cpp
+  test_sd_gelu.cpp
+  test_sd_gemm.cpp
+  test_sd_groupnorm.cpp
+  test_sd_layernorm.cpp
+  test_sd_matmul.cpp
+  test_sd_mha.cpp
+  test_sd_resize.cpp
+  test_sd_silu.cpp
+  test_sd_slice.cpp
   test_sigmoid.cpp
   test_silu.cpp
   test_silu_qdq.cpp
@@ -68,6 +92,10 @@ add_executable(
   test_transpose.cpp
   test_xcom_conv2d.cpp
 )
+
+if(MSVC)
+  target_compile_options(cpp_tests PRIVATE /MP)
+endif()
 
 dd_configure_test(cpp_tests ON)
 if(UNIT_TEST_PERF_EN)

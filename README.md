@@ -151,7 +151,7 @@ cmake -S . -B build -DCMAKE_INSTALL_PREFIX=build\Release --fresh
 ## Optional build flag: Build unit tests -DENABLE_DD_TESTS=ON
 cmake -S . -B build -DCMAKE_INSTALL_PREFIX=build\Release -DENABLE_DD_TESTS=ON -DUNIT_TEST_PERF_EN=ON --fresh
 
-cmake --build build --config=Release --target install
+cmake --build build --config=Release --target install -j
 ```
 
 ## Compile source code (Linux)

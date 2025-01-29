@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -217,6 +218,7 @@ int test_gpn(int M, int N, int GB, bool debug = false,
       a_dtype, b_dtype, c_dtype, false, attr);
 
   groupnorm_.debug(debug);
+
   std::vector<size_t> perform_shape = {Ms, Ns, GBs};
   groupnorm_.set_params(model_name, perform_shape);
 
@@ -292,169 +294,169 @@ int test_gpn(int M, int N, int GB, bool debug = false,
   return err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel1) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_64_1280) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       64, 1280, 1280, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel2) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_64_2560) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       64, 2560, 2560, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel3) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_256_1280) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       256, 1280, 1280, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel4) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_256_2560) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       256, 2560, 2560, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel5) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_256_1920) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       256, 1920, 1920, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel6) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_1024_640) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       1024, 640, 640, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel7) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_4096_320) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       4096, 320, 320, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel8) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_1024_1920) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       1024, 1920, 1920, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel9) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_1024_960) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       1024, 960, 960, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel10) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_1024_1280) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       1024, 1280, 1280, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel11) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_4096_640) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       4096, 640, 640, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel12) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_4096_960) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       4096, 960, 960, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel13) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_1024_320) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       1024, 320, 320, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel14) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_bf16_bf16_256_640) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       256, 640, 640, false, "bfloat16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel15) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_64_1280) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       64, 1280, 1280, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel16) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_64_2560) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       64, 2560, 2560, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel17) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_256_1280) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       256, 1280, 1280, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel18) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_256_2560) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       256, 2560, 2560, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel19) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_256_1920) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       256, 1920, 1920, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel20) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_1024_640) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       1024, 640, 640, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel21) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_4096_320) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       4096, 320, 320, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel22) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_1024_1920) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       1024, 1920, 1920, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel23) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_1024_960) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       1024, 960, 960, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel24) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_1024_1280) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       1024, 1280, 1280, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel25) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_4096_640) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       4096, 640, 640, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel26) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_4096_960) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       4096, 960, 960, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel27) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_1024_320) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       1024, 320, 320, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel28) {
+TEST(C4mzdk5_GPN_Testabf16wbf16, Kernel_uint16_bf16_256_640) {
   int err_count = test_gpn<int16_t, int16_t, uint16_t>(
       256, 640, 640, false, "uint16", "bfloat16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;

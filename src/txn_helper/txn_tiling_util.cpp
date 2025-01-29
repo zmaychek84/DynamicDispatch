@@ -59,6 +59,16 @@ map_padded_shape(int64_t M, int64_t K,
       tiling_spec.info_.push_back(std::make_pair(shape_size, s));
       return tiling_spec;
     }
+    if (shape_size > M * K) {
+      tiling_spec.size_ = shape_size;
+      if (tiling_cost.count(shape_size)) {
+        tiling_spec.cost_ = tiling_cost.at(shape_size);
+      } else {
+        tiling_spec.cost_ = 100;
+      }
+      tiling_spec.info_.push_back(std::make_pair(shape_size, s));
+      return tiling_spec;
+    }
     possible_tiles.insert({shape_size, s});
     tiling.insert(shape_size);
   }
@@ -148,8 +158,8 @@ double minimum_tiles_helper(
     } catch (...) {
       m_cost = 100;
     }
-    if (sub_res >= 0 && sub_res + (m_cost) < res) {
-      res = sub_res + (m_cost);
+    if (sub_res >= 0 && sub_res + (m_cost) + 0.5 < res) {
+      res = sub_res + (m_cost) + 0.5;
       minSolution = memo[V - m].second;
       minSolution.push_back(m);
     }
@@ -320,6 +330,37 @@ std::vector<uint8_t> matmul_nonuniform_tile_transaction_bin(
         txn_util::patch(tiled_base_txn_bin.at(m), args_map);
   }
 
+  auto fused_txn = txn_util::fuse_txns(tiled_base_txn_bin);
+  return fused_txn;
+}
+
+/**
+ * @brief Tile the transaction binary of rmsnorm based on the tiling specified.
+ * Each tile coul be not of the same size, the size and sequence information is
+ * specified in dest arg maps.
+ *
+ * @param base_txn_bin: the kernel transaction bin list for different shapes, in
+ * the sequence of dest arg maps.
+ * @param source_arg_map: contains the buffer sizes of the base (unit) kernel
+ * operation
+ * @param dest_arg_maps: a vector of vector of OpArgMap specifying the tiling
+ * information for each tile
+ *
+ * @returns fused transaction bin based on the tiling scheme
+ */
+std::vector<uint8_t> rmsnorm_nonuniform_tile_transaction_bin(
+    std::vector<std::vector<uint8_t>> &tiled_base_txn_bin,
+    const std::vector<OpArgMap> &source_arg_map,
+    const std::vector<std::vector<OpArgMap>> &dest_arg_maps) {
+  RYZENAI_LOG_TRACE("Tiling matmul nonuniform transaction bin");
+  DD_THROW_IF((tiled_base_txn_bin.size() != dest_arg_maps.size()),
+              "base txn bin and dest arg maps size mismatch");
+  DD_THROW_IF((tiled_base_txn_bin.size() < 1),
+              "base txn bin size should be at least 1");
+  for (int i = 1; i < tiled_base_txn_bin.size(); i++) {
+    tiled_base_txn_bin.at(i) = txn_util::patch(
+        tiled_base_txn_bin.at(i), source_arg_map, dest_arg_maps.at(i));
+  }
   auto fused_txn = txn_util::fuse_txns(tiled_base_txn_bin);
   return fused_txn;
 }

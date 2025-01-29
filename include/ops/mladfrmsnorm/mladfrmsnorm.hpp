@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -34,7 +35,7 @@ template <typename LhsT, typename WtsT, typename OutT>
 class rms_norm : public OpInterface {
 private:
   std::map<std::string, std::string> txnbin_operand_header;
-  std::map<std::string, std::vector<std::tuple<int, int>>> default_shapes_;
+  std::vector<std::tuple<int, int>> supported_shapes_;
   /* BxMxK dimension of base elwmul being offloaded to AIE */
   int64_t kernel_x_shape_[2];
   /*Kernel shape selected in runtime*/
@@ -42,6 +43,10 @@ private:
   int64_t operand_shape_[3];
   size_t operand_size_in_bytes_;
   size_t wts_size_in_bytes_;
+  size_t kernel_max_size_;
+  bool skip_create_input_a_ = false;
+  bool skip_create_input_b_ = false;
+  bool skip_create_output_;
   /* xrt context handle */
   // xrt_context *xrt_ctx_;
   // static instruction_registry instr_reg_add_;
@@ -56,7 +61,6 @@ private:
   /* size for activation dtype*/
   int operand_dtype_size_;
   std::string instr_bo_key_;
-  std::vector<std::pair<size_t, size_t>> thresholds_;
 
   /* variables to store profile data */
   int64_t a_copy_time_;
@@ -78,6 +82,10 @@ private:
   std::string txn_fname_prefix_;
   std::string param_fname_prefix_;
   std::string op_version_;
+  /* tiling */
+  std::map<int64_t, double> m_tiling_cost_;
+  static std::mutex instr_reg_mutex_;
+
   /*
    * Utility function that setups for context.
    */
@@ -87,13 +95,26 @@ private:
    * binaries.
    */
   void setup_instr_registry(const std::map<std::string, std::any> &attr);
-  /*
-   * Utility function that checks if an operands shape is supported before
-   * execution.
-   */
-  bool isSupportedShape(const Tensor &operand) const;
 
+  /**
+   * @brief get all supported shapes of the operator
+   */
+  void setup_supported_shapes();
   std::string get_instr_key(std::string prefix, size_t m, size_t k) const;
+
+  /**
+   * @brief tiling along the m dimension
+   */
+  std::tuple<std::tuple<int, int>, std::vector<int64_t>, double>
+  map_padded_shape(int64_t M, int64_t K) const;
+
+  /**
+   * @brief generate tiled txn bins
+   */
+  const std::vector<uint8_t>
+  generate_fused_txnbin(const std::tuple<int, int> &tiling_info,
+                        const std::vector<int64_t> &tiling_info_m,
+                        const int64_t &K) const;
 
 public:
   rms_norm(const std::string &operand_dtype, bool load_xrt,
@@ -123,7 +144,8 @@ public:
       const std::map<std::string, std::any> &attr = {}) override {}
   void initialize_const_params(
       ConstBufferIO &io, const std::vector<Tensor> &const_params,
-      const std::map<std::string, std::any> &attr = {}) override {}
+      const std::map<std::string, std::any> &attr = {}) override;
+  void create_bo(void *data_b, size_t size, int index);
   // TBD
   inline static float EPSILON = 0;
   bool load_xrt_;

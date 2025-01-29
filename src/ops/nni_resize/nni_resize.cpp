@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 #include <any>
 #include <iostream>
@@ -20,8 +21,12 @@
 #include <utils/instruction_registry.hpp>
 #include <xrt_context/xrt_context.hpp>
 
+#include "utils/ctrl_pkt_utils.hpp"
+
 #include <ops/nni_resize/nni_resize.hpp>
 #include <ops/op_interface.hpp>
+#include <ops/ops_common/ctrlpkt.hpp>
+
 #include <utils/logging.hpp>
 #include <utils/utils.hpp>
 
@@ -161,6 +166,8 @@ nni_resize<InT, OutT>::nni_resize(const std::string &a_dtype,
   std::string XCLBIN_FNAME =
       OpInterface::get_dd_base_dir() + ryzenai::mzdk54x4_A16W8_QDQ_XCLBIN_PATH;
 
+  is_ctrl_pkt_ = 1;
+
   design_param_ = "";
   if (attr.count("design_param") &&
       attr.at("design_param").type() == typeid(std::vector<std::string>)) {
@@ -228,6 +235,92 @@ void nni_resize<InT, OutT>::initialize_const_params(
 }
 
 template <typename InT, typename OutT>
+void nni_resize<InT, OutT>::initialize_const_params(
+    const std::vector<Tensor> &const_params,
+    const std::map<std::string, std::any> &attr) {
+
+  RYZENAI_LOG_TRACE("resize initialize_const_params(ptr) ...");
+
+  a_shape_[0] = const_params.at(0).shape.at(0);
+  a_shape_[1] = const_params.at(0).shape.at(1);
+  a_shape_[2] = const_params.at(0).shape.at(2);
+
+  auto [H, W, C] = map_padded_shape(a_shape_[0], a_shape_[1], a_shape_[2]);
+
+  kernel_x_shape_[0] = H;
+  kernel_x_shape_[1] = W;
+  kernel_x_shape_[2] = C;
+
+  const auto a_bo_size_in_bytes = kernel_x_shape_[0] * kernel_x_shape_[1] *
+                                  kernel_x_shape_[2] * a_dtype_size_;
+  const auto c_bo_size_in_bytes = kernel_x_shape_[0] * kernel_x_shape_[1] *
+                                  kernel_x_shape_[2] * 4 * c_dtype_size_;
+
+  /* Create input/output BOs */
+  const size_t A_BO_SIZE = a_bo_size_in_bytes;
+  const size_t C_BO_SIZE = c_bo_size_in_bytes;
+  RYZENAI_LOG_TRACE("NNI_RESIZE: A_BO_SIZE:" + std::to_string(A_BO_SIZE) +
+                    " C_BO_SIZE:" + std::to_string(C_BO_SIZE));
+
+  a_bo_ = xrt::bo(xrt_ctx_->get_device(), A_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
+                  xrt_ctx_->get_kernel().group_id(8));
+
+  c_bo_ = xrt::bo(xrt_ctx_->get_device(), C_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
+                  xrt_ctx_->get_kernel().group_id(8));
+
+  if (is_ctrl_pkt_) {
+    // Based on the mapped_shape to get the meta json file
+    std::vector<uint8_t> json_data;
+    try {
+      auto json_key =
+          get_instr_key(param_fname_prefix_, H, W, C) + "_ctrl_meta";
+      Transaction &txn = Transaction::getInstance();
+      json_data = txn.get_txn_bvec(json_key);
+    } catch (...) {
+      is_ctrl_pkt_ = 0;
+    }
+
+    if (is_ctrl_pkt_) {
+      std::cout << "ctrlpkt patching" << std::endl;
+      RYZENAI_LOG_TRACE("resize patch ctrlpkt ... START");
+      // get param_bo address
+      auto param_bo_key =
+          get_instr_key(param_fname_prefix_, H, W, C) + "_param";
+      const xrt::bo &param_bo =
+          xrt_ctx_->get_registry().get_param_bo(param_bo_key).second;
+
+      // Get ctrl pkt patch info from json
+      std::vector<CtrlPktPatchInfo> ctrlpkt_info;
+      ctrlpkt_info = json_str_to_ctrlpkt_patch_info(json_data);
+
+      // Get the ctrl pkt
+      auto ctrl_bo_key = get_instr_key(param_fname_prefix_, H, W, C) + "_ctrl";
+      std::string ctrl_params =
+          Transaction::getInstance().get_txn_str(ctrl_bo_key);
+      std::vector<char> ctrl_buffer(ctrl_params.begin(), ctrl_params.end());
+
+      // ctrl pkt patch
+      std::vector<char> ctrl_pkt_new;
+      std::vector<uint64_t> buffer_addrs = {
+          uint64_t(c_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(a_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(0 + DDR_AIE_ADDR_OFFSET), // No b_bo/const bo for slice
+          uint64_t(param_bo.address() + DDR_AIE_ADDR_OFFSET)};
+      ctrl_pkt_new = patch_ctrl_bin(ctrl_buffer, ctrlpkt_info, buffer_addrs);
+
+      size_t ctrl_bo_words = ctrl_pkt_new.size();
+      ctrl_bo_ =
+          xrt::bo(xrt_ctx_->get_device(), ctrl_bo_words, XRT_BO_FLAGS_HOST_ONLY,
+                  xrt_ctx_->get_kernel().group_id(8));
+      ctrl_bo_.write(ctrl_pkt_new.data());
+      ctrl_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+      RYZENAI_LOG_TRACE("resize patch ctrlpkt ... DONE");
+    }
+  }
+  RYZENAI_LOG_TRACE("resize initialize_const_params(ptr) ... DONE");
+}
+
+template <typename InT, typename OutT>
 void nni_resize<InT, OutT>::execute(std::vector<Tensor> &input,
                                     std::vector<Tensor> &output) {
   // Check the number of inputs
@@ -259,27 +352,6 @@ void nni_resize<InT, OutT>::execute(std::vector<Tensor> &input,
   c_shape_[1] = output.at(c_idx).shape.at(1);
   c_shape_[2] = output.at(c_idx).shape.at(2);
 
-  kernel_x_shape_[0] = H;
-  kernel_x_shape_[1] = W;
-  kernel_x_shape_[2] = C;
-
-  const auto a_bo_size_in_bytes = kernel_x_shape_[0] * kernel_x_shape_[1] *
-                                  kernel_x_shape_[2] * a_dtype_size_;
-  const auto c_bo_size_in_bytes = kernel_x_shape_[0] * kernel_x_shape_[1] *
-                                  kernel_x_shape_[2] * 4 * c_dtype_size_;
-
-  /* Create input/output BOs */
-  const size_t A_BO_SIZE = a_bo_size_in_bytes;
-  const size_t C_BO_SIZE = c_bo_size_in_bytes;
-  RYZENAI_LOG_TRACE("NNI_RESIZE: A_BO_SIZE:" + std::to_string(A_BO_SIZE) +
-                    " C_BO_SIZE:" + std::to_string(C_BO_SIZE));
-
-  a_bo_ = xrt::bo(xrt_ctx_->get_device(), A_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
-                  xrt_ctx_->get_kernel().group_id(8));
-
-  c_bo_ = xrt::bo(xrt_ctx_->get_device(), C_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
-                  xrt_ctx_->get_kernel().group_id(8));
-
   size_t a_size = a_shape_[0] * a_shape_[1] * a_shape_[2] * sizeof(InT);
   RYZENAI_LOG_TRACE("NNI_RESIZE: a_size:" + std::to_string(a_size));
   // a_bo copy
@@ -306,14 +378,13 @@ void nni_resize<InT, OutT>::execute(std::vector<Tensor> &input,
   uint32_t instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
   auto kernel_ = xrt_ctx_->get_kernel();
   // launch the kernel
-  xrt::run run;
+
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   c_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  run = kernel_(2, instr_bo, instr_bo_words,
-                c_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                a_bo_.address() + DDR_AIE_ADDR_OFFSET, 0,
-                param_bo.address() + DDR_AIE_ADDR_OFFSET, 0);
-  run.wait2();
+
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, c_bo_, a_bo_, 0, param_bo, ctrl_bo_,
+      true, is_ctrl_pkt_);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);
   num_run_aie_++;
@@ -370,6 +441,42 @@ const std::vector<uint8_t> nni_resize<InT, OutT>::get_super_kernel_params(
 }
 
 template <typename InT, typename OutT>
+std::vector<uint8_t> nni_resize<InT, OutT>::get_ctrl_pkts(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto [H, W, C] = extract_HWC(input);
+  auto [Ho, Wo, Co] = map_padded_shape(H, W, C);
+  // TODO: Add check to validate tensor shapes
+  std::string ctrl_key =
+      get_instr_key(param_fname_prefix_, Ho, Wo, Co) + "_ctrl";
+  try {
+    Transaction &txn = Transaction::getInstance();
+    return txn.get_txn_bvec(ctrl_key);
+  } catch (...) {
+    return {};
+  }
+}
+
+template <typename InT, typename OutT>
+std::vector<CtrlPktPatchInfo> nni_resize<InT, OutT>::get_ctrl_pkt_patch_info(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto [H, W, C] = extract_HWC(input);
+  auto [Ho, Wo, Co] = map_padded_shape(H, W, C);
+  // TODO: Add check to validate tensor shapes
+  try {
+    auto ctrl_pkt_meta =
+        get_instr_key(param_fname_prefix_, Ho, Wo, Co) + "_ctrl_meta";
+    Transaction &txn = Transaction::getInstance();
+    return json_str_to_ctrlpkt_patch_info(txn.get_txn_bvec(ctrl_pkt_meta));
+  } catch (...) {
+    // throw std::runtime_error("resize : Can not file the ctrl_meta.json
+    // file");
+    return {};
+  }
+}
+
+template <typename InT, typename OutT>
 std::vector<OpArgMap> nni_resize<InT, OutT>::get_buffer_reqs(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
@@ -381,6 +488,7 @@ std::vector<OpArgMap> nni_resize<InT, OutT>::get_buffer_reqs(
   size_t input_bo_size = (Ho * Wo * Co * sizeof(InT));
   size_t output_bo_size = (out_shape * sizeof(OutT));
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
+  size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
 
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
@@ -388,8 +496,10 @@ std::vector<OpArgMap> nni_resize<InT, OutT>::get_buffer_reqs(
        const_params_bo_size}, // Dummy allocation
       {OpArgMap::OpArgType::OUTPUT, 0, 2, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
-       super_kernel_size}}; // TODO: This will be removed after the recent
-                            // changes from main are merged into computex
+       super_kernel_size},
+      {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0,
+       ctrl_pkt_size}}; // TODO: This will be removed after the recent
+                        // changes from main are merged into computex
 
   return arg_map;
 }

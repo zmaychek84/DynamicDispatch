@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -59,7 +60,7 @@ int test_AttentionMaskPrePro(int M, int N, bool debug = false,
   for (int r = 0; r < M; r++) {
     for (int c = 0; c < N; c++) {
       float in_gold = bfloat16_to_float(inputMat.at(r, c));
-      cpu_Y.at(r, c) = float_to_bfloat16(silu_golden(in_gold, r, c));
+      cpu_Y.at(r, c) = float_to_bfloat16(silu_golden(in_gold));
     }
   }
   // quant_bfloat_to_uint16(cpu_Y, sc_out, zp_out, cpu_q_Y);

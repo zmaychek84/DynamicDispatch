@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 #include <any>
 #include <iostream>
@@ -636,18 +637,18 @@ void matmul_tile<InT, WtT, OutT>::initialize_const_params(
 
     if (w_shape_[0] % Ksubv_mzdk5 == 0) { // mzdk5
       if (w_shape_[1] > 640) {
-        matmul_matrix::WgtMatrix<WtT, matmul_matrix::Ksubv_mzdk5,
-                                 matmul_matrix::Nsubv_mzdk5_LARGE>
-            W((int)w_shape_[0], (int)w_shape_[1], buf.data());
+        matmul_matrix::WgtMatrix<WtT> W(
+            (int)w_shape_[0], (int)w_shape_[1], matmul_matrix::Ksubv_mzdk5,
+            matmul_matrix::Nsubv_mzdk5_LARGE, buf.data());
         for (int r = 0; r < w_shape_[0]; ++r) {
           for (int c = 0; c < w_shape_[1]; ++c) {
             W.at(r, c) = weights[(r * w_shape_[1]) + c];
           }
         }
       } else {
-        matmul_matrix::WgtMatrix<WtT, matmul_matrix::Ksubv_mzdk5,
-                                 matmul_matrix::Nsubv_mzdk5>
-            W((int)w_shape_[0], (int)w_shape_[1], buf.data());
+        matmul_matrix::WgtMatrix<WtT> W((int)w_shape_[0], (int)w_shape_[1],
+                                        matmul_matrix::Ksubv_mzdk5,
+                                        matmul_matrix::Nsubv_mzdk5, buf.data());
         for (int r = 0; r < w_shape_[0]; ++r) {
           for (int c = 0; c < w_shape_[1]; ++c) {
             W.at(r, c) = weights[(r * w_shape_[1]) + c];
@@ -655,8 +656,9 @@ void matmul_tile<InT, WtT, OutT>::initialize_const_params(
         }
       }
     } else {
-      matmul_matrix::WgtMatrix<WtT, matmul_matrix::Ksubv, matmul_matrix::Nsubv>
-          W((int)w_shape_[0], (int)w_shape_[1], buf.data());
+      matmul_matrix::WgtMatrix<WtT> W((int)w_shape_[0], (int)w_shape_[1],
+                                      matmul_matrix::Ksubv,
+                                      matmul_matrix::Nsubv, buf.data());
       for (int r = 0; r < K_raw; ++r) {
         for (int c = 0; c < N_raw; ++c) {
           W.at(r, c) = weights[(r * N_raw) + c];
@@ -923,17 +925,14 @@ void matmul_tile<InT, WtT, OutT>::execute(std::vector<Tensor> &input,
   uint32_t instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
   auto kernel_ = xrt_ctx_->get_kernel();
 
-  xrt::run run;
   // launch the GEMM kernel
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   // kernel call for GEMM that supports transaction binary flow
   c_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  run = kernel_(2, instr_bo, instr_bo_words,
-                c_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                a_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                b_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                param_bo.address() + DDR_AIE_ADDR_OFFSET, 0);
-  run.wait2();
+
+  ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, instr_bo,
+                                            instr_bo_words, c_bo_, a_bo_, b_bo_,
+                                            param_bo, 0, true, false);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   num_run_aie_++;
   // sync output activation to host memory

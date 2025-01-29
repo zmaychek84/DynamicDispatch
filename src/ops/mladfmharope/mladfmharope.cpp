@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 #include <iostream>
 #include <map>
@@ -19,6 +20,7 @@
 
 #include <txn_container.hpp>
 #include <utils/instruction_registry.hpp>
+#include <xclbin_container.hpp>
 #include <xrt_context/xrt_context.hpp>
 
 #include <ops/mladfmharope/mladfmharope.hpp>
@@ -30,11 +32,11 @@ namespace ryzenai {
 
 namespace {
 std::string getXCLBinName(std::string op_version) {
-  return (op_version == "v1")
-             ? OpInterface::get_dd_base_dir() +
-                   LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_PATH
-             : OpInterface::get_dd_base_dir() +
-                   LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_PATH;
+  if (op_version == "v1" || op_version == "flat") {
+    return LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  } else {
+    return LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  }
 }
 
 std::tuple<size_t, size_t, size_t> extract_BMK(const Tensor &input) {
@@ -171,7 +173,7 @@ mha_rope<LhsT, TrigT, OutT>::mha_rope(
     : load_xrt_(load_xrt) {
   if (operand_dtype != "bfloat16") {
     throw std::runtime_error(
-        "mharope only supportes homogeneous bfloat16 data type "
+        "mharope only supports homogeneous bfloat16 data type "
         "for activation, trig. matrices and result");
   }
   operand_dtype_ = operand_dtype;
@@ -181,7 +183,7 @@ mha_rope<LhsT, TrigT, OutT>::mha_rope(
   op_version_ = "v1";
   if (attr.find("op_version") != attr.end()) {
     op_version_ = std::any_cast<std::string>(attr.find("op_version")->second);
-    if (op_version_ != "v1") {
+    if (op_version_ != "v1" && op_version_ != "flat") {
       throw std::runtime_error("The selected op version does not exist");
     }
   }
@@ -193,13 +195,41 @@ mha_rope<LhsT, TrigT, OutT>::mha_rope(
       transpose_ = transpose_attr.at(transpose_str);
     }
   }
-  txn_fname_prefix_ = "mharope_" + op_version_ +
+
+  if (attr.find("model_name") != attr.end()) {
+    std::string model_str =
+        std::any_cast<std::string>(attr.find("model_name")->second);
+    model_ = model_string_attr.at(model_str);
+  }
+
+  txn_fname_prefix_ = "mharope_v1" + model_ +
                       transpose_txn_suffix.at(transpose_) + "_" +
                       txnbin_operand_header.at(operand_dtype_);
 
   default_shapes_[txn_fname_prefix_] = std::vector<std::tuple<int, int, int>>();
 
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 4096, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 3072, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 2048, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 1920, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 1792, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 1664, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 1536, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 1408, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 1280, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 1152, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 1024, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 896, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 768, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 640, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 512, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 384, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 256, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 128, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 1, 128));
+
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 4096, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 3072, 128));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 2048, 128));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1920, 128));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1792, 128));
@@ -220,6 +250,7 @@ mha_rope<LhsT, TrigT, OutT>::mha_rope(
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1, 128));
 
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 4096, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 3072, 128));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 2048, 128));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1920, 128));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1792, 128));
@@ -239,6 +270,112 @@ mha_rope<LhsT, TrigT, OutT>::mha_rope(
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 8, 128));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 128));
 
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 4096, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 3072, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 2048, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1920, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1792, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1664, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1536, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1408, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1280, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1152, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1024, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 896, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 768, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 640, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 512, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 384, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 256, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 128, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 8, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1, 96));
+
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 4096, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 3072, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 2048, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1920, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1792, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1664, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1536, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1408, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1280, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1152, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1024, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 896, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 768, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 640, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 512, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 384, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 256, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 128, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 8, 96));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 96));
+
+  // new shapes for llama-3.2
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 4096, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 3072, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 2048, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1920, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1792, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1664, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1536, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1408, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1280, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1152, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1024, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 896, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 768, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 640, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 512, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 384, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 256, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 128, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 8, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 64));
+
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 4096, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 3072, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 2048, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1920, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1792, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1664, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1536, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1408, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1280, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1152, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1024, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 896, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 768, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 640, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 512, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 384, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 256, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 128, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 8, 64));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 1, 64));
+
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 4096, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 3072, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 2048, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 1920, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 1792, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 1664, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 1536, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 1408, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 1280, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 1152, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 1024, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 896, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 768, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 640, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 512, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 384, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 256, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 128, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 8, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 1, 128));
+
   mha_rope_id_ = mha_rope_count++;
 
   /*select xclbin based on the input/output types*/
@@ -252,10 +389,16 @@ mha_rope<LhsT, TrigT, OutT>::mha_rope(
   operand_size_in_bytes_ = kernel_x_shape_[0] * kernel_x_shape_[1] *
                            kernel_x_shape_[2] * operand_dtype_size_;
   trig_size_in_bytes_ =
-      2 * kernel_x_shape_[1] * kernel_x_shape_[2] * operand_dtype_size_;
+      (model_ == "_glm")
+          ? kernel_x_shape_[1] * kernel_x_shape_[2] * operand_dtype_size_
+          : 2 * kernel_x_shape_[1] * kernel_x_shape_[2] * operand_dtype_size_;
 
   if (load_xrt) {
-    xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME);
+
+    xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(
+        XCLBIN_FNAME, 0, {},
+        XclbinContainer::getInstance().get_xclbin_content(XCLBIN_FNAME));
+
     if (op_version_ == "v1") {
       std::call_once(instr_reg_v1_flag_,
                      [this, &attr]() { setup_instr_init(); });
@@ -316,40 +459,37 @@ std::vector<xrt::bo> mha_rope<LhsT, TrigT, OutT>::get_outputs() {
 template <typename LhsT, typename TrigT, typename OutT>
 void mha_rope<LhsT, TrigT, OutT>::set_params(const std::string &model_name,
                                              std::vector<size_t> input_shape) {
+
   if (kernel_x_shape_[0] != input_shape[0] ||
       kernel_x_shape_[1] != input_shape[1] ||
       kernel_x_shape_[2] != input_shape[2]) {
     kernel_x_shape_[0] = input_shape[0];
     kernel_x_shape_[1] = input_shape[1];
     kernel_x_shape_[2] = input_shape[2];
-
     operand_size_in_bytes_ = kernel_x_shape_[0] * kernel_x_shape_[1] *
                              kernel_x_shape_[2] * operand_dtype_size_;
     trig_size_in_bytes_ =
-        2 * kernel_x_shape_[1] * kernel_x_shape_[2] * operand_dtype_size_;
+        (model_ == "_glm")
+            ? kernel_x_shape_[1] * kernel_x_shape_[2] * operand_dtype_size_
+            : 2 * kernel_x_shape_[1] * kernel_x_shape_[2] * operand_dtype_size_;
 
     instr_bo_key_ = get_instr_key(txn_fname_prefix_, input_shape[0],
                                   input_shape[1], input_shape[2]);
   }
-
   return;
 }
 
 template <typename LhsT, typename TrigT, typename OutT>
 void mha_rope<LhsT, TrigT, OutT>::execute(std::vector<xrt::bo> &input,
                                           std::vector<xrt::bo> &output,
-                                          bool wait) {
+                                          bool wait, int64_t offset) {
   auto instr_bo = xrt_ctx_->get_registry().get_instr_bo(instr_bo_key_);
   auto instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
   auto kernel_ = xrt_ctx_->get_kernel();
-  auto run = kernel_(2, instr_bo, instr_bo_words,
-                     input[0].address() + DDR_AIE_ADDR_OFFSET,
-                     input[1].address() + DDR_AIE_ADDR_OFFSET,
-                     output[0].address() + DDR_AIE_ADDR_OFFSET, 0, 0);
 
-  if (wait) {
-    run.wait2();
-  }
+  ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, instr_bo,
+                                            instr_bo_words, input[0], input[1],
+                                            output[0], 0, 0, wait, false);
   return;
 }
 

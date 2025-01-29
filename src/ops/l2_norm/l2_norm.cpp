@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <any>
@@ -20,6 +21,9 @@
 #include <txn_container.hpp>
 #include <utils/instruction_registry.hpp>
 #include <xrt_context/xrt_context.hpp>
+
+#include "utils/ctrl_pkt_utils.hpp"
+#include <ops/ops_common/ctrlpkt.hpp>
 
 #include "ops/ops_common/matmul_matrix.hpp"
 #include <ops/l2_norm/l2_norm.hpp>
@@ -42,14 +46,8 @@ extract_MK(const std::vector<Tensor> &inputs) {
     M = inputs.at(0).shape.at(1);
     K = inputs.at(0).shape.at(2);
   } else if (inputs.at(0).shape.size() == 4) {
-    if (inputs.at(0).shape.at(1) == inputs.at(0).shape.at(2)) { // NHWC
-      M = inputs.at(0).shape.at(0) * inputs.at(0).shape.at(1) *
-          inputs.at(0).shape.at(2);
-      K = inputs.at(0).shape.at(3);
-    } else { // NCHW
-      M = inputs.at(0).shape.at(2) * inputs.at(0).shape.at(3);
-      K = inputs.at(0).shape.at(1);
-    }
+    M = inputs.at(0).shape.at(2);
+    K = inputs.at(0).shape.at(3);
   }
   return std::make_tuple(M, K);
 }
@@ -130,6 +128,42 @@ const std::vector<uint8_t> l2_norm<InT, WtT, OutT>::get_super_kernel_params(
 }
 
 template <typename InT, typename WtT, typename OutT>
+std::vector<uint8_t> l2_norm<InT, WtT, OutT>::get_ctrl_pkts(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto [M, K] = extract_MK(input);
+  auto [Mo, Ko] = map_padded_shape(M, K);
+  // TODO: Add check to validate tensor shapes
+  std::string ctrl_key = get_instr_key(param_fname_prefix_, Mo, Ko) + "_ctrl";
+  // std::cout << "Super kernel params name : " << fname << std::endl;
+  try {
+    Transaction &txn = Transaction::getInstance();
+    return txn.get_txn_bvec(ctrl_key);
+  } catch (...) {
+    return {};
+  }
+}
+
+template <typename InT, typename WtT, typename OutT>
+std::vector<CtrlPktPatchInfo> l2_norm<InT, WtT, OutT>::get_ctrl_pkt_patch_info(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto [M, K] = extract_MK(input);
+  auto [Mo, Ko] = map_padded_shape(M, K);
+  // TODO: Add check to validate tensor shapes
+  try {
+    auto ctrl_pkt_meta =
+        get_instr_key(param_fname_prefix_, Mo, Ko) + "_ctrl_meta";
+    Transaction &txn = Transaction::getInstance();
+    return json_str_to_ctrlpkt_patch_info(txn.get_txn_bvec(ctrl_pkt_meta));
+  } catch (...) {
+    // throw std::runtime_error("l2_norm : Can not file the ctrl_meta.json
+    // file");
+    return {};
+  }
+}
+
+template <typename InT, typename WtT, typename OutT>
 std::vector<OpArgMap> l2_norm<InT, WtT, OutT>::get_buffer_reqs(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
@@ -143,13 +177,15 @@ std::vector<OpArgMap> l2_norm<InT, WtT, OutT>::get_buffer_reqs(
   size_t input_bo_size = (Mo * No * sizeof(InT));
   size_t output_bo_size = (Mo * No * sizeof(OutT));
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
+  size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
 
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, const_params_bo_size},
       {OpArgMap::OpArgType::OUTPUT, 0, 2, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
-       super_kernel_size}};
+       super_kernel_size},
+      {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};
   return arg_map;
 };
 
@@ -189,15 +225,21 @@ l2_norm<InT, WtT, OutT>::l2_norm(const std::string &a_dtype,
   // default shape is the padded shaped used in AIE for BO allocation
   default_shapes_["l2_norm_4x2_abf16accbf16"] =
       std::vector<std::tuple<int, int>>();
+  default_shapes_["l2_norm_4x4_a16acc16"] = std::vector<std::tuple<int, int>>();
 
   default_shapes_["l2_norm_4x2_abf16accbf16"].push_back(
       std::make_tuple(1, 768));
+  default_shapes_["l2_norm_4x4_a16acc16"].push_back(std::make_tuple(1, 3072));
+  default_shapes_["l2_norm_4x4_a16acc16"].push_back(std::make_tuple(64, 3072));
 
   // raw shape is the actual shape from ONNX, sequence needs to match with
   // default_shape
   raw_shapes_["l2_norm_4x2_abf16accbf16"] = std::vector<std::tuple<int, int>>();
+  raw_shapes_["l2_norm_4x4_a16acc16"] = std::vector<std::tuple<int, int>>();
 
   raw_shapes_["l2_norm_4x2_abf16accbf16"].push_back(std::make_tuple(1, 768));
+  raw_shapes_["l2_norm_4x4_a16acc16"].push_back(std::make_tuple(1, 3072));
+  raw_shapes_["l2_norm_4x4_a16acc16"].push_back(std::make_tuple(64, 3072));
 
   a_dtype_ = a_dtype;
   b_dtype_ = b_dtype;
@@ -209,9 +251,14 @@ l2_norm<InT, WtT, OutT>::l2_norm(const std::string &a_dtype,
 
   l2_norm_id_ = l2_norm_count++;
   /*select xclbin based on the input/output types*/
-  std::string XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
-                             ryzenai::START_TAIL_4x2_MS_SHELL_QDQ_XCLBIN_PATH;
-
+  std::string XCLBIN_FNAME = "";
+  if (a_dtype_ == "uint16") {
+    XCLBIN_FNAME =
+        OpInterface::get_dd_base_dir() + ryzenai::PSU_4x4_A16W8_QDQ_XCLBIN_PATH;
+  } else {
+    XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
+                   ryzenai::START_TAIL_4x2_MS_SHELL_QDQ_XCLBIN_PATH;
+  }
   design_param_ = "";
   if (attr.count("design_param") &&
       attr.at("design_param").type() == typeid(std::vector<std::string>)) {
@@ -236,6 +283,14 @@ l2_norm<InT, WtT, OutT>::l2_norm(const std::string &a_dtype,
 
   param_fname_prefix_ = "l2_norm_4x2_" + txnbin_a_header.at(a_dtype_) +
                         txnbin_acc_header.at(c_dtype_);
+  // Case for PSU 0/1 models
+  if (a_dtype_ == "uint16") {
+    txn_fname_prefix_ = "l2_norm_4x4_" + txnbin_a_header.at(a_dtype_) +
+                        txnbin_acc_header.at(c_dtype_);
+
+    param_fname_prefix_ = "l2_norm_4x4_" + txnbin_a_header.at(a_dtype_) +
+                          txnbin_acc_header.at(c_dtype_);
+  }
 
   KERNEL_M_MAX = 512;
 
@@ -256,6 +311,7 @@ l2_norm<InT, WtT, OutT>::l2_norm(const std::string &a_dtype,
   run_aie_time_ = 0;
   cpu_acc_time_ = 0;
   num_run_aie_ = 0;
+  is_ctrl_pkt_ = 1;
 
   std::call_once(logger_flag_, []() {
     std::string header = "l2_norm_id M K N kernel_m kernel_k kernel_n Execute"
@@ -287,9 +343,14 @@ void l2_norm<InT, WtT, OutT>::set_params(const std::string &model_name,
     throw std::invalid_argument("model_name is not supported");
   }
 #endif
-
-  std::string XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
-                             ryzenai::START_TAIL_4x2_MS_SHELL_QDQ_XCLBIN_PATH;
+  std::string XCLBIN_FNAME = "";
+  if (model_name == "4x4PSU") {
+    XCLBIN_FNAME =
+        OpInterface::get_dd_base_dir() + ryzenai::PSU_4x4_A16W8_QDQ_XCLBIN_PATH;
+  } else {
+    XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
+                   ryzenai::START_TAIL_4x2_MS_SHELL_QDQ_XCLBIN_PATH;
+  }
 
   // for memory allocation
   auto [M, N] = map_padded_shape(input_shape.at(0), input_shape.at(1));
@@ -381,6 +442,56 @@ void l2_norm<InT, WtT, OutT>::initialize_const_params(
   b_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
   auto b_sync_stop = GET_ELAPSED_TIME_NS();
   b_sync_time_ = static_cast<int64_t>(b_sync_stop - b_sync_start);
+  auto M = kernel_x_shape_[0];
+  auto K = kernel_x_shape_[1];
+  auto [Mo, Ko] = map_padded_shape(M, K);
+  if (is_ctrl_pkt_) {
+    // Based on the mapped_shape to get the meta json file
+    std::vector<uint8_t> json_data;
+    try {
+      auto json_key = get_instr_key(param_fname_prefix_, Mo, Ko) + "_ctrl_meta";
+      Transaction &txn = Transaction::getInstance();
+      json_data = txn.get_txn_bvec(json_key);
+    } catch (...) {
+      is_ctrl_pkt_ = 0;
+    }
+
+    if (is_ctrl_pkt_) {
+      std::cout << "ctrlpkt patching" << std::endl;
+      RYZENAI_LOG_TRACE("l2 patch ctrlpkt ... START");
+      // get param_bo address
+      auto param_bo_key = get_instr_key(param_fname_prefix_, Mo, Ko) + "_param";
+      const xrt::bo &param_bo =
+          xrt_ctx_->get_registry().get_param_bo(param_bo_key).second;
+
+      // Get ctrl pkt patch info from json
+      std::vector<CtrlPktPatchInfo> ctrlpkt_info;
+      ctrlpkt_info = json_str_to_ctrlpkt_patch_info(json_data);
+
+      // Get the ctrl pkt
+      auto ctrl_bo_key = get_instr_key(param_fname_prefix_, Mo, Ko) + "_ctrl";
+      std::string ctrl_params =
+          Transaction::getInstance().get_txn_str(ctrl_bo_key);
+      std::vector<char> ctrl_buffer(ctrl_params.begin(), ctrl_params.end());
+
+      // ctrl pkt patch
+      std::vector<char> ctrl_pkt_new;
+      std::vector<uint64_t> buffer_addrs = {
+          uint64_t(c_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(a_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(b_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(param_bo.address() + DDR_AIE_ADDR_OFFSET)};
+      ctrl_pkt_new = patch_ctrl_bin(ctrl_buffer, ctrlpkt_info, buffer_addrs);
+
+      size_t ctrl_bo_words = ctrl_pkt_new.size();
+      ctrl_bo_ =
+          xrt::bo(xrt_ctx_->get_device(), ctrl_bo_words, XRT_BO_FLAGS_HOST_ONLY,
+                  xrt_ctx_->get_kernel().group_id(8));
+      ctrl_bo_.write(ctrl_pkt_new.data());
+      ctrl_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+      RYZENAI_LOG_TRACE("l2_norm patch ctrlpkt ... DONE");
+    }
+  }
 }
 
 template <typename InT, typename WtT, typename OutT>
@@ -439,18 +550,15 @@ void l2_norm<InT, WtT, OutT>::execute(std::vector<Tensor> &input,
   const xrt::bo &param_bo =
       xrt_ctx_->get_registry().get_param_bo(param_bo_key).second;
   uint32_t instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
+
   auto kernel_ = xrt_ctx_->get_kernel();
 
   // launch the kernel
-  xrt::run run;
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   c_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  run = kernel_(2, instr_bo, instr_bo_words,
-                c_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                a_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                b_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                param_bo.address() + DDR_AIE_ADDR_OFFSET, 0);
-  run.wait2();
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, c_bo_, a_bo_, b_bo_, param_bo,
+      ctrl_bo_, true, is_ctrl_pkt_);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);
   num_run_aie_++;

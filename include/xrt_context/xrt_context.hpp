@@ -44,6 +44,7 @@
 #include "utils/instruction_registry.hpp"
 #include <utils/logging.hpp>
 #include <utils/tfuncs.hpp>
+constexpr std::uint64_t DDR_AIE_ADDR_OFFSET = std::uint64_t{0x80000000};
 
 namespace {
 constexpr unsigned int DEVICE_INDEX = 0;
@@ -106,9 +107,9 @@ private:
 public:
   xrt_context() = default;
 
-  xrt_context(const std::vector<char> *xclbin,
+  xrt_context(const std::vector<char> &xclbin,
               const std::map<std::string, std::uint32_t> &qos)
-      : init_(create_xrt_context()), device_(DEVICE_INDEX), xclbin_(*xclbin),
+      : init_(create_xrt_context()), device_(DEVICE_INDEX), xclbin_(xclbin),
         uuid_(device_.register_xclbin(xclbin_)),
         context_(device_, xclbin_.get_uuid(), qos),
         kernel_(context_, get_first_kernel_name(xclbin_)),
@@ -126,7 +127,7 @@ public:
   static std::shared_ptr<xrt_context>
   get_instance(const std::string &xclbin_fname, context_id_t context_id = 0,
                const std::map<std::string, std::uint32_t> &qos = {},
-               const std::vector<char> *xclbin_content = nullptr) {
+               const std::vector<char> &xclbin_content = {}) {
     RYZENAI_LOG_TRACE("Getting context with xclbin: " + xclbin_fname +
                       ", context_id = " + std::to_string(context_id));
     auto xrt_key =
@@ -177,13 +178,16 @@ public:
       constexpr std::uint32_t MAX_NUM_RETRIES = 1;
       do {
         try {
-          std::vector<char> buffer;
-          if (!xclbin_content) {
-            buffer = OpsFusion::read_bin_file<char>(xclbin_fname);
-            xclbin_content = &buffer;
+
+          if (xclbin_content.size() == 0) {
+            std::vector<char> buffer =
+                OpsFusion::read_bin_file<char>(xclbin_fname);
+            ctx_map_[xrt_key] = std::make_shared<xrt_context>(buffer, qos);
+          } else {
+            ctx_map_[xrt_key] =
+                std::make_shared<xrt_context>(xclbin_content, qos);
           }
-          ctx_map_[xrt_key] =
-              std::make_shared<xrt_context>(xclbin_content, qos);
+
           retry = false;
         } catch (...) {
           RYZENAI_LOG_TRACE(
@@ -218,6 +222,56 @@ public:
     context_.update_qos(qos_);
   }
 };
+
+/**
+ * A helper function that extracts a 64-bit address from either a bo or an
+ * integer (e.g., 0).
+ */
+template <typename T> static uint64_t get_address(const T &arg) {
+  if constexpr (std::is_same_v<std::decay_t<T>, xrt::bo>) {
+    return arg ? arg.address() : 0;
+  } else if constexpr (std::is_integral_v<std::decay_t<T>>) {
+    return 0;
+  } else {
+    static_assert(!std::is_same_v<T, T>,
+                  "Unsupported argument type for execute_kernel.");
+  }
+}
+
+/**
+ * A template that allows the last 5 arguments (#5..#9) to be either xrt::bo or
+ * int (0).
+ */
+template <typename T1, typename T2, typename T3, typename T4, typename T5>
+static void execute_kernel(xrt::kernel &kernel, int arg1,
+                           const xrt::bo &instr_bo, size_t instr_bo_words,
+                           T1 bo1_or_zero,      // 5th parameter
+                           T2 bo2_or_zero,      // 6th parameter
+                           T3 bo3_or_zero,      // 7th parameter
+                           T4 param_bo_or_zero, // 8th parameter
+                           T5 ctrl_bo_or_zero,  // 9th parameter
+                           bool wait_flag, bool is_ctrl_pkt_) {
+  uint64_t bo1_addr = get_address(bo1_or_zero);
+  uint64_t bo2_addr = get_address(bo2_or_zero);
+  uint64_t bo3_addr = get_address(bo3_or_zero);
+  uint64_t param_addr = get_address(param_bo_or_zero);
+  uint64_t ctrl_addr = get_address(ctrl_bo_or_zero);
+
+  if (is_ctrl_pkt_) {
+    ctrl_addr = ctrl_addr ? (ctrl_addr + DDR_AIE_ADDR_OFFSET) : 0;
+  }
+
+  xrt::run run =
+      kernel(arg1, instr_bo, instr_bo_words,
+             bo1_addr ? bo1_addr + DDR_AIE_ADDR_OFFSET : 0,
+             bo2_addr ? bo2_addr + DDR_AIE_ADDR_OFFSET : 0,
+             bo3_addr ? bo3_addr + DDR_AIE_ADDR_OFFSET : 0,
+             param_addr ? param_addr + DDR_AIE_ADDR_OFFSET : 0, ctrl_addr);
+
+  if (wait_flag) {
+    run.wait2();
+  }
+}
 
 } // namespace dynamic_dispatch
 

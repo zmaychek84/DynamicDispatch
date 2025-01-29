@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +31,15 @@
 #include <ops/concateOps/concateOps.hpp>
 #include <ops/conv/conv.hpp>
 #include <ops/conv2matmul/conv2matmul.hpp>
+#include <ops/conv2matmul_silu/conv2matmul_silu.hpp>
 #include <ops/dequant/dequant.hpp>
+#include <ops/dmacompiler/AttentionMaskPrePro_win25/AttentionMaskPrePro_win25.hpp>
+#include <ops/dmacompiler/batch_matmul/batch_matmul.hpp>
+#include <ops/dmacompiler/gather_qdq_add/gather_qdq_add.hpp>
+#include <ops/dmacompiler/matmul_v_geluadd/matmul_v_geluadd.hpp>
+#include <ops/dmacompiler/mhapsw/mhapsw.hpp>
+#include <ops/dmacompiler/qdq_mul/qdq_mul.hpp>
+#include <ops/dmacompiler/qdqadd/qdqadd.hpp>
 #include <ops/elwadd/elwadd.hpp>
 #include <ops/elwdiv_qdq/elwdiv_qdq.hpp>
 #include <ops/elwmul/elwmul.hpp>
@@ -38,6 +47,9 @@
 #include <ops/expand/expand.hpp>
 #include <ops/experimental/cube.hpp>
 #include <ops/experimental/square.hpp>
+#include <ops/flat/mha_v2.hpp>
+#include <ops/flat/mlp.hpp>
+#include <ops/flat/rms_add.hpp>
 #include <ops/gap/gap.hpp>
 #include <ops/gelu/gelu.cpp>
 #include <ops/gelu_e/gelue.hpp>
@@ -69,9 +81,22 @@
 #include <ops/op_builder.hpp>
 #include <ops/op_policy.hpp>
 #include <ops/pm_load/pm_load.hpp>
+#include <ops/preemption/preemption.hpp>
 #include <ops/quant/quant.hpp>
 #include <ops/record_timer/record_timer.hpp>
+#include <ops/sd/concat.hpp>
 #include <ops/sd/conv2d.hpp>
+#include <ops/sd/elwadd.hpp>
+#include <ops/sd/elwmul.hpp>
+#include <ops/sd/gelu.hpp>
+#include <ops/sd/gemm.hpp>
+#include <ops/sd/groupnorm.hpp>
+#include <ops/sd/layernorm.hpp>
+#include <ops/sd/matmul.hpp>
+#include <ops/sd/mha.hpp>
+#include <ops/sd/resize.hpp>
+#include <ops/sd/silu.hpp>
+#include <ops/sd/slice.hpp>
 #include <ops/sigmoid/sigmoid.hpp>
 #include <ops/silu/silu.hpp>
 #include <ops/silu_qdq/silu_qdq.hpp>

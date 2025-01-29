@@ -29,6 +29,7 @@ void assign_pdi_id_pass(const OpPDIMap &op_pdi_map, Metadata &meta);
 Metadata insert_pm_swap_nodes(const Metadata &meta);
 Metadata insert_record_timer_nodes(const Metadata &meta,
                                    uint32_t profile_level);
+Metadata insert_preemption_nodes(const Metadata &meta);
 std::pair<std::map<std::string, std::any>, std::map<std::string, std::any>>
 get_record_timer_attr(const std::string &op_name);
 void generate_pdi_partitions_pass(Metadata &meta, bool eager_mode);
@@ -38,7 +39,8 @@ bool split_max_partition_pass(
     Metadata &meta, const std::vector<std::vector<uint8_t>> fused_instr_vec,
     size_t limit);
 void fetch_op_txn_bins(Metadata &meta,
-                       std::map<std::string, SimpleSpan> &const_map);
-void relocate_ctrl_pkt_patch_info(Metadata &meta);
+                       std::map<std::string, SimpleSpan> &const_map,
+                       bool elf_flow = false);
+void relocate_ctrl_pkt_patch_info(Metadata &meta, bool elf_flow = false);
 
 } // namespace OpsFusion

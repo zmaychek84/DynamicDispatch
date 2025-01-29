@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -86,7 +87,15 @@ convForMatmulAdd<InT, WtT, OutT>::convForMatmulAdd(
   if (Utils::get_env_var("DEBUG_LP", "0") != "0") {
     this->debug_lp = true;
   }
-  if (Utils::get_env_var("COMPUTE_LP", "0") != "0") {
+  std::string model_var;
+  if (attr.end() != attr.find("model_variant")) {
+    model_var = std::any_cast<std::string>(attr.at("model_variant"));
+  }
+  if (model_var == "08_320" || model_var == "08_640" ||
+      model_var == "08_1280" || model_var == "08_2560" ||
+      model_var == "08_8000") {
+    this->compute_lp = true;
+  } else if (Utils::get_env_var("COMPUTE_LP", "0") != "0") {
     this->compute_lp = true;
   }
 
@@ -769,17 +778,15 @@ void convForMatmulAdd<InT, WtT, OutT>::execute(std::vector<Tensor> &input,
   instr_bo_words = instr_bo.size() / sizeof(int);
 
   auto kernel_ = xrt_ctx_->get_kernel();
-  xrt::run run;
 
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   /* kernel call for Conv that supports transaction binary flow. For single
    * convolution there can't be any time requirement of scratch pad buffer. So
    * in below executiion scratch pad is not used */
-  run = kernel_(2, instr_bo, instr_bo_words,
-                constBo_.address() + DDR_AIE_ADDR_OFFSET,
-                ifmBo_.address() + DDR_AIE_ADDR_OFFSET,
-                ofmBo_.address() + DDR_AIE_ADDR_OFFSET, 0, 0);
-  run.wait2();
+
+  ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, instr_bo,
+                                            instr_bo_words, constBo_, ifmBo_,
+                                            ofmBo_, 0, 0, true, false);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   num_run_aie_++;
   run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);
@@ -952,13 +959,14 @@ void updateLayerParams(std::vector<uint8_t> &layer_params,
 
   // NOTE: an string object must be passed as value (not a const char *)
   auto graph_id = std::to_string(std::any_cast<int64_t>(attrs.at("graph_id")));
-  if (graph_id != "320" && graph_id != "640" && graph_id != "1280" &&
-      graph_id != "2560" && graph_id != "5120" && graph_id != "8000") {
+  if (fc_tiling_params.find(graph_id) == fc_tiling_params.end()) {
+    std::cout << "ERROR: graph_id: " << graph_id
+              << ", not present in the tiling map" << std::endl;
     throw new std::logic_error(
         "Unsupported graph_id/network passed to updateLayerParams");
   }
 
-  auto layer_dims = fc_layer_dims[graph_id];
+  auto tiling_params = fc_tiling_params[graph_id];
   auto srs_shifts = mswbjvw_srs_shifts[graph_id];
 
   bool alpha_scaled = std::round(
@@ -1014,15 +1022,15 @@ void updateLayerParams(std::vector<uint8_t> &layer_params,
   }
 
   std::vector<int> ifm_sv_dim = {
-      layer_dims.ifm_sv_height, layer_dims.ifm_sv_width,
-      layer_dims.ifm_sv_depth, FCLayerDims::CONV_2D_OFM_PAD};
+      tiling_params.ifm_sv_height, tiling_params.ifm_sv_width,
+      tiling_params.ifm_sv_depth, FCLayerDims::CONV_2D_OFM_PAD};
   int ofm_sv_height =
       (int)std::ceil((ifm_sv_dim[0] - filt_dim[0] + 1) / (double)filt_dim[3]);
   int ofm_sv_width =
       (int)std::ceil((ifm_sv_dim[1] - filt_dim[1] + 1) / (double)filt_dim[3]);
-  int ofm_height = (int)std::ceil((layer_dims.ifm_height - filt_dim[0] + 1) /
+  int ofm_height = (int)std::ceil((tiling_params.ifm_height - filt_dim[0] + 1) /
                                   (double)filt_dim[3]);
-  int ofm_width = (int)std::ceil((layer_dims.ifm_width - filt_dim[1] + 1) /
+  int ofm_width = (int)std::ceil((tiling_params.ifm_width - filt_dim[1] + 1) /
                                  (double)filt_dim[3]);
 
   int ifm_iter_w = (int)std::ceil(
@@ -1047,8 +1055,8 @@ void updateLayerParams(std::vector<uint8_t> &layer_params,
                            FCLayerDims::NUM_ADF_COLS);
 
   // Calculate ifm_depth_iter and width_iter using local variables
-  int ifm_depth_iter =
-      (int)std::ceil(layer_dims.ifm_depth / (double)layer_dims.ifm_sv_depth);
+  int ifm_depth_iter = (int)std::ceil(tiling_params.ifm_depth /
+                                      (double)tiling_params.ifm_sv_depth);
   int width_iter = (FCLayerDims::NO_X_ITER == 0) ? ifm_x_iter : 1;
 
   // Adjust width_iter based on hardcoded value for mswbjvw_8000
@@ -1060,9 +1068,9 @@ void updateLayerParams(std::vector<uint8_t> &layer_params,
   int depth_scale_fac = 8;
   int ifm_sign = dtype_in == "int16" || dtype_in == "int8";
 
-  layer_params[0] = layer_dims.ifm_sv_width;
-  layer_params[1] = layer_dims.ifm_sv_height;
-  layer_params[2] = layer_dims.ifm_sv_depth / depth_scale_fac;
+  layer_params[0] = tiling_params.ifm_sv_width;
+  layer_params[1] = tiling_params.ifm_sv_height;
+  layer_params[2] = tiling_params.ifm_sv_depth / depth_scale_fac;
   layer_params[3] = (uint8_t)(FCLayerDims::OFM_SV_DEPTH / depth_scale_fac);
   layer_params[24] = FCLayerDims::SUPER_ITER_0;
   layer_params[25] = FCLayerDims::NUM_ADF_ROWS;
@@ -1082,7 +1090,7 @@ void updateLayerParams(std::vector<uint8_t> &layer_params,
   layer_params[offset + 4] = kernel_width;
   layer_params[offset + 5] = kernel_height;
   layer_params[offset + 6] =
-      int(std::ceil(layer_dims.ifm_sv_depth / float(ifm_depth_gran)));
+      int(std::ceil(tiling_params.ifm_sv_depth / float(ifm_depth_gran)));
   layer_params[offset + 7] = stride_width;
   layer_params[offset + 8] = FCLayerDims::BATCH_SIZE;
 
@@ -1111,7 +1119,7 @@ void updateLayerParams(std::vector<uint8_t> &layer_params,
   int step_kx = ifm_depth_gran * ifm_bytes;
   int step_ky = int(std::ceil((ofm_sv_width * stride_width + kernel_width - 1) *
                               ifm_depth_gran * ifm_bytes / 64.0) *
-                    64.0 * layer_dims.ifm_sv_depth / ifm_depth_gran);
+                    64.0 * tiling_params.ifm_sv_depth / ifm_depth_gran);
   int step_Ci = int(std::ceil((ofm_sv_width * stride_width + kernel_width - 1) *
                               ifm_depth_gran * ifm_bytes / 64.0) *
                     64.0);

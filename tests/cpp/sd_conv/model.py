@@ -32,7 +32,7 @@ from onnx.helper import (
 
 from onnx.checker import check_model
 from ryzenai_dynamic_dispatch import onnx_graph as ogm
-from ryzenai_dynamic_dispatch import fuse, bfp16
+from ryzenai_dynamic_dispatch import fuse, sd
 import argparse
 
 
@@ -53,7 +53,9 @@ def read_hex_file(file_path):
     buffer = b''.join(buffers)
     return buffer
 
-def create_sdconv_model(ifm_info, w_info, b_info, out_info):
+def create_sdconv_model(ifm_info, w_info, b_info, out_info, kh=1, kw=1):
+    batch, ih, iw, ic = ifm_info[1]
+    _, oh, ow, oc = out_info[1]
     X = make_tensor_value_info("X", ifm_info[0], ifm_info[1])
     Z = make_tensor_value_info("Z", out_info[0], out_info[1])
     SDConv_node = make_node(
@@ -64,12 +66,11 @@ def create_sdconv_model(ifm_info, w_info, b_info, out_info):
         domain="com.amd",
     )
 
-    wts_float_path = "tests/cpp/unit_tests/testDataMladf/sd_vae_dec_conv/a16bfw16bfpacc16bf_128_256_512_8_512_8_1_1_wts32.npy"
-    bias_float_path = "tests/cpp/unit_tests/testDataMladf/sd_vae_dec_conv/a16bfw16bfpacc16bf_128_256_512_8_512_8_1_1_bias32.npy"
-    in_wts = np.load(wts_float_path)
-    in_bias = np.load(bias_float_path)
+    # wts expected to be in oc kh kw ic format
+    in_wts = np.random.rand(oc, kh, kw, ic).astype(np.float32)
+    in_bias = np.random.rand(oc).astype(np.float32)
     in_shape = np.array([ifm_info[1][1], ifm_info[1][2], out_info[1][1], out_info[1][2]])
-    wts_bias_shuffle = bfp16.const_from_fp32_to_bfp16(in_wts, in_bias, "SDConv", in_shape)
+    wts_bias_shuffle = sd.conv_to_bfp16(in_wts, in_bias, "SDConv", in_shape)
     w_tensor = make_tensor("w", w_info[0], wts_bias_shuffle.shape, wts_bias_shuffle)
 
     graph = make_graph(
@@ -93,19 +94,37 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--dtypes", help="List of data types", nargs='+', required=False, default=["bf16", "bfp16", "float", "bf16"])
+    parser.add_argument("--batch", type=int, default=2, help="Batch size")
+    parser.add_argument("--ic", type=int, default=1280, help="Input channels")
+    parser.add_argument("--ih", type=int, default=16, help="Input height")
+    parser.add_argument("--iw", type=int, default=16, help="Input width")
+    parser.add_argument("--oc", type=int, default=1280, help="Output channels")
+    parser.add_argument("--oh", type=int, default=16, help="Output height")
+    parser.add_argument("--ow", type=int, default=16, help="Output width")
+    parser.add_argument("--kh", type=int, default=1, help="Kernel height")
+    parser.add_argument("--kw", type=int, default=1, help="Kernel width")
 
     args = parser.parse_args()
     data_types = args.dtypes
+    batch = args.batch
+    ic = args.ic
+    ih = args.ih
+    iw = args.iw
+    oc = args.oc
+    oh = args.oh
+    ow = args.ow
+    kh = args.kh
+    kw = args.kw
 
     dir_name = "test_sdconv"
     model_name = dir_name + "/sdconv.onnx"
     json_name = dir_name + "/model_sdconv_meta.json"
     if data_types[0] == "bf16" and data_types[1] == "bfp16" and data_types[2] == "float" and data_types[3] == "bf16":
         onnx_model = create_sdconv_model(
-            (onnx.TensorProto.BFLOAT16,   [1, 512, 8, 256]),  # ifm [n, ih, iw, ic]
-            (onnx.TensorProto.UINT8,    [128, 1, 1, 256]),  # wts [oc, kh, kw, ic]
-            (onnx.TensorProto.FLOAT,    [128]),             # bias
-            (onnx.TensorProto.BFLOAT16,   [1, 512, 8, 128]),  # ofm[n, oh, ow, oc]
+            (onnx.TensorProto.BFLOAT16,   [batch, ih, iw, ic]),  # ifm
+            (onnx.TensorProto.UINT8,    [oc, kh, kw, ic]),  # wts
+            (onnx.TensorProto.FLOAT,    [oc]),             # bias
+            (onnx.TensorProto.BFLOAT16,   [batch, oh, ow, oc]),  # ofm
         )
     else:
         raise ValueError(f"Unsupported dtypes: {data_types}")

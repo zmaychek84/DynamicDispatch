@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -58,7 +59,7 @@ int test_silu_qdq(int M, int N, bool debug = false,
   for (int r = 0; r < M; r++) {
     for (int c = 0; c < N; c++) {
       float in_gold = bfloat16_to_float(inputMat.at(r, c));
-      cpu_Y.at(r, c) = float_to_bfloat16(silu_golden(in_gold, r, c));
+      cpu_Y.at(r, c) = float_to_bfloat16(silu_golden(in_gold));
     }
   }
   // quant_bfloat_to_uint16(cpu_Y, sc_out, zp_out, cpu_q_Y);
@@ -82,7 +83,6 @@ int test_silu_qdq(int M, int N, bool debug = false,
   ryzenai::silu_qdq silu_qdq_ =
       ryzenai::silu_qdq<InT, WgT, OutT>(a_dtype, b_dtype, c_dtype, false, attr);
 
-  silu_qdq_.debug(debug);
   silu_qdq_.set_params(model_name, a_shape);
 
   std::vector<Tensor> const_Tensor;
@@ -90,6 +90,8 @@ int test_silu_qdq(int M, int N, bool debug = false,
   const_Tensor = {{qdq_params.data(), qdq_params_shape, "int16"}};
 
   silu_qdq_.initialize_const_params(const_Tensor);
+
+  silu_qdq_.debug(debug);
 
   std::vector<Tensor> input_Tensor;
   input_Tensor = {{a.data(), a_shape, a_dtype}};
@@ -111,91 +113,91 @@ int test_silu_qdq(int M, int N, bool debug = false,
 }
 
 // mzdk5 4x4 -- Need to update txn/param files for the combined xclbin
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel1) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_320_1024) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       320, 1024, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel2) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_320_4096) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       320, 4096, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel3) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_640_256) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       640, 256, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel4) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_640_1024) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       640, 1024, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel5) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_640_4096) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       640, 4096, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel6) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_960_1024) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       960, 1024, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel7) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_960_4096) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       960, 4096, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel8) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_1280_64) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       1280, 64, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel9) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_1280_256) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       1280, 256, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel10) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_1280_1024) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       1280, 1024, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel11) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_1920_256) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       1920, 256, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel12) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_1920_1024) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       1920, 1024, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel13) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_2560_64) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       2560, 64, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel14) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_2560_256) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       2560, 256, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SILUQDQ_Testa16, Kernel15) {
+TEST(C4mzdk5_SILUQDQ_Testa16, Kernel_1280_1) {
   int err_count = test_silu_qdq<uint16_t, uint16_t, uint16_t>(
       1280, 1, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;

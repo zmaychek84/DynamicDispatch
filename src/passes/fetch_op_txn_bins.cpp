@@ -31,9 +31,11 @@
 namespace OpsFusion {
 
 void fetch_op_txn_bins(Metadata &meta,
-                       std::map<std::string, SimpleSpan> &const_map) {
+                       std::map<std::string, SimpleSpan> &const_map,
+                       bool elf_flow) {
   for (size_t i = 0; i < meta.op_list.size(); i++) {
     auto &op_info = meta.op_list.at(i);
+    op_info.attr["elf_flow"] = (uint32_t)elf_flow;
     RYZENAI_LOG_TRACE(
         OpsFusion::dd_format("Get ops txn for op:{}", op_info.name));
     auto op = OpBuilder::create(op_info.name, op_info, meta.tensor_map);

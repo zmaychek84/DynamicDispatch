@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -137,25 +138,25 @@ int test_matvecadd(size_t M, size_t K, bool debug = false,
 }
 
 // MatvecADD 4x4
-TEST(C4mzdk5_MATVECADD_Testa16, Kernel1) {
+TEST(C4mzdk5_MATVECADD_Testa16, Kernel_64_1280) {
   int err_count = test_matvecadd<uint16_t, uint16_t, uint16_t>(
       64, 1280, false, "uint16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_MATVECADD_Testa16, Kernel2) {
+TEST(C4mzdk5_MATVECADD_Testa16, Kernel_256_1280) {
   int err_count = test_matvecadd<uint16_t, uint16_t, uint16_t>(
       256, 1280, false, "uint16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_MATVECADD_Testa16, Kernel3) {
+TEST(C4mzdk5_MATVECADD_Testa16, Kernel_1024_640) {
   int err_count = test_matvecadd<uint16_t, uint16_t, uint16_t>(
       1024, 640, false, "uint16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_MATVECADD_Testa16, Kernel4) {
+TEST(C4mzdk5_MATVECADD_Testa16, Kernel_4096_320) {
   int err_count = test_matvecadd<uint16_t, uint16_t, uint16_t>(
       4096, 320, false, "uint16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;

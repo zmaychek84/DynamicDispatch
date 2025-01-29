@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -80,6 +81,8 @@ private:
   std::map<int64_t, double> tiling_cost_;
   static std::mutex instr_reg_mutex_;
   int64_t kernel_max_size_;
+  int skipinput_v_;
+  bool skip_create_output_;
   /*
    * Utility function that setups for context.
    */
@@ -115,7 +118,7 @@ public:
   std::vector<xrt::bo> get_inputs();
   std::vector<xrt::bo> get_outputs();
   void set_kernel_shape(const std::vector<size_t> &shape);
-
+  bool create_bo(void *usr_ptr, size_t size, int operand_index);
   const std::vector<uint8_t> get_transaction_bin(
       std::vector<Tensor> &input, std::vector<Tensor> &output,
       const std::map<std::string, std::any> &attr = {}) const override;

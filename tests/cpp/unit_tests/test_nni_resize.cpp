@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -58,6 +59,8 @@ int test_nni_resize(size_t H, size_t W, size_t C, bool debug = false,
   output_Tensor = {{aie_out.data(), c_shape, c_dtype}};
 
   nni_resize_.debug(debug);
+  nni_resize_.initialize_const_params(
+      input_Tensor); // use input tensor to get the size of BO
 
 #ifdef UNIT_TEST_PERF
   PROFILE_THIS(nni_resize_.execute(input_Tensor, output_Tensor));
@@ -71,19 +74,19 @@ int test_nni_resize(size_t H, size_t W, size_t C, bool debug = false,
 }
 
 // NNI 4x4
-TEST(C4mzdk5_NNI_RESIZE_a16acc16, Kernel1) {
+TEST(C4mzdk5_NNI_RESIZE_a16acc16, Kernel_32_32_640) {
   int err_count = test_nni_resize<uint16_t, uint16_t>(
       32, 32, 640, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_NNI_RESIZE_a16acc16, Kernel2) {
+TEST(C4mzdk5_NNI_RESIZE_a16acc16, Kernel_8_8_1280) {
   int err_count = test_nni_resize<uint16_t, uint16_t>(
       8, 8, 1280, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_NNI_RESIZE_a16acc16, Kernel3) {
+TEST(C4mzdk5_NNI_RESIZE_a16acc16, Kernel_16_16_1280) {
   int err_count = test_nni_resize<uint16_t, uint16_t>(
       16, 16, 1280, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;

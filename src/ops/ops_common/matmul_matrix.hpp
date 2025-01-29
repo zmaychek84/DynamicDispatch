@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,6 +29,13 @@
 #include <vector>
 
 namespace matmul_matrix {
+
+#if 0
+struct bfloat16_t {
+  uint16_t value;
+};
+#endif
+
 int constexpr Msubv = 64;
 int constexpr Msubv_16 = 32;
 int constexpr Ksubv = 128;
@@ -37,6 +45,19 @@ int constexpr Msubv_mzdk5 = 16;
 int constexpr Ksubv_mzdk5 = 80;
 int constexpr Nsubv_mzdk5 = 32;
 int constexpr Nsubv_mzdk5_LARGE = 128;
+
+int constexpr Msubv_PSW_BMM = 64;
+int constexpr Ksubv_PSW_BMM = 64;
+int constexpr Nsubv_PSW_BMM = 32;
+
+int constexpr Msubv_PSW = 64;
+int constexpr Ksubv_PSW = 64;
+int constexpr Nsubv_PSW = 48;
+int constexpr Nsubv_PSW_GeMM_GeLU = 64;
+
+int constexpr Msubv_PSW_GeMM_V_GeLU = 16;
+int constexpr Ksubv_PSW_GeMM_V_GeLU = 96;
+int constexpr Nsubv_PSW_GeMM_V_GeLU = 48;
 
 int constexpr QDQparam_size = 16;
 // general qdq idx
@@ -52,6 +73,7 @@ int constexpr qdq_Stdm_idx = 9;
 // for mdsqr and mxpzi, set this be 1; for mxgan, if uint8_q, set it be 0, if
 // uint16_q, set it be 1
 int constexpr qdq_isint16_idx = 10;
+int constexpr qdq_veccoeffs_idx = 10;
 
 // gelu qdq idx
 int constexpr gelu_dq_zp_idx = 0;
@@ -61,7 +83,7 @@ int constexpr gelu_q_scale_idx = 3;
 int constexpr gelu_isint16_idx = 4;
 
 using SUBV_T = std::array<int, 3>;
-int constexpr Mode_count = 10;
+int constexpr Mode_count = 17;
 // Msubv, Ksubv, Nsubv
 constexpr std::array<std::pair<int, SUBV_T>, Mode_count> subv_gemm4x4 = {
     {{0, {24, 128, 16}},
@@ -73,9 +95,16 @@ constexpr std::array<std::pair<int, SUBV_T>, Mode_count> subv_gemm4x4 = {
      {6, {16, 128, 64}},
      {7, {32, 80, 64}},
      {8, {64, 128, 32}},
-     {9, {32, 80, 80}}}};
+     {9, {32, 80, 80}},
+     {10, {16, 192, 48}},
+     {11, {8, 192, 48}},
+     {12, {8, 256, 32}},
+     {13, {16, 256, 32}},
+     {14, {64, 64, 64}},
+     {15, {8, 64, 64}},
+     {16, {16, 96, 8}}}}; // PSW GemmV
 
-int constexpr Shape_count = 31;
+int constexpr Shape_count = 36;
 
 constexpr std::array<std::pair<SUBV_T, int>, Shape_count> subv_mode_gemm4x4 = {
     {{{77, 1024, 64}, 0},    {{96, 1024, 64}, 0},    {{4096, 320, 64}, 7},
@@ -88,7 +117,22 @@ constexpr std::array<std::pair<SUBV_T, int>, Shape_count> subv_mode_gemm4x4 = {
      {{1024, 2560, 640}, 8}, {{256, 1280, 1280}, 8}, {{256, 1280, 10240}, 5},
      {{256, 5120, 1280}, 5}, {{64, 1280, 1280}, 6},  {{64, 1280, 10240}, 6},
      {{64, 5120, 1280}, 6},  {{1, 1280, 320}, 3},    {{1, 1280, 640}, 3},
-     {{1, 1280, 1280}, 6}}};
+     {{1, 1280, 1280}, 6},   {{64, 3072, 3072}, 10}, {{1, 3072, 3072}, 11},
+     {{1, 8192, 3072}, 12},  {{64, 8192, 3072}, 13}, {{1, 768, 8}, 16}}};
+
+int constexpr Shape_count_int4 = 10;
+
+constexpr std::array<std::pair<SUBV_T, int>, Shape_count_int4>
+    subv_mode_gemm4x4_int4 = {{{{64, 3072, 9216}, 14},
+                               {{64, 3072, 16384}, 14},
+                               {{1, 3072, 9216}, 15},
+                               {{1, 3072, 16384}, 15},
+                               {{64, 3072, 8192}, 14},
+                               {{1, 3072, 8192}, 15},
+                               {{1, 3072, 3072}, 11},
+                               {{64, 3072, 3072}, 10},
+                               {{1, 8192, 3072}, 12},
+                               {{64, 8192, 3072}, 13}}};
 
 constexpr bool arrayEqual(const SUBV_T &arr1, const SUBV_T &arr2) {
   for (size_t i = 0; i < 3; ++i) {
@@ -100,7 +144,7 @@ constexpr bool arrayEqual(const SUBV_T &arr1, const SUBV_T &arr2) {
 }
 
 // Function to search for a key (mode) and get subv values
-constexpr SUBV_T get_subv(const int &key) {
+constexpr SUBV_T get_subv(int &key) {
   for (size_t i = 0; i < subv_gemm4x4.size(); ++i) {
     if (subv_gemm4x4[i].first == key) {
       return subv_gemm4x4[i].second; // Key found
@@ -110,10 +154,18 @@ constexpr SUBV_T get_subv(const int &key) {
 }
 
 // Function to search for a key (shapes) and get subv mode
-inline int search_subv_mode(const SUBV_T &key) {
-  for (size_t i = 0; i < subv_mode_gemm4x4.size(); ++i) {
-    if (arrayEqual(subv_mode_gemm4x4[i].first, key)) {
-      return subv_mode_gemm4x4[i].second; // Key found
+inline int search_subv_mode(const SUBV_T &key, int b_shift_value = 0) {
+  if (b_shift_value == 0) { // int8
+    for (size_t i = 0; i < subv_mode_gemm4x4.size(); ++i) {
+      if (arrayEqual(subv_mode_gemm4x4[i].first, key)) {
+        return subv_mode_gemm4x4[i].second; // Key found
+      }
+    }
+  } else if (b_shift_value == 1) { // int4
+    for (size_t i = 0; i < subv_mode_gemm4x4_int4.size(); ++i) {
+      if (arrayEqual(subv_mode_gemm4x4_int4[i].first, key)) {
+        return subv_mode_gemm4x4_int4[i].second; // Key found
+      }
     }
   }
   return -1; // Key not found
@@ -143,6 +195,20 @@ inline int h4_index(int row, int col, int num_rows, int num_cols) {
   return (col * zz) + (row % zz) + ((row / zz) * (zz * num_cols));
 }
 
+inline uint8_t int8_to_int4(uint8_t in_val, int idx) {
+  return ((idx == 1) ? in_val >> 4 : (in_val & 0x0f));
+}
+
+inline uint8_t int4_pack_to_int8(uint8_t in_l, uint8_t in_h, int is_odd) {
+  uint8_t out_val;
+  if (is_odd == 0) {
+    out_val = (in_l & 0x0F) + ((in_h & 0x0F) << 4);
+  } else {
+    out_val = (in_l >> 4) + ((in_h >> 4) << 4);
+  }
+  return (out_val);
+}
+
 template <typename T, int subv_rows, int subv_cols> struct ActMatrix {
   int const num_rows;
   int const num_cols;
@@ -167,13 +233,17 @@ template <typename T, int subv_rows, int subv_cols> struct ActMatrix {
   }
 };
 
-template <typename T, int subv_rows, int subv_cols> struct WgtMatrix {
+template <typename T> struct WgtMatrix {
   int const num_rows;
   int const num_cols;
+  int const subv_rows;
+  int const subv_cols;
   T *const data;
 
-  WgtMatrix(int num_rows, int num_cols, void *data)
-      : num_rows(num_rows), num_cols(num_cols), data(static_cast<T *>(data)) {
+  WgtMatrix(int num_rows, int num_cols, int subv_rows, int subv_cols,
+            void *data)
+      : num_rows(num_rows), num_cols(num_cols), subv_rows(subv_rows),
+        subv_cols(subv_cols), data(static_cast<T *>(data)) {
     assert(num_rows % subv_rows == 0);
     assert(num_cols % subv_cols == 0);
   }
@@ -181,7 +251,7 @@ template <typename T, int subv_rows, int subv_cols> struct WgtMatrix {
   T &at(int row, int col) {
     assert(row < num_rows);
     assert(col < num_cols);
-    int constexpr subv_size = subv_rows * subv_cols;
+    int const subv_size = subv_rows * subv_cols;
     int const r = row % subv_rows;
     int const c = col % subv_cols;
     int const i = w8_index(r, c, subv_rows, subv_cols);
@@ -196,6 +266,48 @@ template <typename T, int subv_rows, int subv_cols> struct WgtMatrix {
 
   static int size(int num_rows, int num_cols) {
     return num_rows * num_cols * sizeof(T);
+  }
+};
+
+struct int4_WgtMatrix {
+  int const num_rows;
+  int const num_cols;
+  int const subv_rows;
+  int const subv_cols;
+  uint8_t *const data;
+
+  int4_WgtMatrix(int num_rows, int num_cols, int subv_rows, int subv_cols,
+                 void *data)
+      : num_rows(num_rows), num_cols(num_cols), subv_rows(subv_rows),
+        subv_cols(subv_cols), data(static_cast<uint8_t *>(data)) {
+    assert(num_rows % subv_rows == 0);
+    assert(num_cols % subv_cols == 0);
+  }
+
+  uint8_t &block(int row, int col) {
+    assert(row < num_rows);
+    assert(col < num_cols);
+    int const subv_size = subv_rows * subv_cols / 2;
+    int const r = row % subv_rows;
+    int const c = col % subv_cols;
+    int const i = w8_index(r, c, subv_rows, subv_cols) / 2;
+    int const rr = row / subv_rows;
+    int const cc = col / subv_cols;
+    int const ii =
+        col_major_index(rr, cc, (num_rows / subv_rows), (num_cols / subv_cols));
+    int const idx = i + (ii * subv_size);
+    // printf("num_rows = %d, num_cols = %d, row = %d, col = %d , i = %d, idx =
+    // %d \n", num_rows, num_cols, row, col, i, idx);
+    assert(idx < (num_rows * num_cols / 2));
+    return data[idx];
+  }
+
+  uint8_t at(int row, int col) {
+    return (int8_to_int4(block(row, col), (col % 2)));
+  }
+
+  static int size(int num_rows, int num_cols) {
+    return (num_rows * num_cols * sizeof(uint8_t) / 2);
   }
 };
 
@@ -282,216 +394,48 @@ template <typename T, int subv_rows, int subv_cols> struct BiasVector {
 
 template <typename T>
 void format_wgt_trans(T *wgt_data, T *buf, int subv_mode, int K, int N,
-                      int K_orig) {
-  if (subv_mode == 0) {
-    constexpr SUBV_T subv = get_subv(0);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
+                      int K_orig, int b_shift_value) {
+  SUBV_T subv = get_subv(subv_mode);
+  int Ksv = subv[1];
+  int Nsv = subv[2];
+  if (b_shift_value == 0) {
+    matmul_matrix::WgtMatrix<T> W(K, N, Ksv, Nsv, buf);
     for (int r = 0; r < K_orig; ++r) {
       for (int c = 0; c < N; ++c) {
         W.at(r, c) = wgt_data[(c * K_orig) + r]; // transpose
       }
     }
-  } else if (subv_mode == 1) {
-    constexpr SUBV_T subv = get_subv(1);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K_orig; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(c * K_orig) + r]; // transpose
-      }
-    }
-  } else if (subv_mode == 2) {
-    constexpr SUBV_T subv = get_subv(2);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K_orig; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(c * K_orig) + r]; // transpose
-      }
-    }
-  } else if (subv_mode == 3) {
-    constexpr SUBV_T subv = get_subv(3);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K_orig; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(c * K_orig) + r]; // transpose
-      }
-    }
-  } else if (subv_mode == 4) {
-    constexpr SUBV_T subv = get_subv(4);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K_orig; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(c * K_orig) + r]; // transpose
-      }
-    }
-  } else if (subv_mode == 5) {
-    constexpr SUBV_T subv = get_subv(5);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K_orig; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(c * K_orig) + r]; // transpose
-      }
-    }
-  } else if (subv_mode == 6) {
-    constexpr SUBV_T subv = get_subv(6);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K_orig; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(c * K_orig) + r]; // transpose
-      }
-    }
-  } else if (subv_mode == 7) {
-    constexpr SUBV_T subv = get_subv(7);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K_orig; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(c * K_orig) + r]; // transpose
-      }
-    }
-  } else if (subv_mode == 8) {
-    constexpr SUBV_T subv = get_subv(8);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K_orig; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(c * K_orig) + r]; // transpose
-      }
-    }
-  } else if (subv_mode == 9) {
-    constexpr SUBV_T subv = get_subv(9);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K_orig; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(c * K_orig) + r]; // transpose
+  } else if (b_shift_value == 1) { // int4
+    matmul_matrix::int4_WgtMatrix W(K, N, Ksv, Nsv, buf);
+    for (int r = 0; r < K_orig; r += 2) {
+      int is_odd_0 = r % 2;
+      int is_odd_1 = (r + 1) % 2;
+      for (int c = 0; c < N; c += 2) {
+        uint8_t temp = int4_pack_to_int8(
+            wgt_data[(c * K_orig / 2) + r / 2],
+            wgt_data[((c + 1) * K_orig / 2) + r / 2], is_odd_0);
+        W.block(r, c) = temp; // transpose
+        temp = int4_pack_to_int8(wgt_data[(c * K_orig / 2) + r / 2],
+                                 wgt_data[((c + 1) * K_orig / 2) + r / 2],
+                                 is_odd_1);
+        W.block(r + 1, c) = temp; // transpose
       }
     }
   } else {
-    throw std::runtime_error("Subvol key is not supported in Conv2Gemm.");
+    throw std::runtime_error("Conv2Matmul : Invalid b_shift_value");
   }
 }
 
 template <typename T>
 void format_wgt(T *wgt_data, T *buf, int subv_mode, int K, int N) {
-  if (subv_mode == 0) {
-    constexpr SUBV_T subv = get_subv(0);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(r * N) + c];
-      }
+  SUBV_T subv = get_subv(subv_mode);
+  int Ksv = subv[1];
+  int Nsv = subv[2];
+  matmul_matrix::WgtMatrix<T> W(K, N, Ksv, Nsv, buf);
+  for (int r = 0; r < K; ++r) {
+    for (int c = 0; c < N; ++c) {
+      W.at(r, c) = wgt_data[(r * N) + c];
     }
-  } else if (subv_mode == 1) {
-    constexpr SUBV_T subv = get_subv(1);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(r * N) + c];
-      }
-    }
-  } else if (subv_mode == 2) {
-    constexpr SUBV_T subv = get_subv(2);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(r * N) + c];
-      }
-    }
-  } else if (subv_mode == 3) {
-    constexpr SUBV_T subv = get_subv(3);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(r * N) + c];
-      }
-    }
-  } else if (subv_mode == 4) {
-    constexpr SUBV_T subv = get_subv(4);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(r * N) + c];
-      }
-    }
-  } else if (subv_mode == 5) {
-    constexpr SUBV_T subv = get_subv(5);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(r * N) + c];
-      }
-    }
-  } else if (subv_mode == 6) {
-    constexpr SUBV_T subv = get_subv(6);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(r * N) + c];
-      }
-    }
-  } else if (subv_mode == 7) {
-    constexpr SUBV_T subv = get_subv(7);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(r * N) + c];
-      }
-    }
-  } else if (subv_mode == 8) {
-    constexpr SUBV_T subv = get_subv(8);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(r * N) + c];
-      }
-    }
-  } else if (subv_mode == 9) {
-    constexpr SUBV_T subv = get_subv(9);
-    int constexpr Ksv = subv[1];
-    int constexpr Nsv = subv[2];
-    matmul_matrix::WgtMatrix<T, Ksv, Nsv> W(K, N, buf);
-    for (int r = 0; r < K; ++r) {
-      for (int c = 0; c < N; ++c) {
-        W.at(r, c) = wgt_data[(r * N) + c];
-      }
-    }
-  } else {
-    throw std::runtime_error("Subvol key is not supported in Matmul.");
   }
 }
 
@@ -511,7 +455,7 @@ inline float gelu_golden(float in) {
   return g;
 }
 
-inline float silu_golden(float in, int r, int c) {
+inline float silu_golden(float in) {
   float exp_x = std::exp(-in);
   float sg = in / (1 + exp_x);
 
@@ -560,7 +504,7 @@ void dequant_int8_to_bfloat(std::vector<T1> &in_vec, std::vector<T2> &out_vec,
     out_vec[i] = float_to_bfloat16((in_vec[i] - zero_point) * scale);
   }
 }
-
+#if 1
 inline float bfloat16_to_float(uint16_t x) {
   float y = 0.0;
   uint8_t *src = (uint8_t *)&x;
@@ -569,6 +513,22 @@ inline float bfloat16_to_float(uint16_t x) {
   dst[3] = src[1];
   return y;
 }
+#else
+inline float uint_to_float(uint32_t i) {
+  float f = 0;
+  char *ptr_f = reinterpret_cast<char *>(&f);
+  char *ptr_i = reinterpret_cast<char *>(&i);
+  ptr_f[0] = ptr_i[0];
+  ptr_f[1] = ptr_i[1];
+  ptr_f[2] = ptr_i[2];
+  ptr_f[3] = ptr_i[3];
+  return f;
+}
+
+inline float bfloat16_to_float(bfloat16_t bf) {
+  return uint_to_float(uint32_t(bf.value) << 16);
+}
+#endif
 
 union Float32Bits {
   uint32_t u;
@@ -725,6 +685,39 @@ void qdq_golden(Ta A, Toi X, int32_t C2, int32_t C1, int64_t *C0, uint8_t sqb,
       //    * (int64_t)C2 + (int64_t)C1 * (int64_t)ifmsum[r] + ((int64_t)C0[c]
       //    << sqb)) >> sout);
       // }
+    }
+  }
+}
+
+template <typename Ta, typename Toi, typename Tout>
+void qdq_golden(Ta A, Toi X, int32_t *C2_vec, int32_t *C1_vec, int64_t *C0,
+                uint8_t sqb, uint8_t sout, Tout Y, std::string Ytype) {
+  std::vector<int64_t> ifmsum;
+  for (int r = 0; r < A.num_rows; ++r) {
+    int64_t acc = 0;
+    for (int c = 0; c < A.num_cols; ++c) {
+      acc += A.at(r, c);
+      // printf("r:%d c:%d, A.at(r,c) = %d, ifmsum[r] = %d\n", r, c,A.at(r,c),
+      // ifmsum[r]);
+    }
+    ifmsum.push_back(acc);
+  }
+
+  for (int c = 0; c < X.num_cols; ++c) {
+    for (int r = 0; r < X.num_rows; ++r) {
+      if (Ytype == "uint8") {
+        Y.at(r, c) = srs_to_int8<std::uint8_t>(
+            (int64_t)X.at(r, c) * (int64_t)C2_vec[c] +
+                (int64_t)C1_vec[c] * (int64_t)ifmsum[r] +
+                ((int64_t)C0[c] << sqb),
+            sout);
+      } else { // uint16
+        Y.at(r, c) = srs_to_int16<std::uint16_t>(
+            (int64_t)X.at(r, c) * (int64_t)C2_vec[c] +
+                (int64_t)C1_vec[c] * (int64_t)ifmsum[r] +
+                ((int64_t)C0[c] << sqb),
+            sout);
+      }
     }
   }
 }
@@ -960,10 +953,38 @@ int check_add_result(T cpu_Y, T aie_Y, float error_tolerance = 0.01) {
         max_diff = diff;
       }
       if (relative_diff > error_tolerance) {
-        // std::cout << "ERROR: Y[" << r << ", " << c << "]: "
-        //           << "Expected: " << int(cpu_Y.at(r, c)) << ", "
-        //           << "Received: " << int(aie_Y.at(r, c)) << ", "
-        //           << "Diff: " << int(diff) << "\n";
+        std::cout << "ERROR: Y[" << r << ", " << c << "]: "
+                  << "Expected: " << int(cpu_Y.at(r, c)) << ", "
+                  << "Received: " << int(aie_Y.at(r, c)) << ", "
+                  << "Diff: " << int(diff) << "\n";
+        fail = 1;
+        err_count++;
+      }
+    }
+  }
+  L2_norm = std::sqrt(L2_norm);
+  std::cout << "max_diff is " << max_diff << std::endl;
+  std::cout << "L2_norm is " << L2_norm << std::endl;
+  return err_count;
+}
+
+template <typename To>
+int check_result_uint16(To cpu_Y, To aie_Y, float error_tolerance = 0.01) {
+  int fail = 0;
+  uint16_t max_diff = 0;
+  float L2_norm = 0;
+  int err_count = 0;
+  for (int r = 0; r < cpu_Y.num_rows; ++r) {
+    for (int c = 0; c < cpu_Y.num_cols; ++c) {
+      uint16_t diff = std::abs(cpu_Y.at(r, c) - aie_Y.at(r, c));
+      L2_norm += ((float)diff * (float)diff);
+      if (diff > max_diff) {
+        max_diff = diff;
+      }
+      if ((float)diff > error_tolerance) {
+        std::cout << "ERROR: Y[" << r << ", " << c << "]: "
+                  << "Expected: " << cpu_Y.at(r, c) << ","
+                  << "Received: " << aie_Y.at(r, c) << "\n";
         fail = 1;
         err_count++;
       }

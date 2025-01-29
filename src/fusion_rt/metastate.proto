@@ -42,6 +42,10 @@ message UInt32 {
   uint32 data = 1;
 }
 
+message String {
+  string data = 1;
+}
+
 message OpInfo {
   string name = 1;
   string type = 2;

@@ -1,5 +1,6 @@
 /*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -530,147 +531,147 @@ TEST(m3uec_iCONV_Testa16w8, Kernel8) {
 }
 
 // mzdk5 4x4
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel1) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_320_64_64_320_64_64_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       320, 64, 64, 320, 64, 64, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel2) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_320_32_32_640_32_32_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       320, 32, 32, 640, 32, 32, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel3) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_640_32_32_640_32_32_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       640, 32, 32, 640, 32, 32, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel4) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_640_16_16_1280_16_16_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       640, 16, 16, 1280, 16, 16, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel5) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_1280_16_16_1280_16_16_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       1280, 16, 16, 1280, 16, 16, 3, 3, 1, 1, false, "uint16", "uint8",
       "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel6) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_1280_8_8_1280_8_8_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       1280, 8, 8, 1280, 8, 8, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel7) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_2560_8_8_1280_8_8_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       2560, 8, 8, 1280, 8, 8, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel8) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_2560_16_16_1280_16_16_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       2560, 16, 16, 1280, 16, 16, 3, 3, 1, 1, false, "uint16", "uint8",
       "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel9) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_1920_16_16_1280_16_16_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       1920, 16, 16, 1280, 16, 16, 3, 3, 1, 1, false, "uint16", "uint8",
       "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel10) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_1280_32_32_1280_32_32_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       1280, 32, 32, 1280, 32, 32, 3, 3, 1, 1, false, "uint16", "uint8",
       "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel11) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_1920_32_32_640_32_32_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       1920, 32, 32, 640, 32, 32, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel12) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_1280_32_32_640_32_32_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       1280, 32, 32, 640, 32, 32, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel13) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_960_32_32_640_32_32_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       960, 32, 32, 640, 32, 32, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel14) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_640_64_64_640_64_64_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       640, 64, 64, 640, 64, 64, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel15) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_960_64_64_320_64_64_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       960, 64, 64, 320, 64, 64, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel16) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_640_64_64_320_64_64_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       640, 64, 64, 320, 64, 64, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel17) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_4_64_64_320_64_64_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       4, 64, 64, 320, 64, 64, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel18) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_320_64_64_4_64_64_3_3_1_1) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       320, 64, 64, 4, 64, 64, 3, 3, 1, 1, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel19) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_320_64_64_320_32_32_3_3_2_2) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       320, 64, 64, 320, 32, 32, 3, 3, 2, 2, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel20) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_640_32_32_640_16_16_3_3_2_2) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       640, 32, 32, 640, 16, 16, 3, 3, 2, 2, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_iCONV_Testa16w8, Kernel21) {
+TEST(C4mzdk5_iCONV_Testa16w8, Kernel_1280_16_16_1280_8_8_3_3_2_2) {
   int err_count = test_iconv<uint16_t, uint8_t, uint16_t>(
       1280, 16, 16, 1280, 8, 8, 3, 3, 2, 2, false, "uint16", "uint8", "uint16",
       "4x4mzdk5");

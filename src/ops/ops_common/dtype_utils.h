@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #ifndef DTYPE_UTILS
@@ -38,6 +39,43 @@ static inline uint16_t float_to_bfloat16(float x) {
   // extract upper half of input
   uint16_t y = uint16_t(i >> 16);
   return y;
+}
+
+static inline uint32_t as_uint(const float x) { return *(uint32_t *)&x; }
+static inline float as_float(const uint32_t x) { return *(float *)&x; }
+
+static inline float float16_to_float(
+    const uint16_t x) { // IEEE-754 16-bit floating-point format (without
+                        // infinity): 1-5-10, exp-15, +-131008.0,
+                        // +-6.1035156E-5, +-5.9604645E-8, 3.311 digits
+  const uint32_t e = (x & 0x7C00) >> 10; // exponent
+  const uint32_t m = (x & 0x03FF) << 13; // mantissa
+  const uint32_t v =
+      as_uint((float)m) >>
+      23; // evil log2 bit hack to count leading zeros in denormalized format
+  return as_float(
+      (x & 0x8000) << 16 | (e != 0) * ((e + 112) << 23 | m) |
+      ((e == 0) & (m != 0)) *
+          ((v - 37) << 23 | ((m << (150 - v)) &
+                             0x007FE000))); // sign : normalized : denormalized
+}
+
+static inline uint16_t float_to_float16(
+    const float x) { // IEEE-754 16-bit floating-point format (without
+                     // infinity): 1-5-10, exp-15, +-131008.0, +-6.1035156E-5,
+                     // +-5.9604645E-8, 3.311 digits
+  const uint32_t b = as_uint(x) + 0x00001000; // round-to-nearest-even: add last
+                                              // bit after truncated mantissa
+  const uint32_t e = (b & 0x7F800000) >> 23;  // exponent
+  const uint32_t m =
+      b &
+      0x007FFFFF; // mantissa; in line below: 0x007FF000 = 0x00800000-0x00001000
+                  // = decimal indicator flag - initial rounding
+  return (b & 0x80000000) >> 16 |
+         (e > 112) * ((((e - 112) << 10) & 0x7C00) | m >> 13) |
+         ((e < 113) & (e > 101)) *
+             ((((0x007FF000 + m) >> (125 - e)) + 1) >> 1) |
+         (e > 143) * 0x7FFF; // sign : normalized : denormalized : saturate
 }
 
 #ifdef __GNUC__
@@ -145,6 +183,153 @@ static float bfloat16_rnd_even(float x) {
 static uint16_t rand_bfloat16(float range = 1.0f) {
   float x = range * (2.0f * (rand() / (float)RAND_MAX) - 1.0f);
   return float_to_bfloat16(x);
+}
+
+/*
+* converts float16 to bfloat16 by rounding the LSB to nearest even
+@param x is the float16 value
+@return bfloat16 value in uint16_t variable
+*/
+static inline uint16_t float16_to_bfloat16(uint16_t float16) {
+  return float_to_bfloat16(float16_to_float(float16));
+}
+
+static inline void bfloat16_buffer_to_float(const uint16_t *in,
+                                            std::size_t num_elements,
+                                            float *out, const bool use_avx) {
+  if (!use_avx) {
+    std::transform(in, in + num_elements, out, bfloat16_to_float);
+  } else {
+#ifdef _WIN32
+    static_assert(sizeof(uint16_t) == 2);
+    constexpr std::size_t VECTOR_SIZE_BYTES = (256 / 8);
+    constexpr std::size_t BFLOAT_16SIZE_BYTES = sizeof(uint16_t);
+
+    static_assert(VECTOR_SIZE_BYTES % BFLOAT_16SIZE_BYTES == 0);
+    constexpr std::size_t FLOAT16S_PER_VECTOR =
+        VECTOR_SIZE_BYTES / BFLOAT_16SIZE_BYTES;
+
+    const std::size_t num_iter = num_elements / FLOAT16S_PER_VECTOR;
+    const std::size_t remainder = num_elements % FLOAT16S_PER_VECTOR;
+
+    for (std::size_t i = 0; i < num_iter; ++i) {
+      __m256bh bfloat16_vec =
+          _mm256_loadu_si256(reinterpret_cast<const __m256bh *>(in));
+      __m512 float32_vec = _mm512_castsi512_ps(
+          _mm512_slli_epi32(_mm512_cvtepu16_epi32(bfloat16_vec), 16));
+      _mm512_store_ps(out, float32_vec);
+      in += FLOAT16S_PER_VECTOR;
+      out += FLOAT16S_PER_VECTOR;
+    }
+
+    if (remainder > 0) {
+      __m256bh bfloat16_vec{};
+      memcpy(&bfloat16_vec, in, remainder * sizeof(uint16_t));
+      __m512 float32_vec = _mm512_castsi512_ps(
+          _mm512_slli_epi32(_mm512_cvtepu16_epi32(bfloat16_vec), 16));
+      memcpy(out, &float32_vec, remainder * sizeof(uint32_t));
+    }
+#else
+    throw;
+#endif
+  }
+}
+
+/*
+* converts float16 to bfloat16 by rounding the LSB to nearest even
+@param x is the float16 value
+@return bfloat16 value in uint16_t variable
+*/
+static inline uint16_t bfloat16_to_float16(uint16_t bfloat16) {
+  return float_to_float16(bfloat16_to_float(bfloat16));
+}
+
+static inline void float16_buffer_to_bfloat16(const uint16_t *in,
+                                              std::size_t num_elements,
+                                              std::uint16_t *out,
+                                              const bool use_avx) {
+  if (!use_avx) {
+    std::transform(in, in + num_elements, out, float16_to_bfloat16);
+  } else {
+#ifdef _WIN32
+    static_assert(sizeof(uint16_t) == 2);
+    constexpr std::size_t VECTOR_SIZE_BYTES = (256 / 8);
+    constexpr std::size_t BFLOAT_16SIZE_BYTES = sizeof(uint16_t);
+
+    static_assert(VECTOR_SIZE_BYTES % BFLOAT_16SIZE_BYTES == 0);
+    constexpr std::size_t FLOAT16S_PER_VECTOR =
+        VECTOR_SIZE_BYTES / BFLOAT_16SIZE_BYTES;
+
+    const std::size_t num_iter = num_elements / FLOAT16S_PER_VECTOR;
+    const std::size_t remainder = num_elements % FLOAT16S_PER_VECTOR;
+
+    for (std::size_t i = 0; i < num_iter; ++i) {
+      __m256h float16_vec =
+          _mm256_loadu_si256(reinterpret_cast<const __m256h *>(in));
+      __m512 float32_vec = _mm512_cvtph_ps(float16_vec);
+      __m256bh bf16_vec = _mm512_cvtneps2bf16(float32_vec);
+      _mm256_storeu_epi16(out, bf16_vec);
+      in += FLOAT16S_PER_VECTOR;
+      out += FLOAT16S_PER_VECTOR;
+    }
+
+    if (remainder > 0) {
+      __m256h float16_vec;
+      memcpy(&float16_vec, in, remainder * sizeof(uint16_t));
+      __m512 float32_vec = _mm512_cvtph_ps(float16_vec);
+      __m256bh bf16_vec = _mm512_cvtneps2bf16(float32_vec);
+      memcpy(out, &bf16_vec, remainder * sizeof(uint16_t));
+    }
+#else
+    throw;
+#endif
+  }
+}
+
+static inline void bfloat16_buffer_to_float16(const uint16_t *in,
+                                              std::size_t num_elements,
+                                              std::uint16_t *out,
+                                              const bool use_avx) {
+  if (!use_avx) {
+    std::transform(in, in + num_elements, out, bfloat16_to_float16);
+  } else {
+#ifdef _WIN32
+    static_assert(sizeof(uint16_t) == 2);
+    constexpr std::size_t VECTOR_SIZE_BYTES = (256 / 8);
+    constexpr std::size_t BFLOAT_16SIZE_BYTES = sizeof(uint16_t);
+
+    static_assert(VECTOR_SIZE_BYTES % BFLOAT_16SIZE_BYTES == 0);
+    constexpr std::size_t FLOAT16S_PER_VECTOR =
+        VECTOR_SIZE_BYTES / BFLOAT_16SIZE_BYTES;
+
+    const std::size_t num_iter = num_elements / FLOAT16S_PER_VECTOR;
+    const std::size_t remainder = num_elements % FLOAT16S_PER_VECTOR;
+
+    for (std::size_t i = 0; i < num_iter; ++i) {
+      __m256bh bfloat16_vec =
+          _mm256_loadu_si256(reinterpret_cast<const __m256bh *>(in));
+      __m512 float32_vec = _mm512_castsi512_ps(
+          _mm512_slli_epi32(_mm512_cvtepu16_epi32(bfloat16_vec), 16));
+      __m256h float16_vec =
+          _mm512_cvtps_ph(float32_vec, _MM_FROUND_TO_NEAREST_INT);
+      _mm256_storeu_epi16(out, float16_vec);
+      in += FLOAT16S_PER_VECTOR;
+      out += FLOAT16S_PER_VECTOR;
+    }
+
+    if (remainder > 0) {
+      __m256bh bfloat16_vec{};
+      memcpy(&bfloat16_vec, in, remainder * sizeof(uint16_t));
+      __m512 float32_vec = _mm512_castsi512_ps(
+          _mm512_slli_epi32(_mm512_cvtepu16_epi32(bfloat16_vec), 16));
+      __m256h float16_vec =
+          _mm512_cvtps_ph(float32_vec, _MM_FROUND_TO_NEAREST_INT);
+      memcpy(out, &float16_vec, remainder * sizeof(uint16_t));
+    }
+#else
+    throw;
+#endif
+  }
 }
 
 /*

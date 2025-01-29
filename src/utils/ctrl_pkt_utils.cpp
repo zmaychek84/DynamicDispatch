@@ -51,3 +51,32 @@ json_str_to_ctrlpkt_patch_info(const std::vector<uint8_t> &json_vec) {
 
   return patch_info;
 }
+
+json meta_to_ctrl_pkt_json(const OpsFusion::Metadata &meta) {
+  json ctrl_info;
+  ctrl_info["version"] = "1.1";
+  ctrl_info["ctrl_pkt_xrt_arg_idx"] = 5;
+  ctrl_info["ctrl_pkt_patch_info"] = json::array();
+  uint64_t ctrl_pkt_bo_offset = 0;
+  for (auto &op : meta.op_list) {
+    auto &patch_info = op.ctrl_pkt_patch_info;
+    // if ctrl packet ddoes not exist for an op, skip the patching
+    if ((meta.ctrl_pkt_map.find(op.name) == meta.ctrl_pkt_map.end()) ||
+        (!patch_info.size())) {
+      continue;
+    }
+    auto op_offset = meta.ctrl_pkt_map.at(op.name).offset + ctrl_pkt_bo_offset;
+    RYZENAI_LOG_TRACE(OpsFusion::dd_format(
+        "Final DDR address patch: op_name: {}, op_type: {}", op.name, op.type));
+
+    for (auto &patch : patch_info) {
+      auto offset = op_offset + patch.offset;
+      ctrl_info["ctrl_pkt_patch_info"].push_back(
+          {{"offset", offset},
+           {"size", patch.size},
+           {"xrt_arg_idx", patch.xrt_arg_idx},
+           {"bo_offset", patch.bo_offset}});
+    }
+  }
+  return ctrl_info;
+}

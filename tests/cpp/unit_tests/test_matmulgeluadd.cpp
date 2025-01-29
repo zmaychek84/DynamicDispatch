@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +23,7 @@
 #include <gtest/gtest.h>
 #include <iostream>
 #include <numeric>
+#include <string>
 
 #include "enable_perf.hpp"
 #include "ops/ops_common/help_file.hpp"
@@ -31,6 +33,7 @@
 #include "test_common.hpp"
 #define RANDOM_DATA
 using namespace matmul_matrix;
+using namespace std;
 
 template <typename InT = int8_t, typename WgT = int8_t, typename OuT = int16_t>
 int test_matmulgelu(int M, int K, int N, bool debug = false,
@@ -67,6 +70,7 @@ int test_matmulgelu(int M, int K, int N, bool debug = false,
   std::vector<uint16_t> gelu_out_golden(M * N, garbage_value);
   std::vector<OuT> gelu_out_golden_quant(M * N, garbage_value);
   std::vector<OuT> aie_out(M * N, garbage_value);
+  std::vector<OuT> ref_out(M * N, garbage_value);
 
   RowMajorMatrix<InT> X(M, K, a.data());
   RowMajorMatrix<WgT> W(K, N, b.data());
@@ -76,8 +80,7 @@ int test_matmulgelu(int M, int K, int N, bool debug = false,
   // golden Q(X*W)
   RowMajorMatrix<uint16_t> gelu_out_gold_mat(M, N, gelu_out_golden.data());
   // golden Q(X*W)
-  RowMajorMatrix<OuT> gelu_out_gold_quant_mat(M, N,
-                                              gelu_out_golden_quant.data());
+  RowMajorMatrix<OuT> gelu_out_gold_quant_mat(M, N, ref_out.data());
 
   RowMajorMatrix<OuT> aie_Y(M, N, aie_out.data());
 
@@ -152,60 +155,6 @@ int test_matmulgelu(int M, int K, int N, bool debug = false,
   gelu_qdq_params[gelu_q_scale_idx] = float_to_bfloat16(1.0 / gelu_out_q_scale);
   // for mxgan, user needs to set it based on Q datatype
   gelu_qdq_params[gelu_isint16_idx] = isint16;
-#else
-  std::vector<uint8_t> a_uint8(M * K);
-  std::string input_bin_name =
-      OpInterface::get_dd_base_dir() +
-      "//bin_files//gelu_12th_test_data//input_12th_gelu.bin";
-  read_bin_file(input_bin_name, reinterpret_cast<char *>(a_uint8.data()));
-  for (int i = 0; i < M * K; i++) {
-    a[i] = (InT)a_uint8[i];
-  }
-
-  for (int i = 0; i < 10; i++) {
-    std::cout << (int)a_uint8[i] << std::endl;
-  }
-
-  for (int i = 0; i < 10; i++) {
-    std::cout << a[i] << std::endl;
-  }
-
-  std::string weight_bin_name =
-      OpInterface::get_dd_base_dir() +
-      "//bin_files//gelu_12th_test_data//weights.const";
-  read_bin_file(weight_bin_name, reinterpret_cast<char *>(b.data()));
-  std::string c0_bin_name = OpInterface::get_dd_base_dir() +
-                            "//bin_files//gelu_12th_test_data//C0.const";
-  read_bin_file(c0_bin_name, reinterpret_cast<char *>(qdq.data()));
-
-  std::string gelu_bin_name =
-      OpInterface::get_dd_base_dir() +
-      "//bin_files//gelu_12th_test_data//gelu_qdq.const";
-  read_bin_file(gelu_bin_name,
-                reinterpret_cast<char *>(gelu_qdq_params.data()));
-
-  std::string qdqp_bin_name =
-      OpInterface::get_dd_base_dir() +
-      "//bin_files//gelu_12th_test_data//matmul_qdq.const";
-  read_bin_file(qdqp_bin_name, reinterpret_cast<char *>(qdq_params.data()));
-
-  C1 = qdq_params[qdq_c1_idx];
-  C2 = qdq_params[qdq_c2_idx];
-  SQb = qdq_params[qdq_SQb_idx];
-  Sout = qdq_params[qdq_Sout_idx];
-
-  qdq_params[qdq_Stdm_idx] = 0;
-  qdq_params[qdq_isint16_idx] = 0;
-
-  uint8_t gelu_in_dq_zero_point = gelu_qdq_params[0];
-  bfloat16_t temp;
-  temp.value = (uint16_t)gelu_qdq_params[1];
-  float gelu_in_dq_scale = bfloat16_to_float(temp);
-  uint8_t gelu_out_q_zero_point = gelu_qdq_params[2];
-  temp.value = (uint16_t)gelu_qdq_params[3];
-  float gelu_out_q_scale = bfloat16_to_float(temp);
-  gelu_qdq_params[gelu_isint16_idx] = 0;
-#endif
   std::string Ytype;
   if (a_dtype == "uint16") {
     cpu_matmul<RowMajorMatrix<InT>, RowMajorMatrix<WgT>,
@@ -235,9 +184,54 @@ int test_matmulgelu(int M, int K, int N, bool debug = false,
   // Quantisze gelu output
   quant(gelu_out_gold_mat, gelu_out_gold_quant_mat, gelu_out_q_scale,
         gelu_out_q_zero_point, Ytype);
+#else
+  std::string input_bin_name =
+      OpInterface::get_dd_base_dir() +
+      "//bin_files//malmulgeluadd_test_data//input_1.bin";
+  read_bin_file(input_bin_name, (char *)a.data());
 
-  ryzenai::matmulgeluadd matmulgelu_ =
-      ryzenai::matmulgeluadd<InT, WgT, OuT>(a_dtype, b_dtype, c_dtype, false);
+  std::string weight_bin_name =
+      OpInterface::get_dd_base_dir() +
+      "//bin_files//malmulgeluadd_test_data//input_2.bin";
+  read_bin_file(weight_bin_name, (char *)(b.data()));
+  std::string c0_bin_name = OpInterface::get_dd_base_dir() +
+                            "//bin_files//malmulgeluadd_test_data//C0.bin";
+  read_bin_file(c0_bin_name, (char *)(qdq.data()));
+
+  *(int64_t *)(&qdq_params[qdq_c0_idx]) = 0; // qdq_params[0] = c0;
+  qdq_params[qdq_c1_idx] = -4869270;         // C1
+  qdq_params[qdq_c2_idx] = 309160;           // C2
+  qdq_params[qdq_c3_idx] = 0;                // C3
+  // qdq_params[5] = Msubv;          // M
+  // qdq_params[6] = Nsubv;          // N
+  qdq_params[qdq_SQb_idx] = 0;   // Shift_Qb
+  qdq_params[qdq_Sout_idx] = 23; // Shift_ou
+  qdq_params[qdq_Stdm_idx] = 3;
+  // for mxgan, user needs to set it based on Q datatype
+  qdq_params[qdq_isint16_idx] = 0;
+
+  // GELU IN dequant params
+  gelu_qdq_params[gelu_dq_zp_idx] = 28280;
+  gelu_qdq_params[gelu_dq_scale_idx] = float_to_bfloat16(0.0035490046720951796);
+  // GELU OUT quant params
+  gelu_qdq_params[gelu_q_zp_idx] = 84;
+  gelu_qdq_params[gelu_q_scale_idx] =
+      float_to_bfloat16(1.0 / 0.002020118059590459);
+  // for mxgan, user needs to set it based on Q datatype
+  gelu_qdq_params[gelu_isint16_idx] = 0;
+
+  std::string golden_out_name = OpInterface::get_dd_base_dir() +
+                                "//bin_files//malmulgeluadd_test_data//ofm.bin";
+  read_bin_file(golden_out_name, (char *)(ref_out.data()));
+
+#endif
+  std::map<std::string, std::any> attr;
+  if (model_name.find("4x4") != std::string::npos) {
+    attr["design_param"] = std::vector<string>{"4x4"};
+  }
+
+  ryzenai::matmulgeluadd matmulgelu_ = ryzenai::matmulgeluadd<InT, WgT, OuT>(
+      a_dtype, b_dtype, c_dtype, false, attr);
 
   matmulgelu_.debug(debug);
   matmulgelu_.set_params(model_name, a_shape);
@@ -261,25 +255,6 @@ int test_matmulgelu(int M, int K, int N, bool debug = false,
   PROFILE_THIS(matmulgelu_.execute(input_Tensor, output_Tensor));
 #else
   matmulgelu_.execute(input_Tensor, output_Tensor);
-#endif
-
-#ifndef RANDOM_DATA
-  std::vector<uint8_t> ref_out(M * N);
-  std::string golden_out_name =
-      OpInterface::get_dd_base_dir() +
-      "//bin_files//gelu_12th_test_data//golden_12th_gelu.bin";
-  read_bin_file(golden_out_name, reinterpret_cast<char *>(ref_out.data()));
-  for (int i = 0; i < M * N; i++) {
-    gelu_out_golden_quant[i] = (InT)ref_out[i];
-  }
-
-  for (int i = 0; i < 10; i++) {
-    std::cout << (int)ref_out[i] << std::endl;
-  }
-
-  for (int i = 0; i < 10; i++) {
-    std::cout << gelu_out_golden_quant[i] << std::endl;
-  }
 #endif
   err_count = check_result(gelu_out_gold_quant_mat, aie_Y);
 
@@ -350,5 +325,11 @@ TEST(m7h4xjg_GEMM_Testa16w8_Gelu, Kernel6) {
 TEST(mdsqrv1_1_GEMM_Testa8w8_Gelu, Kernel1) {
   int err_count = test_matmulgelu<uint8_t, uint8_t, uint8_t>(
       256, 768, 3072, false, "uint8", "uint8", "uint8", "mdsqrv1.1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSW_MatmulAddGelu_Testa16w8, Kernel_64x768_768x3072) {
+  int err_count = test_matmulgelu<uint16_t, uint8_t, uint16_t>(
+      64, 768, 3072, false, "uint16", "uint8", "uint16", "4x4PSW1.0");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

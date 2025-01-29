@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -55,7 +56,6 @@ private:
   xrt::bo c_bo_;
   /* size for activation dtype*/
   int operand_dtype_size_;
-
   /* variables to store profile data */
   int64_t a_copy_time_;
   int64_t a_sync_time_;
@@ -78,13 +78,15 @@ private:
   std::string op_version_;
   std::string instr_bo_key_;
   std::vector<std::pair<size_t, size_t>> thresholds_;
-  enum transpose_enum { NONE = 0, INPUT = 1, ALL = 2, GLM = 3 };
+  enum transpose_enum { NONE = 0, INPUT = 1, ALL = 2 };
   transpose_enum transpose_ = NONE;
   std::map<std::string, transpose_enum> transpose_attr{
-      {"none", NONE}, {"input", INPUT}, {"all", ALL}, {"glm", GLM}};
+      {"none", NONE}, {"input", INPUT}, {"all", ALL}};
   std::map<transpose_enum, std::string> transpose_txn_suffix{
-      {NONE, ""}, {INPUT, "_input_trans"}, {ALL, "_trans"}, {GLM, "_glm"}};
-
+      {NONE, ""}, {INPUT, "_input_trans"}, {ALL, "_trans"}};
+  std::string model_ = "";
+  std::map<std::string, std::string> model_string_attr{{"LLAMA2", ""},
+                                                       {"CHATGLM", "_glm"}};
   /*
    * Utility function that setups for context.
    */
@@ -99,7 +101,6 @@ private:
    * execution.
    */
   bool isSupportedShape(const Tensor &operand);
-
   std::string get_instr_key(std::string prefix, size_t batch, size_t m,
                             size_t k) const;
 
@@ -110,7 +111,7 @@ public:
   void execute(std::vector<Tensor> &input,
                std::vector<Tensor> &output) override;
   void execute(std::vector<xrt::bo> &input, std::vector<xrt::bo> &output,
-               bool wait = true);
+               bool wait = true, int64_t offset = 0);
   void debug(bool enable);
 
   std::vector<xrt::bo> get_inputs();

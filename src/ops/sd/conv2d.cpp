@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -88,27 +89,147 @@ conv<InT, WtT, BiasT, OutT>::conv(const std::string &ifm_dtype,
   ofmDtypeSize_ = sizeof(OutT);
   biasDtypeSize_ = sizeof(BiasT);
   conv_id_ = conv_count++;
-
-  /*TODO:
-   * select xclbin based on the input/output types,
-   * currently only need one xclbin for one type of ops.
-   */
+  const auto &output_shape_vec =
+      std::any_cast<const std::vector<int> &>(attr.at("output_shape"));
+  batch_ = output_shape_vec[0];
   XCLBIN_FNAME_ =
       OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\SDConv2d.xclbin";
   RYZENAI_LOG_TRACE(OpsFusion::dd_format("xclbin fname : {}", XCLBIN_FNAME_));
   txn_fname_prefix_ = sd_conv_key_ + txnbin_a_header.at(ifmDtype_) +
                       txnbin_b_header.at(weightDtype_) +
                       txnbin_acc_header.at(ofmDtype_);
-  // Shape for Unetsdconv2d_a16bfw16bfpacc16bf
-  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(128, // OC
-                                                               256, // IC
-                                                               512, // IH
-                                                               8,   // IW
-                                                               512, // OH
-                                                               8,   // OW
-                                                               1,   // kh
-                                                               1);  // kw
+  // OC IC IH IW OH OW kh kw
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(128, 256, 512, 8,
+                                                               512, 8, 1, 1);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      128, 128, 512, 512, 512, 512, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 512, 256, 256, 256, 256, 1, 1);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      128, 256, 512, 512, 512, 512, 1, 1);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(3, 128, 512, 512,
+                                                               512, 512, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      128, 256, 512, 512, 512, 512, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 2560, 16, 16, 16, 16, 1, 1);
+  // VAE conv
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 256, 256, 256, 256, 256, 3, 3); // layer3_11.31ms
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 256, 512, 512, 512, 512, 3, 3); // layer6_44.99ms
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      4, 4, 64, 64, 64, 64, 1, 1); // layer7_0.047ms
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      512, 4, 64, 64, 64, 64, 3, 3); // layer8_0.64ms
+  // Unet conv
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 1280, 16, 16, 16, 16, 1, 1); // layer 1
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 1280, 16, 16, 16, 16, 3, 3); // layer 2
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 1280, 16, 16, 8, 8, 3, 3); // layer 3
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 1280, 32, 32, 32, 32, 3, 3); // layer 4
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      640, 1280, 32, 32, 32, 32, 1, 1); // layer 5
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      640, 1280, 32, 32, 32, 32, 3, 3); // layer 6
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 1280, 8, 8, 8, 8, 1, 1); // layer 7
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 1280, 8, 8, 8, 8, 3, 3); // layer 8
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 1920, 16, 16, 16, 16, 1, 1); // layer 9
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 1920, 16, 16, 16, 16, 3, 3); // layer 10
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      640, 1920, 32, 32, 32, 32, 1, 1); // layer 11
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      640, 1920, 32, 32, 32, 32, 3, 3); // layer 12
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      640, 320, 32, 32, 32, 32, 1, 1); // layer 13
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 2560, 16, 16, 16, 16, 3, 3); // layer 14
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      320, 320, 64, 64, 64, 64, 1, 1); // layer 15
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 2560, 8, 8, 8, 8, 3, 3); // layer 16
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 640, 16, 16, 16, 16, 1, 1); // layer 17
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      640, 320, 32, 32, 32, 32, 3, 3); // layer 18
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 2560, 8, 8, 8, 8, 1, 1); // layer 19
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      320, 320, 64, 64, 64, 64, 3, 3); // layer 20
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      320, 320, 64, 64, 32, 32, 3, 3); // layer 21
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      4, 320, 64, 64, 64, 64, 3, 3); // layer 22
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      320, 4, 64, 64, 64, 64, 3, 3); // layer 23
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 2560, 16, 16, 16, 16, 1, 1); // layer 24
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1280, 640, 16, 16, 16, 16, 3, 3); // layer 25
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      640, 640, 32, 32, 32, 32, 1, 1); // layer 26
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      640, 640, 32, 32, 32, 32, 3, 3); // layer 27
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      640, 640, 32, 32, 16, 16, 3, 3); // layer 28
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      320, 640, 64, 64, 64, 64, 1, 1); // layer 29
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      320, 640, 64, 64, 64, 64, 3, 3); // layer 30
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      640, 640, 64, 64, 64, 64, 3, 3); // layer 31
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      640, 960, 32, 32, 32, 32, 1, 1); // layer 32
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      640, 960, 32, 32, 32, 32, 3, 3); // layer 33
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      320, 960, 64, 64, 64, 64, 1, 1); // layer 34
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      320, 960, 64, 64, 64, 64, 3, 3); // layer 35
 
+  // vae decoder
+  // OC IC IH IW OH OW kh kw
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      512, 512, 128, 128, 128, 128, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 512, 256, 256, 256, 256, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      512, 512, 256, 256, 256, 256, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(512, 512, 64, 64,
+                                                               64, 64, 3, 3);
+
+  // SD3.0
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      1536, 16, 128, 128, 64, 64, 2, 2);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 256, 1024, 1024, 1024, 1024, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      128, 256, 1024, 1024, 1024, 1024, 1, 1);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      3, 128, 1024, 1024, 1024, 1024, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(512, 16, 64, 64,
+                                                               64, 64, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 512, 512, 512, 512, 512, 1, 1);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      512, 512, 512, 512, 512, 512, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      128, 256, 1024, 1024, 1024, 1024, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(1536, 16, 64, 64,
+                                                               32, 32, 2, 2);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      512, 16, 128, 128, 128, 128, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      128, 128, 1024, 1024, 1024, 1024, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 512, 512, 512, 512, 512, 3, 3);
   if (load_xrt) {
     xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
     std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
@@ -129,7 +250,6 @@ conv<InT, WtT, BiasT, OutT>::conv(const std::string &ifm_dtype,
       attr.at("weight_shape").type() == typeid(std::vector<int>)) {
     const auto &weight_shape_vector =
         std::any_cast<const std::vector<int> &>(attr.at("weight_shape"));
-
     if (weight_shape_vector.size() >= 4) {
       weightShape_[0] = weight_shape_vector[0]; // OC
       weightShape_[1] = weight_shape_vector[1]; // kh
@@ -190,6 +310,12 @@ conv<InT, WtT, BiasT, OutT>::conv(const std::string &ifm_dtype,
       outputShape_[0] = output_shape_vector[1]; // OH
       outputShape_[1] = output_shape_vector[2]; // OW
       outputShape_[2] = output_shape_vector[3]; // OC
+      outputShapeAligned_[0] = output_shape_vector[1];
+      outputShapeAligned_[1] = output_shape_vector[2];
+      // Note (xcl): Currently only aligned when the size is less than 4.
+      // Consider extending this to align to 4-byte boundaries in the future.
+      outputShapeAligned_[2] =
+          output_shape_vector[3] < 4 ? 4 : output_shape_vector[3];
     } else {
       RYZENAI_LOG_INFO(
           "Input Shape attribute does not have the expected number of "
@@ -214,6 +340,12 @@ conv<InT, WtT, BiasT, OutT>::conv(const std::string &ifm_dtype,
   OW_ = outputShape_[1];
   kh_ = weightShape_[1];
   kw_ = weightShape_[2];
+  aligned_IC_ = (IC_ % ic_min_sub_)
+                    ? (int64_t)(IC_ + (ic_min_sub_ - (IC_ % ic_min_sub_)))
+                    : (int64_t)IC_;
+  aligned_OC_ = (OC_ % oc_min_sub_)
+                    ? (int64_t)(OC_ + (oc_min_sub_ - (OC_ % oc_min_sub_)))
+                    : (int64_t)OC_;
   if (bias_en_) {
     biasShape_[0] = OC_;
   }
@@ -245,11 +377,8 @@ conv<InT, WtT, BiasT, OutT>::conv(const std::string &ifm_dtype,
   kernelOutputShape_[3] = 8;                   // C parallelism
 
   std::call_once(logger_flag_, []() {
-    std::string header = "sd_conv2d_id (OC IC IH IW OH OW kh kw) Execute"
-                         "time(us) num_aie_runs run_aie_time(ns) "
-                         "IFM_copy_time(ns) IFM_sync_time(ns) "
-                         "OFM_copy_time(ns) C_sync_time(ns) "
-                         "Avg_time_per_aie_run(ns)\n";
+    std::string header =
+        "sd_conv2d_id | Execute time | total time | Avg_time_per_aie_run\n";
     RYZENAI_LOG_INFO(header);
   });
 
@@ -262,12 +391,12 @@ conv<InT, WtT, BiasT, OutT>::conv(const std::string &ifm_dtype,
 template <typename InT, typename WtT, typename BiasT, typename OutT>
 size_t
 conv<InT, WtT, BiasT, OutT>::get_const_bo_size(uint32_t ifm_sv_depth) const {
-  auto wts_size = OC_ * kh_ * kw_ * IC_ / 8 * 9;
+  auto wts_size = aligned_OC_ * kh_ * kw_ * aligned_IC_ / 8 * 9;
   // from python, casc_len == 1
   // depth_iter_casc = ceil(ifm_depth/ifm_sv_depth)/casc_len
   size_t depth_iter_casc =
       static_cast<size_t>(std::ceil(IC_ * 1.0 / ifm_sv_depth));
-  auto bias_size = OC_ * depth_iter_casc * 4 * sizeof(float);
+  auto bias_size = aligned_OC_ * depth_iter_casc * 4 * sizeof(float);
   return wts_size + bias_size;
 }
 
@@ -284,7 +413,8 @@ void conv<InT, WtT, BiasT, OutT>::initialize_const_params(
                            super_kernel_size));
 
   auto lp_data_ptr = reinterpret_cast<uint32_t *>(super_kernel_params.data());
-  ryzenai::sd_helper::layer_params lp(lp_data_ptr);
+  ryzenai::sd_helper::layer_params lp(lp_data_ptr, (uint32_t)IC_,
+                                      (uint32_t)OC_);
   lp.print_param();
 
   if (weightDtype_ == "float32") {
@@ -306,20 +436,29 @@ void conv<InT, WtT, BiasT, OutT>::initialize_const_params(
         }
       }
     }
+
+    std::vector<WtT> wgt_pad(aligned_OC_ * aligned_IC_ * kh_ * kw_, 0);
+    for (size_t b = 0; b < (size_t)OC_; ++b) {
+      for (size_t c = 0; c < (size_t)IC_; ++c) {
+        memcpy(&wgt_pad[(b * aligned_IC_ + c) * kh_ * kw_],
+               &wgt_reshaped[(b * IC_ + c) * kh_ * kw_],
+               kh_ * kw_ * sizeof(WtT));
+      }
+    }
+
     auto wts_tensor = const_params.at(0);
     auto bias_tensor = const_params.at(1);
-    std::vector<float> bias_data((float *)bias_tensor.data,
-                                 (float *)bias_tensor.data +
-                                     bias_tensor.shape[0]);
+    std::vector<float> bias_data(aligned_OC_, 0);
+    memcpy(bias_data.data(), (float *)bias_tensor.data, OC_ * sizeof(float));
 
-    std::vector<size_t> wt_shape_oihw{(size_t)OC_, (size_t)IC_, (size_t)kh_,
-                                      (size_t)kw_};
+    std::vector<size_t> wt_padded_shape_oihw{
+        (size_t)aligned_OC_, (size_t)aligned_IC_, (size_t)kh_, (size_t)kw_};
     int num_words_bias = 1;
     int num_words_wts = 2;
     std::vector<uint32_t> buffer;
     std::string wts32_file = "cpp_wts32.txt";
 
-    ryzenai::sd_helper::write_datafmt_wts(buffer, wgt_reshaped, wt_shape_oihw,
+    ryzenai::sd_helper::write_datafmt_wts(buffer, wgt_pad, wt_padded_shape_oihw,
                                           bias_data, lp, wts32_file, 8,
                                           num_words_bias, num_words_wts);
 
@@ -392,6 +531,7 @@ template <typename InT, typename WtT, typename BiasT, typename OutT>
 void conv<InT, WtT, BiasT, OutT>::execute(std::vector<Tensor> &input,
                                           std::vector<Tensor> &output) {
   RYZENAI_LOG_TRACE("Conv execute ...");
+
   ifmBo_.write(input.at(0).data);
   ifmBo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
   auto txnData = this->get_transaction_bin();
@@ -406,24 +546,24 @@ void conv<InT, WtT, BiasT, OutT>::execute(std::vector<Tensor> &input,
   instr_bo_words = instr_bo.size() / sizeof(int);
 
   auto kernel_ = xrt_ctx_->get_kernel();
-  xrt::run run;
 
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   // TODO: figure out the Bo order
-  run = kernel_(2, instr_bo, instr_bo_words,
-                ifmBo_.address() + DDR_AIE_ADDR_OFFSET,
-                constBo_.address() + DDR_AIE_ADDR_OFFSET,
-                ofmBo_.address() + DDR_AIE_ADDR_OFFSET, 0, 0);
-  run.wait2();
+
+  ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, instr_bo,
+                                            instr_bo_words, ifmBo_, constBo_,
+                                            ofmBo_, 0, 0, true, false);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   num_run_aie_++;
   run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);
-
   /* sync output activation to host memory */
   ofmBo_.sync(XCL_BO_SYNC_BO_FROM_DEVICE);
   ofmBo_.read(output.at(0).data);
 
-  RYZENAI_LOG_TRACE("Conv execute ... DONE");
+  RYZENAI_LOG_INFO(std::to_string(conv_id_) + " " +
+                   std::to_string(num_run_aie_) + " " +
+                   std::to_string(run_aie_time_) + " " +
+                   std::to_string((double)run_aie_time_ / num_run_aie_) + "\n");
 }
 
 template <typename InT, typename WtT, typename BiasT, typename OutT>
@@ -460,7 +600,6 @@ void conv<InT, WtT, BiasT, OutT>::set_params(
   OW_ = shape_info.OW;
   kh_ = shape_info.kh;
   kw_ = shape_info.kw;
-
   inputShape_[0] = IH_;
   inputShape_[1] = IW_;
   inputShape_[2] = IC_;
@@ -497,7 +636,6 @@ void conv<InT, WtT, BiasT, OutT>::set_params(
   kernelOutputShape_[1] = outputShape_[2] / 8; // C / 8
   kernelOutputShape_[2] = outputShape_[1];     // W
   kernelOutputShape_[3] = 8;                   // C parallelism
-
   xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }
@@ -506,8 +644,8 @@ template <typename InT, typename WtT, typename BiasT, typename OutT>
 std::vector<OpArgMap> conv<InT, WtT, BiasT, OutT>::get_buffer_reqs(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
-  size_t ifm_bo_size =
-      (inputShape_[0] * inputShape_[1] * inputShape_[2] * ifmDtypeSize_);
+  size_t ifm_bo_size = (batch_ * inputShape_[0] * inputShape_[1] *
+                        inputShape_[2] * ifmDtypeSize_);
   auto super_kernel_params = get_super_kernel_params();
   auto super_kernel_size = super_kernel_params.size();
   DD_ASSERT(
@@ -515,17 +653,18 @@ std::vector<OpArgMap> conv<InT, WtT, BiasT, OutT>::get_buffer_reqs(
       OpsFusion::dd_format("sdconv2d load {} bytes lp bin less than 64 bytes",
                            super_kernel_size));
   auto lp_data_ptr = reinterpret_cast<uint32_t *>(super_kernel_params.data());
-  ryzenai::sd_helper::layer_params lp(lp_data_ptr);
+  ryzenai::sd_helper::layer_params lp(lp_data_ptr, (uint32_t)IC_,
+                                      (uint32_t)OC_);
   lp.print_param();
   auto const_params_bo_size = get_const_bo_size(lp.ifm_sv_depth);
-
+  // use aligned output shape
   size_t ofm_bo_size =
-      ((outputShape_[0]) * outputShape_[1] * (outputShape_[2]) * ofmDtypeSize_);
+      (batch_ * outputShapeAligned_[0] * outputShapeAligned_[1] *
+       outputShapeAligned_[2] * ofmDtypeSize_);
 
   RYZENAI_LOG_TRACE("SDConv: IFM_BO_SIZE:" + std::to_string(ifm_bo_size) +
                     " CONST_BO_SIZE:" + std::to_string(const_params_bo_size) +
                     " OFM_BO_SIZE:" + std::to_string(ofm_bo_size));
-
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 0, 0, 0, ifm_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 1, 1, 0, const_params_bo_size},
@@ -551,6 +690,35 @@ const std::vector<uint8_t> conv<InT, WtT, BiasT, OutT>::get_super_kernel_params(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
   return {};
+};
+
+template <typename InT, typename WtT, typename BiasT, typename OutT>
+void conv<InT, WtT, BiasT, OutT>::format_output(
+    const Tensor &out_tensor, void *hw_out_ptr, size_t sz, size_t tensor_idx,
+    const std::map<std::string, std::any> &attr) {
+  size_t tensor_size =
+      std::accumulate(out_tensor.shape.begin(), out_tensor.shape.end(),
+                      size_t(1), std::multiplies<size_t>()) *
+      ofmDtypeSize_;
+  size_t ofm_bo_size = (batch_ * outputShape_[0] * outputShape_[1] *
+                        outputShape_[2] * ofmDtypeSize_);
+  DD_ASSERT(ofm_bo_size == tensor_size,
+            OpsFusion::dd_format("unexpected output size: {} vs {}",
+                                 ofm_bo_size, tensor_size));
+  // get out shape from attrs, because conv2d may have merged with reshape
+  // which may cause its out shape to be different from out_tensor
+  // Note (xcl): Remove dirty data during calculation.
+  // In SD1.5, only one OC is 3 (misaligned with 4).
+  if (OC_ == 3) {
+    uint32_t src_stride = 4;
+    for (int i = 0; i < batch_ * outputShape_[0] * outputShape_[1]; i++) {
+      memcpy((void *)((uint8_t *)out_tensor.data + i * OC_ * ofmDtypeSize_),
+             (void *)((uint8_t *)hw_out_ptr + i * src_stride * ofmDtypeSize_),
+             (OC_ * ofmDtypeSize_));
+    }
+  } else {
+    memcpy(out_tensor.data, hw_out_ptr, ofm_bo_size);
+  }
 };
 
 template <typename InT, typename WtT, typename BiasT, typename OutT>

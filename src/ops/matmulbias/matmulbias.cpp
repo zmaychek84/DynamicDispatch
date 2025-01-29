@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -240,8 +241,8 @@ void matmulbias<InT, WtT, OutT>::initialize_const_params(
   auto bias = (int8_t *)const_params.at(bias_idx).data;
 
   std::vector<WtT> buf(w_shape_[0] * w_shape_[1]);
-  matmul_matrix::WgtMatrix<WtT, Ksubv, Nsubv> W((int)w_shape_[0],
-                                                (int)w_shape_[1], buf.data());
+  matmul_matrix::WgtMatrix<WtT> W((int)w_shape_[0], (int)w_shape_[1], Ksubv,
+                                  Nsubv, buf.data());
   for (int r = 0; r < w_shape_[0]; ++r) {
     for (int c = 0; c < w_shape_[1]; ++c) {
       W.at(r, c) = weights[(r * w_shape_[1]) + c];
@@ -395,14 +396,11 @@ void matmulbias<InT, WtT, OutT>::execute(std::vector<Tensor> &input,
   auto kernel_ = xrt_ctx_->get_kernel();
 
   // launch the kernel
-  xrt::run run;
   auto run_aie_start = GET_ELAPSED_TIME_NS();
-  run = kernel_(2, instr_bo, instr_bo_words,
-                c_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                a_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                b_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                param_bo.address() + DDR_AIE_ADDR_OFFSET, 0);
-  run.wait2();
+
+  ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, instr_bo,
+                                            instr_bo_words, c_bo_, a_bo_, b_bo_,
+                                            param_bo, 0, true, false);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);
   num_run_aie_++;

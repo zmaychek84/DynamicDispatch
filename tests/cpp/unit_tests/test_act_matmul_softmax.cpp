@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -245,21 +246,21 @@ int test_act_matmul_softmax(int M, int K, int N, int shape_format = 0,
 // Activation MatMul and Softmax fused for mzdk5 4x4
 
 // QKt for 256
-TEST(C4mzdk5_actMatMulSoftmax_Testa16w16, Kernel1) {
+TEST(C4mzdk5_actMatMulSoftmax_Testa16w16, Kernel_256_64_256) {
   int err_count = test_act_matmul_softmax<uint16_t, uint16_t, uint16_t>(
       256, 64, 256, 1, false, "uint16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // QKt for 1024
-TEST(C4mzdk5_actMatMulSoftmax_Testa16w16, Kernel2) {
+TEST(C4mzdk5_actMatMulSoftmax_Testa16w16, Kernel_1024_64_1024) {
   int err_count = test_act_matmul_softmax<uint16_t, uint16_t, uint16_t>(
       1024, 64, 1024, 1, false, "uint16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // QKt for 4096
-TEST(C4mzdk5_actMatMulSoftmax_Testa16w16, Kernel3) {
+TEST(C4mzdk5_actMatMulSoftmax_Testa16w16, Kernel_4096_64_4096) {
   int err_count = test_act_matmul_softmax<uint16_t, uint16_t, uint16_t>(
       4096, 64, 4096, 1, false, "uint16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;

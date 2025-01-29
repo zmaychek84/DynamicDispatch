@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -123,17 +124,33 @@ int test_elwmul_qdq(size_t M, size_t K, bool debug = false,
          (void *)(reinterpret_cast<char *>(abuff.data()) + M * K * sizeof(InT)),
          M * K * sizeof(InT));
 
-  read_bin_file(OpInterface::get_dd_base_dir() + fld_name + "wgt.bin",
-                reinterpret_cast<char *>(qdq_params.data()));
-
   read_bin_file(OpInterface::get_dd_base_dir() + fld_name + "ofm.bin",
                 reinterpret_cast<char *>(cpu_out.data()));
+  if (model_name == "4x4PSU") {
+    std::vector<uint16_t> qdq_params_uint16(QDQparam_size * 2);
+    read_bin_file(OpInterface::get_dd_base_dir() + fld_name + "wgt.bin",
+                  reinterpret_cast<char *>(qdq_params_uint16.data()));
+    qdq_params[0] = qdq_params_uint16[1];
+    qdq_params[1] = qdq_params_uint16[0];
+    qdq_params[2] = qdq_params_uint16[3];
+    qdq_params[3] = qdq_params_uint16[2];
+    qdq_params[4] = qdq_params_uint16[5];
+    qdq_params[5] = qdq_params_uint16[4];
+    qdq_params[6] = qdq_params_uint16[6];
+    qdq_params[7] = qdq_params_uint16[7];
+    qdq_params[8] = qdq_params_uint16[8];
+  } else {
+    read_bin_file(OpInterface::get_dd_base_dir() + fld_name + "wgt.bin",
+                  reinterpret_cast<char *>(qdq_params.data()));
+  }
 #endif
 
   std::map<std::string, std::any> attr;
 
   if (model_name == "4x4mzdk5") {
     attr["design_param"] = std::vector<string>{"4x4"};
+  } else if (model_name == "4x4PSU") {
+    attr["design_param"] = std::vector<string>{"4x4PSU"};
   }
   ryzenai::elwmul_qdq elwmul_qdq_ = ryzenai::elwmul_qdq<InT, WgT, OuT>(
       a_dtype, b_dtype, c_dtype, false, attr);
@@ -162,7 +179,11 @@ int test_elwmul_qdq(size_t M, size_t K, bool debug = false,
   elwmul_qdq_.execute(input_Tensor, output_Tensor);
 #endif
   if (c_dtype == "uint16") {
+#ifndef RANDOM_DATA
+    err_count = check_add_result(cpu_Y, aie_Y, 0.01);
+#else
     err_count = check_add_result(cpu_Q_Y, aie_Y, 0.01);
+#endif
   } else {
     err_count = check_add_result_bfloat16<OuT>(cpu_out, aie_out, a_shape, 0.01);
   }
@@ -170,32 +191,44 @@ int test_elwmul_qdq(size_t M, size_t K, bool debug = false,
 }
 
 // 4x4 elwmul_qdq
-TEST(C4mzdk5_ELWMULQDQ_Testa16w8, Kernel1) {
+TEST(C4mzdk5_ELWMULQDQ_Testa16w8, Kernel_64_5120) {
   int err_count = test_elwmul_qdq<uint16_t, uint16_t, uint16_t>(
       64, 5120, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_ELWMULQDQ_Testa16w8, Kernel2) {
+TEST(C4mzdk5_ELWMULQDQ_Testa16w8, Kernel_256_5120) {
   int err_count = test_elwmul_qdq<uint16_t, uint16_t, uint16_t>(
       256, 5120, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_ELWMULQDQ_Testa16w8, Kernel3) {
+TEST(C4mzdk5_ELWMULQDQ_Testa16w8, Kernel_1024_2560) {
   int err_count = test_elwmul_qdq<uint16_t, uint16_t, uint16_t>(
       1024, 2560, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_ELWMULQDQ_Testa16w8, Kernel4) {
+TEST(C4mzdk5_ELWMULQDQ_Testa16w8, Kernel_4096_1280) {
   int err_count = test_elwmul_qdq<uint16_t, uint16_t, uint16_t>(
       4096, 1280, false, "bfloat16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(START_TAIL_mxgan_Testa16w8, Kernel5) {
+TEST(START_TAIL_PSH_Testa16w8, Kernel_512_768) {
   int err_count = test_elwmul_qdq<uint16_t, uint16_t, uint16_t>(
       512, 768, false, "bfloat16", "uint16", "bfloat16", "START_TAIL_PS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU1_ELWMUL_Testa16a16, Kernel_uint16_uint16_uint16_1_8192) {
+  int err_count = test_elwmul_qdq<uint16_t, uint16_t, uint16_t>(
+      1, 8192, false, "uint16", "uint16", "uint16", "4x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU0_ELWMUL_Testa16a16, Kernel_uint16_uint16_uint16_524288_1) {
+  int err_count = test_elwmul_qdq<uint16_t, uint16_t, uint16_t>(
+      524288, 1, false, "uint16", "uint16", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

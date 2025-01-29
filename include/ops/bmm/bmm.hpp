@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -124,6 +125,8 @@ public:
   void execute(std::vector<xrt::bo> &input, std::vector<xrt::bo> &output,
                bool wait = true);
   void debug(bool enable);
+  xrt::bo create_bo(void *usr_ptr, size_t size, int operand_index);
+
   std::vector<xrt::bo> get_inputs();
   std::vector<xrt::bo> get_outputs();
 

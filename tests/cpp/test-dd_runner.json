@@ -1,0 +1,89 @@
+{
+  "run_dir": ".",
+  "owner": "z1_acas_test",
+  "setup": [
+    "cmake -S . -B build -DENABLE_DD_TESTS=ON -DPERF_LOGGING_EN=ON -DCMAKE_INSTALL_PREFIX=build/Release",
+    "cmake --build build --config=Release --target install --parallel",
+    "pip install -e ext\\dd_helper"
+  ],
+  "test_steps": [
+    {
+      "name": "fwd_compatibility_test",
+      "command": "build\\Release\\tests\\test_fwd_compatibility.exe",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_PSF",
+      "command": "pushd %DD_METASTATE%\\PSF  && %DD_ROOT%\\build\\Release\\tests\\dd_runner.exe fused.onnx.subgraph_1961.json  fused.onnx.subgraph_1961.state  4x2_psf_stops_v1.1_model_a8w8_qdq.xclbin         L C & popd",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_PSH",
+      "command": "pushd %DD_METASTATE%\\PSH  && %DD_ROOT%\\build\\Release\\tests\\dd_runner.exe fused.onnx.subgraph_725.json   fused.onnx.subgraph_725.state   4x2_psh_stops_v1.2_model_a16w8_qdq.xclbin        L C & popd",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_PSI",
+      "command": "pushd %DD_METASTATE%\\PSI  && %DD_ROOT%\\build\\Release\\tests\\dd_runner.exe fused.onnx.subgraph_4019.json  fused.onnx.subgraph_4019.state   4x2_psi_integrated_stops_model_a16w8_qdq.xclbin L C & popd",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_PSJ",
+      "command": "pushd %DD_METASTATE%\\PSJ  && %DD_ROOT%\\build\\Release\\tests\\dd_runner.exe fused.onnx.subgraph_1903.json  fused.onnx.subgraph_1903.state   4x2_psj_stops_model_a16w8_qdq.xclbin            L C & popd",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_PSQ2",
+      "command": "pushd %DD_METASTATE%\\PSQ2 && %DD_ROOT%\\build\\Release\\tests\\dd_runner.exe fused.onnx.subgraph_3273.json  fused.onnx.subgraph_3273.state   4x2_psq2_model_a16w8_qdq.xclbin                 L C & popd",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_PSR",
+      "command": "pushd %DD_METASTATE%\\PSR  && %DD_ROOT%\\build\\Release\\tests\\dd_runner.exe fused.onnx.subgraph_22056.json fused.onnx.subgraph_22056.state  4x4_psr_model_a16w8_qdq.xclbin                  L C & popd",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    }
+  ],
+  "cleanup": []
+}

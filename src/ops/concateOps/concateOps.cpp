@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -540,6 +541,11 @@ const std::vector<uint8_t> concateOps<InT, OutT>::get_transaction_bin(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
 
+  bool elf_flow = false;
+  if (attr.end() != attr.find("elf_flow")) {
+    elf_flow = std::any_cast<uint32_t>(attr.at("elf_flow"));
+  }
+
   std::string txn_key;
   if (model_variant_.size()) {
     txn_key = "concatenate_" + txn_fname_prefix_ + "_" + model_variant_ + "_" +
@@ -548,6 +554,9 @@ const std::vector<uint8_t> concateOps<InT, OutT>::get_transaction_bin(
     txn_key = "concatenate_" + txn_fname_prefix_ + "_" +
               std::to_string(graphId_) + "_" + std::to_string(inChannels_) +
               "_" + std::to_string(outChannels_);
+  }
+  if (elf_flow) {
+    txn_key += "_elf";
   }
 
   Transaction &txn = Transaction::getInstance();
@@ -580,7 +589,6 @@ void concateOps<InT, OutT>::execute(std::vector<Tensor> &input,
   uint32_t instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
 
   auto kernel_ = xrt_ctx_->get_kernel();
-  xrt::run run;
   // launch the Conv kernel
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   /* kernel call for Conv that supports transaction binary flow */
@@ -589,19 +597,16 @@ void concateOps<InT, OutT>::execute(std::vector<Tensor> &input,
    * ofm bo should be given xrt id 2 and scratch bo should be given xrt id 3 for
    * all graphs */
   if ((graphId_ == 1280) || (graphId_ == 2560)) {
-    run = kernel_(2, instr_bo, instr_bo_words,
-                  constBo_.address() + DDR_AIE_ADDR_OFFSET,
-                  ifmBo_.address() + DDR_AIE_ADDR_OFFSET,
-                  scratchBo_.address() + DDR_AIE_ADDR_OFFSET,
-                  ofmBo_.address() + DDR_AIE_ADDR_OFFSET, 0);
+
+    ryzenai::dynamic_dispatch::execute_kernel(
+        kernel_, 2, instr_bo, instr_bo_words, constBo_, ifmBo_, scratchBo_,
+        ofmBo_, 0, true, false);
   } else {
-    run = kernel_(2, instr_bo, instr_bo_words,
-                  constBo_.address() + DDR_AIE_ADDR_OFFSET,
-                  ifmBo_.address() + DDR_AIE_ADDR_OFFSET,
-                  ofmBo_.address() + DDR_AIE_ADDR_OFFSET,
-                  scratchBo_.address() + DDR_AIE_ADDR_OFFSET, 0);
+
+    ryzenai::dynamic_dispatch::execute_kernel(
+        kernel_, 2, instr_bo, instr_bo_words, constBo_, ifmBo_, ofmBo_,
+        scratchBo_, 0, true, false);
   }
-  run.wait2();
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);
 

@@ -5,6 +5,7 @@
 #ifndef __UTILS_H_
 #define __UTILS_H_
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <map>
@@ -30,6 +31,25 @@ static void write_buffer_to_file(T *buf, size_t buf_size, std::string fname) {
     ofs << std::to_string(buf[i]) << "\n";
   }
   ofs.close();
+}
+
+static std::string NormWinPath(const std::string &path) {
+  if (path.find("\\\\") != std::string::npos) {
+    return path; // Already normalized
+  }
+  std::string normalizedPath = path;
+
+  // Replace all forward slashes '/' with backward slashes '\'
+  std::replace(normalizedPath.begin(), normalizedPath.end(), '/', '\\');
+
+  // Add an extra backslash after each existing backslash
+  size_t pos = 0;
+  while ((pos = normalizedPath.find("\\", pos)) != std::string::npos) {
+    normalizedPath.insert(pos, "\\");
+    pos += 2; // Move past the double backslashes
+  }
+
+  return normalizedPath;
 }
 
 /// @brief Concat multiple vectors to a single vector
@@ -58,6 +78,9 @@ std::vector<std::string> split_string(const std::string &msg,
 std::string remove_whitespaces(std::string x);
 
 void dumpBinary(void *src, size_t length, std::string &filePath);
+
+/// @brief Generate unique time stamp string for current date and time.
+std::string generateCurrTimeStamp();
 
 } // namespace Utils
 

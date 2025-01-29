@@ -19,20 +19,37 @@
 
 set(LIBRARY_NAME dyn_dispatch_core)
 
+#find_package(AIEBU REQUIRED)
+
 function(dd_add_protobuf_target target proto_file)
   if(COMMAND protobuf_generate)
     add_library(${target} OBJECT ${proto_file})
-    protobuf_generate(TARGET ${target} LANGUAGE cpp)
+    protobuf_generate(
+      TARGET
+      ${target}
+      LANGUAGE
+      cpp
+      PROTOC_OPTIONS
+      "$<LIST:TRANSFORM,$<TARGET_PROPERTY:protobuf::libprotobuf,INTERFACE_INCLUDE_DIRECTORIES>,PREPEND,-I>"
+    )
   else()
     get_filename_component(PROTO_FILE_NAME ${proto_file} NAME_WE)
-    set(PROTO_SRCS ${CMAKE_CURRENT_BINARY_DIR}/fusion_rt/${PROTO_FILE_NAME}.pb.cc)
-    set(PROTO_HDRS ${CMAKE_CURRENT_BINARY_DIR}/fusion_rt/${PROTO_FILE_NAME}.pb.h)
+    set(PROTO_SRCS
+        ${CMAKE_CURRENT_BINARY_DIR}/fusion_rt/${PROTO_FILE_NAME}.pb.cc
+    )
+    set(PROTO_HDRS
+        ${CMAKE_CURRENT_BINARY_DIR}/fusion_rt/${PROTO_FILE_NAME}.pb.h
+    )
     add_custom_command(
       OUTPUT ${PROTO_SRCS} ${PROTO_HDRS}
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-      COMMAND protobuf::protoc
-      ARGS --cpp_out=${CMAKE_CURRENT_BINARY_DIR} -I ${protobuf_SOURCE_DIR}/src -I ${CMAKE_CURRENT_SOURCE_DIR}/ ${proto_file}
-      DEPENDS ${proto_file})
+      COMMAND
+        protobuf::protoc ARGS --cpp_out=${CMAKE_CURRENT_BINARY_DIR} -I
+        ${protobuf_SOURCE_DIR}/src -I ${CMAKE_CURRENT_SOURCE_DIR}/
+        "$<LIST:TRANSFORM,$<TARGET_PROPERTY:protobuf::libprotobuf,INTERFACE_INCLUDE_DIRECTORIES>,PREPEND,-I>"
+        ${proto_file}
+      DEPENDS ${proto_file}
+    )
     add_library(${target} OBJECT ${PROTO_SRCS} ${PROTO_HDRS})
   endif()
   target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
@@ -53,6 +70,7 @@ set(LIB_SRC
     ops/op_interface.cpp
     ops/op_builder.cpp
     ops/matmul/matmul.cpp
+    ops/dmacompiler/batch_matmul/batch_matmul.cpp
     ops/maxpool/maxpool.cpp
     ops/act_act_matmul_qdq/act_act_matmul_qdq.cpp
     ops/act_const_add/act_const_add.cpp
@@ -63,12 +81,17 @@ set(LIB_SRC
     ops/mhachannel/mhachannel.cpp
     ops/mhawindow/mhawindow.cpp
     ops/mha/mha.cpp
+    ops/dmacompiler/mhapsw/mhapsw.cpp
+    ops/dmacompiler/qdq_mul/qdq_mul.cpp
     ops/mhamzdk5/mhamzdk5.cpp
     ops/matmulgeluadd/matmulgeluadd.cpp
+    ops/dmacompiler/matmul_v_geluadd/matmul_v_geluadd.cpp
     ops/matmulbias/matmulbias.cpp
     ops/matmul_a16a16_mladf/matmul_a16a16_mladf.cpp
     ops/matmul_a16w8_mladf/matmul_a16w8_mladf.cpp
     ops/elwadd/elwadd.cpp
+    ops/dmacompiler/qdqadd/qdqadd.cpp
+    ops/dmacompiler/gather_qdq_add/gather_qdq_add.cpp
     ops/mladfadd/mladfadd.cpp
     ops/transpose/transpose.cpp
     ops/silu/silu.cpp
@@ -86,6 +109,7 @@ set(LIB_SRC
     ops/experimental/elwadd_tile.cpp
     ops/pm_load/pm_load.cpp
     ops/record_timer/record_timer.cpp
+    ops/preemption/preemption.cpp
     ops/mladfmatmulbias/mladfmatmulbias.cpp
     ops/bmm/bmm.cpp
     ops/mladfsoftmax/mladfsoftmax.cpp
@@ -94,8 +118,12 @@ set(LIB_SRC
     fusion_rt/fusion_rt.cpp
     fusion_rt/meta_utils.cpp
     fusion_rt/metastate_api.cpp
+    fusion_rt/md5.cpp
+    fusion_rt/md5.h
+    fusion_rt/weak.hpp
     passes/insert_pm_swap.cpp
     passes/insert_record_timer.cpp
+    passes/insert_preemption_pass.cpp
     passes/assign_pdi_id_pass.cpp
     passes/generate_pdi_partitions_pass.cpp
     passes/analyze_buffer_reqs.cpp
@@ -117,6 +145,7 @@ set(LIB_SRC
     ops/gap/gap.cpp
     ops/iconv/iconv.cpp
     ops/conv2matmul/conv2matmul.cpp
+    ops/conv2matmul_silu/conv2matmul_silu.cpp
     ops/gelu/gelu.cpp
     ops/silu_qdq/silu_qdq.cpp
     ops/expand/expand.cpp
@@ -126,6 +155,7 @@ set(LIB_SRC
     ops/ReduceSum/ReduceSum.cpp
     ops/AddTanhLPNorm/AddTanhLPNorm.cpp
     ops/AttentionMaskPrePro/AttentionMaskPrePro.cpp
+    ops/dmacompiler/AttentionMaskPrePro_win25/AttentionMaskPrePro_win25.cpp
     ops/matvecadd/matvecadd.cpp
     ops/elwmul_qdq/elwmul_qdq.cpp
     ops/nni_resize/nni_resize.cpp
@@ -145,6 +175,21 @@ set(LIB_SRC
     ops/conv/conv_lp.cpp
     ops/gap/gap_lp.cpp
     ops/sd/conv2d.cpp
+    ops/sd/concat.cpp
+    ops/sd/matmul.cpp
+    ops/sd/gelu.cpp
+    ops/sd/silu.cpp
+    ops/sd/elwadd.cpp
+    ops/sd/elwmul.cpp
+    ops/sd/resize.cpp
+    ops/sd/layernorm.cpp
+    ops/sd/mha.cpp
+    ops/sd/slice.cpp
+    ops/sd/groupnorm.cpp
+    ops/sd/gemm.cpp
+    ops/flat/mlp.cpp
+    ops/flat/mha_v2.cpp
+    ops/flat/rms_add.cpp
 )
 
 # Hook for simnow lite
@@ -153,6 +198,11 @@ if(ENABLE_SIMNOWLITE_BUILD)
   set(HWEMU ${XRT_HWEMU_LIBRARIES})
 endif()
 add_library(${LIBRARY_NAME} ${LIB_SRC})
+
+if(MSVC)
+  target_compile_options(${LIBRARY_NAME} PRIVATE /MP)
+endif()
+
 target_include_directories(
   ${LIBRARY_NAME}
   PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
@@ -161,16 +211,18 @@ target_include_directories(
   PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
   PRIVATE ${XRT_INCLUDE_DIRS}
   PRIVATE ${DD_SRC_INCLUDE_DIRS}
+  #PRIVATE ${AIEBU_INCLUDE_DIRS}
 )
 
 target_link_libraries(
   ${LIBRARY_NAME}
   PUBLIC nlohmann_json::nlohmann_json spdlog::spdlog xaiengine::xaiengine
-         transaction
+         transaction xclbin #AIEBU::aiebu_static
          $<TARGET_PROPERTY:dd_metastate_proto,INTERFACE_LINK_LIBRARIES>
   PRIVATE ${XRT_COREUTIL_LIBRARIES} ${HWEMU}
   # $<TARGET_PROPERTY:dd_metastate_proto,LINK_LIBRARIES>
 )
+
 target_compile_options(${LIBRARY_NAME} PRIVATE ${DD_DEFAULT_COMPILE_OPTIONS})
 target_compile_definitions(${LIBRARY_NAME} PUBLIC XAIE_FEATURE_MSVC)
 set_source_files_properties(
@@ -204,7 +256,9 @@ if(ENABLE_DD_PYTHON)
   target_compile_options(_DynamicDispatch PRIVATE ${DD_DEFAULT_COMPILE_OPTIONS})
 endif()
 
-target_include_directories(${LIBRARY_NAME} PRIVATE ${nlohmann_json_SOURCE_DIR}/include)
+target_include_directories(
+  ${LIBRARY_NAME} PRIVATE ${nlohmann_json_SOURCE_DIR}/include
+)
 
 if(MSVC)
   target_compile_options(${LIBRARY_NAME} PRIVATE "/wd4996")
@@ -214,19 +268,20 @@ endif(MSVC)
 include(GNUInstallDirs)
 # Install libraries
 if(CMAKE_SOURCE_DIR STREQUAL DynamicDispatch_SOURCE_DIR)
-install(
-  TARGETS ${LIBRARY_NAME} dd_metastate_proto
-  EXPORT ${PROJECT_NAME}-targets
-  INCLUDES
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ryzenai/dynamic_dispatch
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-)
+  install(
+    TARGETS ${LIBRARY_NAME} dd_metastate_proto
+    EXPORT ${PROJECT_NAME}-targets
+    INCLUDES
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ryzenai/dynamic_dispatch
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  )
 endif()
 
-
-if(ENABLE_DD_PYTHON AND SKBUILD AND CMAKE_SOURCE_DIR STREQUAL DynamicDispatch_SOURCE_DIR)
+if(ENABLE_DD_PYTHON AND SKBUILD AND CMAKE_SOURCE_DIR STREQUAL
+                                    DynamicDispatch_SOURCE_DIR
+)
   install(TARGETS _DynamicDispatch LIBRARY DESTINATION ".")
 endif()
 

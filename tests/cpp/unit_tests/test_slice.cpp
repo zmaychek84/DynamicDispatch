@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -48,15 +49,21 @@ int test_slice(size_t M, size_t K, int sIdx, bool debug = false,
     attr["slice_idx"] = std::vector<int>{sIdx};
   }
   ryzenai::slice slice_ =
-      ryzenai::slice<InT, OuT>(a_dtype, c_dtype, true, attr);
+      ryzenai::slice<InT, OuT>(a_dtype, c_dtype, false, attr);
+  slice_.debug(debug);
+  std::vector<size_t> param_shape = {M, K};
+  slice_.set_params(model_name, param_shape);
+
+  std::vector<Tensor> const_Tensor;
+  slice_.initialize_const_params(
+      const_Tensor); // passing empty const tensor. call used only to initialize
+                     // control packet related items
 
   std::vector<Tensor> input_Tensor;
   input_Tensor = {{a.data(), a_shape, a_dtype}};
 
   std::vector<Tensor> output_Tensor;
   output_Tensor = {{aie_out.data(), c_shape, c_dtype}};
-
-  slice_.debug(debug);
 
 #ifdef UNIT_TEST_PERF
   PROFILE_THIS(slice_.execute(input_Tensor, output_Tensor));
@@ -80,49 +87,49 @@ int test_slice(size_t M, size_t K, int sIdx, bool debug = false,
 }
 
 // NNI 4x4
-TEST(C4mzdk5_SLICE_a16, Kernel1) {
+TEST(C4mzdk5_SLICE_a16, Kernel_64_10240_0) {
   int err_count = test_slice<uint16_t, uint16_t>(64, 10240, 0, false, "uint16",
                                                  "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SLICE_a16, Kernel2) {
+TEST(C4mzdk5_SLICE_a16, Kernel_256_10240_0) {
   int err_count = test_slice<uint16_t, uint16_t>(256, 10240, 0, false, "uint16",
                                                  "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SLICE_a16, Kernel3) {
+TEST(C4mzdk5_SLICE_a16, Kernel_1024_5120_0) {
   int err_count = test_slice<uint16_t, uint16_t>(1024, 5120, 0, false, "uint16",
                                                  "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SLICE_a16, Kernel4) {
+TEST(C4mzdk5_SLICE_a16, Kernel_4096_2560_0) {
   int err_count = test_slice<uint16_t, uint16_t>(4096, 2560, 0, false, "uint16",
                                                  "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SLICE_a16, Kernel5) {
+TEST(C4mzdk5_SLICE_a16, Kernel_64_10240_1) {
   int err_count = test_slice<uint16_t, uint16_t>(64, 10240, 1, false, "uint16",
                                                  "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SLICE_a16, Kernel6) {
+TEST(C4mzdk5_SLICE_a16, Kernel_256_10240_1) {
   int err_count = test_slice<uint16_t, uint16_t>(256, 10240, 1, false, "uint16",
                                                  "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SLICE_a16, Kernel7) {
+TEST(C4mzdk5_SLICE_a16, Kernel_1024_5120_1) {
   int err_count = test_slice<uint16_t, uint16_t>(1024, 5120, 1, false, "uint16",
                                                  "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_SLICE_a16, Kernel8) {
+TEST(C4mzdk5_SLICE_a16, Kernel_4096_2560_1) {
   int err_count = test_slice<uint16_t, uint16_t>(4096, 2560, 1, false, "uint16",
                                                  "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;

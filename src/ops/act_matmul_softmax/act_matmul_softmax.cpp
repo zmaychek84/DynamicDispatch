@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 #include <any>
 #include <iostream>
@@ -21,14 +22,14 @@
 #include <xrt_context/xrt_context.hpp>
 
 #include <ops/act_matmul_softmax/act_matmul_softmax.hpp>
-#include <ops/op_interface.hpp>
+#include <ops/ops_common/ctrlpkt.hpp>
 #include <utils/logging.hpp>
 #include <utils/utils.hpp>
 
 // AIE Driver header
-#include "xaiengine.h"
-
 #include "ops/ops_common/mhagprb_matrix.hpp"
+#include "utils/ctrl_pkt_utils.hpp"
+#include "xaiengine.h"
 
 // using namespace matmul_matrix;
 
@@ -155,7 +156,7 @@ act_matmul_softmax<InT, WtT, OutT>::act_matmul_softmax(
              "Expected:1"
           << std::endl;
     }
-    RYZENAI_LOG_TRACE("iConv: DesignFormat: " + design_param_);
+    RYZENAI_LOG_TRACE("act_matmul_softmax: DesignFormat: " + design_param_);
   }
 
   txn_fname_prefix_ = "act_matmul_softmax_4x4_" + txnbin_a_header.at(a_dtype_) +
@@ -208,6 +209,7 @@ act_matmul_softmax<InT, WtT, OutT>::act_matmul_softmax(
   run_aie_time_ = 0;
   cpu_acc_time_ = 0;
   num_run_aie_ = 0;
+  is_ctrl_pkt_ = 0;
 
   std::call_once(logger_flag_, []() {
     std::string header =
@@ -231,15 +233,18 @@ void act_matmul_softmax<InT, WtT, OutT>::set_params(
   std::string XCLBIN_FNAME;
 
   if (model_name == "4x4mzdk5") {
+    is_ctrl_pkt_ = 1;
     XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
                    ryzenai::mzdk54x4_A16W8_QDQ_XCLBIN_PATH;
   } else {
     throw std::invalid_argument("model_name is not supported");
   }
 
-  kernel_x_shape_[0] = input_shape.at(0);
-  kernel_x_shape_[1] = input_shape.at(1);
-  kernel_x_shape_[2] = input_shape.at(2);
+  kernel_x_shape_[0] = input_shape.at(0); // M
+  kernel_x_shape_[1] = input_shape.at(1); // K
+
+  kernel_y_shape_[0] = input_shape.at(1); // K
+  kernel_y_shape_[1] = input_shape.at(2); // N
 
   xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME);
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
@@ -287,10 +292,10 @@ void act_matmul_softmax<InT, WtT, OutT>::initialize_const_params(
 
   // Create input/output BOs
   const size_t A_BO_SIZE = (((kernel_x_shape_[0] * kernel_x_shape_[1]) +
-                             (kernel_x_shape_[1] * kernel_x_shape_[2])) *
+                             (kernel_y_shape_[0] * kernel_y_shape_[1])) *
                             a_dtype_size_); // TODO:: add batch dimension also
   const size_t B_BO_SIZE = size_qdqparam;
-  const size_t C_BO_SIZE = (kernel_x_shape_[0] * kernel_x_shape_[2] *
+  const size_t C_BO_SIZE = (kernel_x_shape_[0] * kernel_y_shape_[1] *
                             c_dtype_size_); // TODO: add batch dimension also
 
   RYZENAI_LOG_TRACE("actmatmul: A_BO_SIZE:" + std::to_string(A_BO_SIZE) +
@@ -323,6 +328,60 @@ void act_matmul_softmax<InT, WtT, OutT>::initialize_const_params(
   b_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
   auto b_sync_stop = GET_ELAPSED_TIME_NS();
   b_sync_time_ = static_cast<int64_t>(b_sync_stop - b_sync_start);
+
+  std::vector<size_t> param_shape = {kernel_x_shape_[0], kernel_x_shape_[1],
+                                     kernel_y_shape_[1]};
+  if (is_ctrl_pkt_) {
+    // Based on the mapped_shape to get the meta json file
+    std::vector<uint8_t> json_data;
+    try {
+      auto json_key =
+          get_instr_key(param_fname_prefix_, param_shape) + "_ctrl_meta";
+      Transaction &txn = Transaction::getInstance();
+      json_data = txn.get_txn_bvec(json_key);
+    } catch (...) {
+      is_ctrl_pkt_ = 0;
+    }
+
+    if (is_ctrl_pkt_) {
+      std::cout << "ctrlpkt patching" << std::endl;
+      RYZENAI_LOG_TRACE("act_matmul_softmax patch ctrlpkt ... START");
+      // get param_bo address
+      auto param_bo_key =
+          get_instr_key(param_fname_prefix_, param_shape) + "_param";
+      const xrt::bo &param_bo =
+          xrt_ctx_->get_registry().get_param_bo(param_bo_key).second;
+
+      // Get ctrl pkt patch info from json
+      std::vector<CtrlPktPatchInfo> ctrlpkt_info;
+      ctrlpkt_info = json_str_to_ctrlpkt_patch_info(json_data);
+
+      // Get the ctrl pkt
+      auto ctrl_bo_key =
+          get_instr_key(param_fname_prefix_, param_shape) + "_ctrl";
+      std::string ctrl_params =
+          Transaction::getInstance().get_txn_str(ctrl_bo_key);
+      std::vector<char> ctrl_buffer(ctrl_params.begin(), ctrl_params.end());
+
+      // ctrl pkt patch
+      std::vector<char> ctrl_pkt_new;
+      std::vector<uint64_t> buffer_addrs = {
+          uint64_t(c_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(a_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(b_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(param_bo.address() + DDR_AIE_ADDR_OFFSET)};
+      ctrl_pkt_new = patch_ctrl_bin(ctrl_buffer, ctrlpkt_info, buffer_addrs);
+
+      size_t ctrl_bo_words = ctrl_pkt_new.size();
+      ctrl_bo_ =
+          xrt::bo(xrt_ctx_->get_device(), ctrl_bo_words, XRT_BO_FLAGS_HOST_ONLY,
+                  xrt_ctx_->get_kernel().group_id(8));
+      ctrl_bo_.write(ctrl_pkt_new.data());
+      ctrl_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+      RYZENAI_LOG_TRACE("act_matmul_softmax patch ctrlpkt ... DONE");
+    }
+  }
+  RYZENAI_LOG_TRACE("act_matmul_softmax initialize_const_params ... DONE");
 }
 
 template <typename InT, typename WtT, typename OutT>
@@ -393,17 +452,14 @@ void act_matmul_softmax<InT, WtT, OutT>::execute(
   const xrt::bo &param_bo =
       xrt_ctx_->get_registry().get_param_bo(param_bo_key).second;
   uint32_t instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
+
   auto kernel_ = xrt_ctx_->get_kernel();
   // launch the kernel
-  xrt::run run;
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   c_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  run = kernel_(2, instr_bo, instr_bo_words,
-                c_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                a_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                b_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                param_bo.address() + DDR_AIE_ADDR_OFFSET, 0);
-  run.wait2();
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, c_bo_, a_bo_, b_bo_, param_bo,
+      ctrl_bo_, true, is_ctrl_pkt_);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);
   num_run_aie_++;
@@ -471,6 +527,49 @@ act_matmul_softmax<InT, WtT, OutT>::get_super_kernel_params(
 }
 
 template <typename InT, typename WtT, typename OutT>
+std::vector<uint8_t> act_matmul_softmax<InT, WtT, OutT>::get_ctrl_pkts(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto Act1_shape = extract_shape(input.at(0));
+  auto Act2_shape = extract_shape(input.at(1));
+
+  std::vector<size_t> param_shape = {Act1_shape[0], Act1_shape[1],
+                                     Act2_shape[0]};
+  // TODO: Add check to validate tensor shapes
+  std::string ctrl_key =
+      get_instr_key(param_fname_prefix_, param_shape) + "_ctrl";
+  try {
+    Transaction &txn = Transaction::getInstance();
+    return txn.get_txn_bvec(ctrl_key);
+  } catch (...) {
+    return {};
+  }
+}
+
+template <typename InT, typename WtT, typename OutT>
+std::vector<CtrlPktPatchInfo>
+act_matmul_softmax<InT, WtT, OutT>::get_ctrl_pkt_patch_info(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto Act1_shape = extract_shape(input.at(0));
+  auto Act2_shape = extract_shape(input.at(1));
+
+  std::vector<size_t> param_shape = {Act1_shape[0], Act1_shape[1],
+                                     Act2_shape[0]};
+  // TODO: Add check to validate tensor shapes
+  try {
+    auto ctrl_pkt_meta =
+        get_instr_key(param_fname_prefix_, param_shape) + "_ctrl_meta";
+    Transaction &txn = Transaction::getInstance();
+    return json_str_to_ctrlpkt_patch_info(txn.get_txn_bvec(ctrl_pkt_meta));
+  } catch (...) {
+    // throw std::runtime_error(
+    //    "act_matmul_softmax : Can not file the ctrl_meta.json file");
+    return {};
+  }
+}
+
+template <typename InT, typename WtT, typename OutT>
 std::vector<OpArgMap> act_matmul_softmax<InT, WtT, OutT>::get_buffer_reqs(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
@@ -492,14 +591,15 @@ std::vector<OpArgMap> act_matmul_softmax<InT, WtT, OutT>::get_buffer_reqs(
   size_t out_size = (out_shape[0] * out_shape[1] * sizeof(OutT));
 
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
-
+  size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, Act1_size},
       {OpArgMap::OpArgType::INPUT, 1, 1, Act1_size, Act2_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 2, 0, size_qdqparam},
       {OpArgMap::OpArgType::OUTPUT, 0, 3, 0, out_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
-       super_kernel_size}};
+       super_kernel_size},
+      {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};
 
   return arg_map;
 }

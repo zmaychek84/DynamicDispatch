@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -59,7 +60,7 @@ int test_l2_norm(int M, int N, bool debug = false,
   for (int r = 0; r < M; r++) {
     for (int c = 0; c < N; c++) {
       float in_gold = bfloat16_to_float(inputMat.at(r, c));
-      cpu_Y.at(r, c) = float_to_bfloat16(silu_golden(in_gold, r, c));
+      cpu_Y.at(r, c) = float_to_bfloat16(silu_golden(in_gold));
     }
   }
   // quant_bfloat_to_uint16(cpu_Y, sc_out, zp_out, cpu_q_Y);
@@ -91,6 +92,8 @@ int test_l2_norm(int M, int N, bool debug = false,
 
   if (model_name == "4x4mzdk5") {
     attr["design_param"] = std::vector<string>{"4x4"};
+  } else if (model_name == "4x4PSU") {
+    attr["design_param"] = std::vector<string>{"4x4PSU"};
   }
   ryzenai::l2_norm l2_norm_ =
       ryzenai::l2_norm<InT, WgT, OutT>(a_dtype, b_dtype, c_dtype, false, attr);
@@ -120,7 +123,11 @@ int test_l2_norm(int M, int N, bool debug = false,
 #ifndef RANDOM_DATA
   // compare results
   // err_count = check_add_result(cpu_Y, aie_Y, 0.1);
-  err_count = check_result_bfloat(cpu_Y, aie_Y, 0.01);
+  if (model_name == "4x4PSU") {
+    err_count = check_result_uint16(cpu_Y, aie_Y, 2);
+  } else {
+    err_count = check_result_bfloat(cpu_Y, aie_Y, 0.01);
+  }
   return err_count;
 #else
   return 0;
@@ -137,5 +144,18 @@ TEST(START_TAIL_m3uec_L2Norm_Testa16, Kernel1) {
 TEST(START_TAIL_mxpzi_L2Norm_Testa16, Kernel1) {
   int err_count = test_l2_norm<uint16_t, uint16_t, uint16_t>(
       1, 768, false, "bfloat16", "bfloat16", "bfloat16", "START_TAIL_PS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+// PSUv1.2 4x4
+// PSU1
+TEST(PSU_L2Norm_Testa16, Kernel1) {
+  int err_count = test_l2_norm<uint16_t, uint16_t, uint16_t>(
+      1, 3072, false, "uint16", "uint16", "uint16", "4x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+// PSU0
+TEST(PSU_L2Norm_Testa16, Kernel2) {
+  int err_count = test_l2_norm<uint16_t, uint16_t, uint16_t>(
+      64, 3072, false, "uint16", "uint16", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

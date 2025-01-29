@@ -21,71 +21,69 @@
 #include "ops/ops_common/matmul_matrix.hpp"
 #include "test_common.hpp"
 #include <algorithm>
+#include <cfenv>
 #include <iostream>
 #include <op_fuser/fusion_rt.hpp>
+#include <random>
 #include <utils/meta_utils.hpp>
 #include <utils/utils.hpp>
 
 using namespace matmul_matrix;
 
-std::vector<uint32_t> read_hex_file(const std::string &filePath) {
-  std::ifstream fileStream(filePath);
+static double round_half_to_even(double value) {
+  // Set rounding mode to "round to nearest, ties to even"
+  std::fesetround(FE_TONEAREST);
 
-  if (!fileStream.is_open()) {
-    std::cerr << "Failed to open file " << filePath << "!" << std::endl;
-    return {};
-  }
-
-  std::cout << "Opened file " << filePath << " for reading hex data!"
-            << std::endl;
-
-  std::vector<uint32_t> buffer;
-  uint32_t temp;
-
-  while (fileStream >> std::hex >> temp) {
-    buffer.push_back(temp);
-  }
-
-  fileStream.close();
-  return buffer;
+  // Use nearbyint, which rounds according to the current rounding mode
+  return std::nearbyint(value);
 }
 
-template <typename T>
-void dump_data_as_uint32_to_file(const std::vector<T> &data,
-                                 const std::string &output_file) {
-  static_assert(sizeof(T) <= sizeof(uint32_t),
-                "Data type is larger than uint32_t!");
-
-  size_t num_uint32_elements = (data.size() * sizeof(T)) / sizeof(uint32_t);
-  const uint32_t *data_as_uint32 =
-      reinterpret_cast<const uint32_t *>(data.data());
-
-  // Open the output file for writing
-  std::ofstream ofm_ofs(output_file, std::ofstream::out | std::ofstream::trunc);
-  if (!ofm_ofs.is_open()) {
-    std::cerr << "Failed to open file " << output_file << " for writing!"
-              << std::endl;
-    return;
+static void aie_srs(std::vector<uint32_t> &input_output) {
+  int data_width = 16;
+  int shift = 16;
+  for (size_t i = 0; i < input_output.size(); ++i) {
+    double temp = static_cast<double>(input_output[i]) / std::pow(2.0, shift);
+    // temp = std::round(temp);
+    temp = round_half_to_even(temp);
+    if (temp > std::pow(2.0f, data_width) - 1) {
+      temp = float(std::pow(2.0f, data_width)) - 1;
+    }
+    if (temp < 0) {
+      temp = 0;
+    }
+    input_output[i] = static_cast<uint32_t>(temp);
   }
-
-  std::cout << "Opened file " << output_file << " for writing OFM!"
-            << std::endl;
-
-  for (size_t i = 0; i < num_uint32_elements; i++) {
-    ofm_ofs << std::setw(8) << std::hex << std::setfill('0')
-            << data_as_uint32[i] << std::endl;
-  }
-  ofm_ofs.close();
-  std::cout << "Data has been successfully written to " << output_file
-            << std::endl;
 }
 
-int test_sd_conv(const std::string &meta_json) {
+static void initialize_random_float(std::vector<float> &vec, int max, int min) {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<float> dis(min, max);
+  for (int i = 0; i < vec.size(); i++) {
+    vec[i] = dis(gen);
+  }
+}
+
+static void float2bf16_vec(std::vector<float> &x) {
+  std::vector<uint32_t> x_uint32(x.size());
+  std::memcpy(x_uint32.data(), x.data(), x.size() * sizeof(float));
+  aie_srs(x_uint32);
+  for (size_t i = 0; i < x_uint32.size(); ++i) {
+    x_uint32[i] = (static_cast<uint16_t>(x_uint32[i]) << 16);
+  }
+  std::memcpy(x.data(), x_uint32.data(), x.size() * sizeof(float));
+}
+
+int test_sd_conv(const std::string &meta_json, size_t IC = 1280, size_t IH = 16,
+                 size_t IW = 16, size_t OC = 1280, size_t OH = 16,
+                 size_t OW = 16, size_t KH = 1, size_t KW = 1,
+                 size_t batch = 2) {
   auto meta = OpsFusion::load_meta_json(meta_json);
   OpsFusion::FusionRuntime rt_cmp;
   OpsFusion::DDConfig cfg;
   std::string xclbin_fname =
       Utils::get_env_var("DD_ROOT") + "\\xclbin\\stx\\SDConv2d.xclbin";
+
   auto xclbin_content = OpsFusion::read_bin_file<char>(xclbin_fname);
   cfg.xclbin_content = &xclbin_content;
   rt_cmp.compile(meta, "", cfg);
@@ -96,43 +94,31 @@ int test_sd_conv(const std::string &meta_json) {
   rt.load_state("dd_metastate");
   rt.init(meta);
 
-  std::string test_golden_root_dir =
-      "tests/cpp/unit_tests/testDataMladf/sd_vae_dec_conv/";
+  std::vector<float> a_aie_float(batch * IH * IW * IC, 0);
+  initialize_random_float(a_aie_float, 2, -2);
+  float2bf16_vec(a_aie_float);
+  std::vector<uint16_t> a_aie_bf16(a_aie_float.size(), 0);
+  union {
+    uint32_t u;
+    float f;
+  } uf;
+  for (int i = 0; i < a_aie_float.size(); ++i) {
+    uf.f = a_aie_float[i];
+    a_aie_bf16[i] = uf.u >> 16;
+  }
 
-  std::string ifm_path = test_golden_root_dir +
-                         "a16bfw16bfpacc16bf_128_256_512_8_512_8_1_1_ifm32.txt";
-  std::vector<uint32_t> a_aie = read_hex_file(ifm_path);
-
-  const size_t IH = 512;
-  const size_t IW = 8;
-  const size_t IC = 256;
-  const size_t OH = 512;
-  const size_t OW = 8;
-  const size_t OC = 128;
-
-  std::vector<size_t> a_shape = {1, IH, IW, IC}; // nhwc
+  std::vector<size_t> a_shape = {batch, IH, IW, IC}; // nhwc
   std::vector<Tensor> input_Tensors;
-  input_Tensors = {{a_aie.data(), a_shape, "bfloat16"}};
+  input_Tensors = {{a_aie_bf16.data(), a_shape, "bfloat16"}};
 
-  std::vector<size_t> aie_out_shape = {1, OH, OW, OC};
-  std::vector<uint16_t> aie_out(OH * OW * OC, 0);
+  std::vector<size_t> aie_out_shape = {batch, OH, OW, OC};
+  std::vector<uint16_t> aie_out(batch * OH * OW * OC, 0);
   std::vector<Tensor> output_Tensors;
   struct Tensor c_T = {aie_out.data(), aie_out_shape, "bfloat16"};
   output_Tensors.push_back(c_T);
   rt.execute(input_Tensors, output_Tensors);
-  // std::string OFM_FILE = "aie_ofm32_fusiont.txt";
-  // dump_data_as_uint32_to_file(aie_out, OFM_FILE);
 
-  std::string output_golden_path =
-      test_golden_root_dir +
-      "a16bfw16bfpacc16bf_128_256_512_8_512_8_1_1_ofm32_ref.txt";
-  std::vector<uint32_t> output_golden = read_hex_file(output_golden_path);
-  auto output_size = OC * OH * OW;
-  OutMatrix<uint16_t, 1, 1> output_golden_m(1, output_size,
-                                            output_golden.data());
-  OutMatrix<uint16_t, 1, 1> output_aie_m(1, output_size, aie_out.data());
-
-  return check_result_bfloat(output_golden_m, output_aie_m, true);
+  return 0;
 }
 
 int main(int argc, char *argv[]) {

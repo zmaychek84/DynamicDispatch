@@ -116,7 +116,8 @@ struct Metadata {
   std::vector<Partition> partitions;
 };
 
-static const std::set<std::string> CONTROL_OPS{"PM_LOAD", "RECORD_TIMER"};
+static const std::set<std::string> CONTROL_OPS{"PM_LOAD", "RECORD_TIMER",
+                                               "PREEMPTION"};
 
 static constexpr uint32_t CONTROL_PDI_ID = 0xFF;
 

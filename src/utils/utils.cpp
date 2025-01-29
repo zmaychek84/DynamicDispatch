@@ -3,6 +3,8 @@
  */
 
 #include <algorithm>
+#include <chrono>
+#include <string>
 #include <unordered_map>
 
 #include <utils/utils.hpp>
@@ -82,6 +84,14 @@ void dumpBinary(void *src, size_t length, std::string &filePath) {
     ptr += chunk_size;
   }
   ofs.write(ptr, length % chunk_size);
+}
+
+std::string generateCurrTimeStamp() {
+  auto now = std::chrono::high_resolution_clock::now();
+  auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       now.time_since_epoch())
+                       .count();
+  return std::to_string(timestamp);
 }
 
 } // namespace Utils

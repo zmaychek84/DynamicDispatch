@@ -1,6 +1,5 @@
-/*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 
 #pragma once
 
@@ -83,7 +82,6 @@ private:
   std::string c_dtype_;
   std::string txn_fname_prefix_;
   std::string param_fname_prefix_;
-  std::string json_fname_prefix_;
   uint32_t const_pad_;
   bool is_ctrl_pkt_;
 

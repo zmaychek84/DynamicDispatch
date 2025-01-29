@@ -1,4 +1,5 @@
-# Copyright (c) 2024 Advanced Micro Devices, Inc
+# Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+# Licensed under the MIT License.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of
 # this software and associated documentation files (the "Software"), to deal in
@@ -135,7 +136,7 @@ def prepare_tensor_maps(tensor_map):
     return new_tensors, new_tensors_map
 
 
-def prepare_metadata(graph: ogm.ONNXGraph, tmp_dir: str = ".", prefix: str = ""):
+def prepare_metadata(graph: ogm.ONNXGraph, tmp_dir: str = ".", prefix: str = "", use_abs_paths=True):
     input_tensors = graph.getPrimaryInputs()
     input_size, input_pack = pack_tensors(input_tensors, TENSOR_PACK_ALIGNMENT)
 
@@ -160,7 +161,7 @@ def prepare_metadata(graph: ogm.ONNXGraph, tmp_dir: str = ".", prefix: str = "")
     )
 
     # Dump const tensors to files and update the tensor map
-    const_file_info = graph.writeConsts(const_tensors, tmp_dir, prefix)
+    const_file_info = graph.writeConsts(const_tensors, tmp_dir, prefix, use_abs_paths)
     for key, (filename, filesz) in const_file_info.items():
         new_tensor_map[key].update({"file_name": filename, "file_size": filesz})
 

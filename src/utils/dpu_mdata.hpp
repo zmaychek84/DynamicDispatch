@@ -11,7 +11,7 @@
 // that header but also include this one so this header is here for now
 #include <cstring>
 
-constexpr std::uint64_t DDR_AIE_ADDR_OFFSET = std::uint64_t{0x80000000};
 constexpr std::uint64_t OPCODE = std::uint64_t{2};
+constexpr std::uint64_t ELF_OPCODE = std::uint64_t{3};
 
 #endif /* __DPU_KERNEL_MDATA_H__ */

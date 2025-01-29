@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #ifndef SD_HELPER_HPP
@@ -23,7 +24,7 @@ namespace ryzenai {
 namespace sd_helper {
 
 // Helper functions
-std::string int2hex(int64_t n, int bits) {
+static std::string int2hex(int64_t n, int bits) {
   int len = static_cast<int>(std::ceil(bits / 4.0) + 2);
   std::stringstream ss;
   ss << std::hex << std::setfill('0');
@@ -37,13 +38,13 @@ std::string int2hex(int64_t n, int bits) {
   return o.substr(2);
 }
 
-uint32_t floatToBits(float f) {
+static uint32_t floatToBits(float f) {
   uint32_t result;
   std::memcpy(&result, &f, sizeof(f));
   return result;
 }
 
-std::string convert_float_to_hex(const std::string &in_line) {
+static std::string convert_float_to_hex(const std::string &in_line) {
   std::istringstream iss(in_line);
   std::vector<std::string> arr;
   std::string temp;
@@ -60,7 +61,7 @@ std::string convert_float_to_hex(const std::string &in_line) {
   return out_hex + '\n';
 }
 
-std::string convert_int8_to_hex(const std::string &in_line) {
+static std::string convert_int8_to_hex(const std::string &in_line) {
   std::istringstream iss(in_line);
   std::vector<std::string> arr;
   std::string temp;
@@ -76,7 +77,7 @@ std::string convert_int8_to_hex(const std::string &in_line) {
   return out_hex + '\n';
 }
 
-void aie_srs(std::vector<uint32_t> &input_output) {
+static void aie_srs(std::vector<uint32_t> &input_output) {
   int data_width = 16;
   int shift = 16;
   for (size_t i = 0; i < input_output.size(); ++i) {
@@ -93,7 +94,7 @@ void aie_srs(std::vector<uint32_t> &input_output) {
   }
 }
 
-void float2bf16_vec(std::vector<float> &x) {
+static void float2bf16_vec(std::vector<float> &x) {
   std::vector<uint32_t> x_uint32(x.size());
   std::memcpy(x_uint32.data(), x.data(), x.size() * sizeof(float));
   aie_srs(x_uint32);
@@ -103,9 +104,9 @@ void float2bf16_vec(std::vector<float> &x) {
   std::memcpy(x.data(), x_uint32.data(), x.size() * sizeof(float));
 }
 
-std::vector<uint8_t> compress_bf16(const std::vector<uint32_t> &data,
-                                   int block_size, int sub_block_size,
-                                   int sub_block_shift_bits) {
+static std::vector<uint8_t> compress_bf16(const std::vector<uint32_t> &data,
+                                          int block_size, int sub_block_size,
+                                          int sub_block_shift_bits) {
   int m_bfp = 16 - 9;
   int exp_bias = 127;
   std::vector<uint8_t> ret(block_size + 1);
@@ -138,7 +139,7 @@ std::vector<uint8_t> compress_bf16(const std::vector<uint32_t> &data,
   return ret;
 }
 
-std::vector<float> read_binary_file(const std::string &filename) {
+static std::vector<float> read_binary_file(const std::string &filename) {
   std::ifstream infile(filename, std::ios::binary | std::ios::ate);
   if (!infile) {
     std::cerr << "Error opening file: " << filename << std::endl;
@@ -249,16 +250,20 @@ template <typename T>
 Tensor<T> Tensor<T>::slice(Range r0, Range r1, Range r2, Range r3) const {
   size_t s0_start = r0.start;
   size_t s0_end =
-      (r0.end == std::numeric_limits<size_t>::max()) ? dim0 : r0.end;
+      (r0.end == std::numeric_limits<size_t>::max() || r0.end > dim0) ? dim0
+                                                                      : r0.end;
   size_t s1_start = r1.start;
   size_t s1_end =
-      (r1.end == std::numeric_limits<size_t>::max()) ? dim1 : r1.end;
+      (r1.end == std::numeric_limits<size_t>::max() || r1.end > dim1) ? dim1
+                                                                      : r1.end;
   size_t s2_start = r2.start;
   size_t s2_end =
-      (r2.end == std::numeric_limits<size_t>::max()) ? dim2 : r2.end;
+      (r2.end == std::numeric_limits<size_t>::max() || r2.end > dim2) ? dim2
+                                                                      : r2.end;
   size_t s3_start = r3.start;
   size_t s3_end =
-      (r3.end == std::numeric_limits<size_t>::max()) ? dim3 : r3.end;
+      (r3.end == std::numeric_limits<size_t>::max() || r3.end > dim3) ? dim3
+                                                                      : r3.end;
 
   if (s0_end > dim0 || s1_end > dim1 || s2_end > dim2 || s3_end > dim3) {
     throw std::out_of_range("Slice range out of bounds");
@@ -340,17 +345,20 @@ struct layer_params {
   uint32_t ofm_sv_width;
   uint32_t ifm_depth_iters;
   uint32_t num_wt_streams;
-  uint32_t ofm_depth_iters;
   uint32_t casc_len;
+  uint32_t ifm_depth, ofm_depth;
 
   layer_params()
-      : ifm_sv_width(32), ifm_sv_height(1), ifm_sv_depth(64), ofm_sv_depth(16),
-        kwidth(1), kheight(1), channel_mode(1), stride_bit(1), psum_a_offset(0),
-        lrelu_alpha_kernel(1), act(0), w_loop(5), h_loop(5), oc_loop(10),
-        ic_loop(20), ofm_sv_width(128), ifm_depth_iters(4), num_wt_streams(8),
-        ofm_depth_iters(1), casc_len(1) {}
+      : ifm_sv_width(32), ifm_sv_height(1), ifm_sv_depth(96), ofm_sv_depth(80),
+        kwidth(1), kheight(1), channel_mode(0), stride_bit(0), psum_a_offset(0),
+        lrelu_alpha_kernel(0), act(0), w_loop(1), h_loop(8), oc_loop(2),
+        ic_loop(20), ofm_sv_width(32), num_wt_streams(8), ifm_depth(1920),
+        ofm_depth(640), casc_len(1) {
+    ifm_depth_iters = (uint32_t)std::ceil(ifm_depth / ifm_sv_depth);
+  }
 
-  layer_params(const uint32_t *lp_data_ptr) {
+  layer_params(const uint32_t *lp_data_ptr, uint32_t ifm_depth_val,
+               uint32_t ofm_depth_val) {
     ifm_sv_width = lp_data_ptr[0];
     ifm_sv_height = lp_data_ptr[1];
     ifm_sv_depth = lp_data_ptr[2];
@@ -364,13 +372,17 @@ struct layer_params {
     act = lp_data_ptr[10];
     w_loop = lp_data_ptr[11];
     h_loop = lp_data_ptr[12];
+    // ofm_depth_iters in python
     oc_loop = lp_data_ptr[13];
     ic_loop = lp_data_ptr[14];
     ofm_sv_width = lp_data_ptr[15];
+    ifm_depth = ifm_depth_val;
+    ofm_depth = ofm_depth_val;
+
+    ifm_depth_iters = (uint32_t)std::ceil(float(ifm_depth) / ifm_sv_depth);
+    num_wt_streams =
+        (uint32_t)std::ceil(float(ofm_depth) / (oc_loop * ofm_sv_depth));
     // hardcode for now
-    ifm_depth_iters = 4;
-    num_wt_streams = 8;
-    ofm_depth_iters = 1;
     casc_len = 1;
   }
 
@@ -394,13 +406,14 @@ struct layer_params {
     RYZENAI_LOG_TRACE("OFM SV Width: " + std::to_string(ofm_sv_width));
     RYZENAI_LOG_TRACE("IFM Depth Iters: " + std::to_string(ifm_depth_iters));
     RYZENAI_LOG_TRACE("Num WTS Streams: " + std::to_string(num_wt_streams));
-    RYZENAI_LOG_TRACE("OFM Depth Iters: " + std::to_string(ofm_depth_iters));
     RYZENAI_LOG_TRACE("CASC Len: " + std::to_string(casc_len));
+    RYZENAI_LOG_TRACE("IFM Depth: " + std::to_string(ifm_depth));
+    RYZENAI_LOG_TRACE("OFM Depth: " + std::to_string(ofm_depth));
   }
 };
 
 // preserve high precision
-std::string float_to_string(float value) {
+static std::string float_to_string(float value) {
   std::ostringstream oss;
   oss << std::setprecision(12) << value; // Using 12 significant digits
   return oss.str();
@@ -413,7 +426,7 @@ void write_datafmt_wts(std::vector<uint32_t> &buffer,
                        const std::vector<float> &bias_data,
                        const layer_params &lp, const std::string &fname,
                        size_t CStride = 8, int num_words_bias = 1,
-                       int num_words_wts = 2, bool write_to_file = true) {
+                       int num_words_wts = 2, bool write_to_file = false) {
 
   if constexpr (!std::is_same<T, float>::value) {
     throw std::runtime_error(
@@ -421,12 +434,11 @@ void write_datafmt_wts(std::vector<uint32_t> &buffer,
   }
 
   Tensor<T> wt_data(wts_data_vec, wt_shape);
-
   size_t ifm_sv_depth = lp.ifm_sv_depth;
   size_t ofm_sv_depth = lp.ofm_sv_depth;
   size_t ifm_depth_iters = lp.ifm_depth_iters;
   size_t num_wt_streams = lp.num_wt_streams;
-  size_t ofm_depth_iters = lp.ofm_depth_iters;
+  size_t ofm_depth_iters = lp.oc_loop;
   size_t casc_len = lp.casc_len;
   size_t cout_per_ch_iter = wt_shape[0] / ofm_depth_iters;
   size_t cout_per_stream = cout_per_ch_iter / num_wt_streams;
@@ -484,7 +496,6 @@ void write_datafmt_wts(std::vector<uint32_t> &buffer,
         }
       }
     }
-
     id = 0;
     plio_line = "";
     for (size_t i = 0; i < b_vals.size(); ++i) {
@@ -500,7 +511,6 @@ void write_datafmt_wts(std::vector<uint32_t> &buffer,
       }
       id++;
     }
-
     size_t Cout = wts.size(0);
     size_t Cin = wts.size(1);
     size_t Kx = wts.size(3);
@@ -560,10 +570,114 @@ void write_datafmt_wts(std::vector<uint32_t> &buffer,
       buffer.push_back(result);
     }
   }
-
   if (write_to_file) {
     wts32_fp.close();
   }
+}
+
+static void save_result_to_hex_file(const std::vector<uint8_t> &result,
+                                    const std::string &file_name) {
+  std::ofstream file(file_name);
+
+  if (file.is_open()) {
+    size_t num_uint32 = result.size() / 4;
+
+    const uint32_t *uint32_data =
+        reinterpret_cast<const uint32_t *>(result.data());
+
+    for (size_t i = 0; i < num_uint32; ++i) {
+      file << int2hex(uint32_data[i], 32) << std::endl;
+    }
+    size_t remaining_bytes = result.size() % 4;
+    if (remaining_bytes > 0) {
+      uint32_t last_value = 0;
+      const uint8_t *last_bytes = &result[num_uint32 * 4];
+      std::memcpy(&last_value, last_bytes, remaining_bytes);
+      file << int2hex(last_value, 32) << std::endl;
+    }
+
+    file.close();
+    std::cout << "Result saved to " << file_name << " in hexadecimal format."
+              << std::endl;
+  } else {
+    std::cerr << "Failed to open file: " << file_name << std::endl;
+  }
+}
+
+static void shuffle_gemm_wts(std::vector<uint8_t> &w_b_vals, const float *input,
+                             int rows, int cols, bool wts_transpose,
+                             const float *bias, int sv_k, int sv_n) {
+  int iter_k = rows / sv_k;
+  int iter_n = cols / sv_n;
+
+  auto elem_sz_per_line = 2;
+
+  if (wts_transpose) {
+    // Transpose the input matrix
+    std::vector<float> input_transpose(rows * cols);
+    for (int i = 0; i < rows; ++i) {
+      for (int j = 0; j < cols; ++j) {
+        input_transpose[j * rows + i] = input[i * cols + j];
+      }
+    }
+
+    int sv_k_div8 = sv_k / 8;
+    for (int n = 0; n < iter_n; ++n) {
+      for (int k = 0; k < iter_k; ++k) {
+        // handle bias
+        if (bias != nullptr) {
+          std::vector<uint16_t> bias_sv_shuffled;
+          std::vector<float> lst;
+          int start_idx = n * sv_n;
+          int end_idx = start_idx + sv_n;
+          std::vector<float> bias_sv(bias + start_idx, bias + end_idx);
+          for (size_t i = 0; i < bias_sv.size(); ++i) {
+
+            lst.push_back(bias_sv[i]);
+            if ((i + 1) % elem_sz_per_line == 0) {
+              uint32_t float_data;
+              std::memcpy(&float_data, &lst[0], sizeof(float));
+              uint16_t bf16_data = float_data >> 16;
+              bias_sv_shuffled.push_back(bf16_data);
+
+              std::memcpy(&float_data, &lst[1], sizeof(float));
+              bf16_data = float_data >> 16;
+              bias_sv_shuffled.push_back(bf16_data);
+              lst.clear();
+            }
+          }
+          uint8_t *bias_8bit =
+              reinterpret_cast<uint8_t *>(bias_sv_shuffled.data());
+          w_b_vals.insert(w_b_vals.end(), bias_8bit,
+                          bias_8bit + bias_sv_shuffled.size() * 2);
+        }
+        // handle weight
+        std::vector<uint8_t> w_vals;
+        for (int r = 0; r < sv_k_div8; ++r) {
+          for (int c = 0; c < sv_n; ++c) {
+            float data[8];
+            for (int idx = 0; idx < 8; ++idx) {
+              int row = n * sv_n + c;
+              int col = k * sv_k + r * 8 + idx;
+              if (row < cols && col < rows) {
+                data[idx] = input_transpose[row * rows + col];
+              } else {
+                data[idx] = 0.0f; // Zero padding if necessary
+              }
+            }
+            std::vector<uint32_t> uint32_data(8);
+            std::memcpy(uint32_data.data(), data, 8 * sizeof(float));
+            std::vector<uint8_t> w = compress_bf16(uint32_data, 8, 8, 0);
+            w_b_vals.insert(w_b_vals.end(), w.begin(), w.end());
+          }
+        }
+      }
+    }
+  } else {
+    // Handle the case where wts_transpose == false if necessary
+  }
+  // may use save_result_to_hex_file to dump the shuffled data w_b_vals.
+  return;
 }
 
 } // namespace sd_helper

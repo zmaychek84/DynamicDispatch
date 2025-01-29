@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -278,21 +279,21 @@ int test_act_act_matmul_qdq(int M, int K, int N, int shape_format = 0,
 // }
 
 // SMV for 256
-TEST(C4mzdk5_actGEMM_Testa16w16, Kernel4) {
+TEST(C4mzdk5_actGEMM_Testa16w16, Kernel_256_256_64) {
   int err_count = test_act_act_matmul_qdq<uint16_t, uint16_t, uint16_t>(
       256, 256, 64, 1, false, "uint16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // SMV for 1024
-TEST(C4mzdk5_actGEMM_Testa16w16, Kernel5) {
+TEST(C4mzdk5_actGEMM_Testa16w16, Kernel_1024_1024_64) {
   int err_count = test_act_act_matmul_qdq<uint16_t, uint16_t, uint16_t>(
       1024, 1024, 64, 1, false, "uint16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // SMV for 4096
-TEST(C4mzdk5_actGEMM_Testa16w16, Kernel6) {
+TEST(C4mzdk5_actGEMM_Testa16w16, Kernel_4096_4096_64) {
   int err_count = test_act_act_matmul_qdq<uint16_t, uint16_t, uint16_t>(
       4096, 4096, 64, 1, false, "uint16", "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;

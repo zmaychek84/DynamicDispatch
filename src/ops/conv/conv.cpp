@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -89,7 +90,15 @@ conv<InT, WtT, OutT>::conv(const std::string &ifmDtype,
     : attr_(attr) {
 
   this->compute_lp = false;
-  if (Utils::get_env_var("COMPUTE_LP", "0") != "0") {
+  std::string model_var;
+  if (attr.end() != attr.find("model_variant")) {
+    model_var = std::any_cast<std::string>(attr.at("model_variant"));
+  }
+  if (model_var == "08_320" || model_var == "08_640" ||
+      model_var == "08_1280" || model_var == "08_2560" ||
+      model_var == "08_8000") {
+    this->compute_lp = true;
+  } else if (Utils::get_env_var("COMPUTE_LP", "0") != "0") {
     this->compute_lp = true;
   }
   this->debug_lp = false;
@@ -342,7 +351,7 @@ conv<InT, WtT, OutT>::conv(const std::string &ifmDtype,
   kernelOutputShape_[3] = 8;
   Transaction &txn = Transaction::getInstance();
   if (this->compute_lp) {
-    std::cout << "Computing layer params." << std::endl;
+    // std::cout << "Computing layer params." << std::endl;
     auto params = get_layer_params(this->attr_);
     this->lp = params[0];
     this->conv_lp = params[1];
@@ -1125,17 +1134,15 @@ void conv<InT, WtT, OutT>::execute(std::vector<Tensor> &input,
   instr_bo_words = instr_bo.size() / sizeof(int);
 
   auto kernel_ = xrt_ctx_->get_kernel();
-  xrt::run run;
 
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   /* kernel call for Conv that supports transaction binary flow. For single
    * convolution there can't be any time requirement of scratch pad buffer. So
    * in below executiion scratch pad is not used */
-  run = kernel_(2, instr_bo, instr_bo_words,
-                constBo_.address() + DDR_AIE_ADDR_OFFSET,
-                ifmBo_.address() + DDR_AIE_ADDR_OFFSET,
-                ofmBo_.address() + DDR_AIE_ADDR_OFFSET, 0, 0);
-  run.wait2();
+
+  ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, instr_bo,
+                                            instr_bo_words, constBo_, ifmBo_,
+                                            ofmBo_, 0, 0, true, false);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   num_run_aie_++;
   run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);

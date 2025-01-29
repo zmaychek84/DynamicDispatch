@@ -1,5 +1,6 @@
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
-// Created by abhbisht on 9/13/2024.
 //
 
 #include "ops/gap/gap_lp.h"

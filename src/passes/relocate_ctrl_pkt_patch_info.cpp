@@ -31,7 +31,9 @@
 
 namespace OpsFusion {
 
-void relocate_ctrl_pkt_patch_info(Metadata &meta) {
+void relocate_ctrl_pkt_patch_info(Metadata &meta, bool elf_flow) {
+  auto param_offset =
+      elf_flow ? OpArgMap::CTRL_PKT_BIN : OpArgMap::CONST_KERNEL_PARAM_INPUT;
   for (size_t i = 0; i < meta.op_list.size(); i++) {
     auto &op_info = meta.op_list.at(i);
     auto args = OpsFusion::get_op_args(op_info);
@@ -75,7 +77,7 @@ void relocate_ctrl_pkt_patch_info(Metadata &meta) {
             orig_arg_idx, patch.xrt_arg_idx, patch.bo_offset, tensor_offset));
       } else if (op_arg.arg_type == OpArgMap::CTRL_PKT_BIN) {
         auto orig_arg_idx = patch.xrt_arg_idx;
-        patch.xrt_arg_idx = OpArgMap::CONST_KERNEL_PARAM_INPUT;
+        patch.xrt_arg_idx = param_offset;
         patch.bo_offset =
             patch.bo_offset + meta.ctrl_pkt_map.at(op_info.name).offset;
         RYZENAI_LOG_TRACE(OpsFusion::dd_format(

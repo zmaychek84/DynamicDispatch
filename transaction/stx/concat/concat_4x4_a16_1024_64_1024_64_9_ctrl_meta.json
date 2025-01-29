@@ -1,0 +1,113 @@
+{
+  "version": "1.0",
+  "ctrl_pkt_patch_info": [
+    {
+      "offset": 2652,
+      "size": 6,
+      "xrt_arg_idx": 3,
+      "bo_offset": 0
+    },
+    {
+      "offset": 2700,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 0
+    },
+    {
+      "offset": 2748,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 131072
+    },
+    {
+      "offset": 2796,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 262144
+    },
+    {
+      "offset": 2844,
+      "size": 6,
+      "xrt_arg_idx": 0,
+      "bo_offset": 0
+    },
+    {
+      "offset": 2940,
+      "size": 6,
+      "xrt_arg_idx": 3,
+      "bo_offset": 0
+    },
+    {
+      "offset": 2988,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 393216
+    },
+    {
+      "offset": 3036,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 524288
+    },
+    {
+      "offset": 3084,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 655360
+    },
+    {
+      "offset": 3132,
+      "size": 6,
+      "xrt_arg_idx": 0,
+      "bo_offset": 384
+    },
+    {
+      "offset": 3228,
+      "size": 6,
+      "xrt_arg_idx": 3,
+      "bo_offset": 0
+    },
+    {
+      "offset": 3276,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 786432
+    },
+    {
+      "offset": 3324,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 917504
+    },
+    {
+      "offset": 3372,
+      "size": 6,
+      "xrt_arg_idx": 0,
+      "bo_offset": 768
+    },
+    {
+      "offset": 3468,
+      "size": 6,
+      "xrt_arg_idx": 3,
+      "bo_offset": 0
+    },
+    {
+      "offset": 3516,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 1048576
+    },
+    {
+      "offset": 3564,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 1179648
+    },
+    {
+      "offset": 3612,
+      "size": 6,
+      "xrt_arg_idx": 0,
+      "bo_offset": 1024
+    }
+  ]
+}

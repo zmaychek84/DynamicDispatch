@@ -93,7 +93,7 @@ using Ty27 = ryzenai::matmul<uint16_t, uint8_t, uint16_t>;
 reg_op_with_def_policy<Ty27,3>("QMatMulAdd",{"uint16", "uint8", "uint16"},{0,1,4});
 
 using Ty28 = ryzenai::elwmul_qdq<uint16_t, uint16_t, uint16_t>;
-reg_op_with_def_policy<Ty28,3>("QELWEMUL_qdq",{"bfloat16", "uint16", "uint16"},{});
+reg_op_with_def_policy<Ty28,3>("QELWEMUL_qdq",{"bfloat16", "uint16", "uint16"},{0,1,3});
 
 using Ty29 = ryzenai::elwmul_qdq<uint16_t, uint16_t, uint16_t>;
 reg_op_with_def_policy<Ty29,3>("QELWEMUL_mxgan",{"bfloat16", "uint16", "bfloat16"},{});
@@ -178,12 +178,12 @@ using Ty50 = ryzenai::mhachannel<uint16_t, uint8_t, uint16_t>;
 reg_op_with_def_policy_wo_attr<Ty50,3>("QMHACHANNEL",{"uint16","uint8","uint16"},{0,-1,2});
 
 using Ty51 = ryzenai::matmulgeluadd<uint8_t, uint8_t, uint8_t>;
-reg_op_with_def_policy_wo_attr<Ty51,3>("MatMulAddGelu",{"uint8","uint8","uint8"},{0,1,5});
+reg_op_with_def_policy<Ty51,3>("MatMulAddGelu",{"uint8","uint8","uint8"},{0,1,5});
 
 using Ty52 = ryzenai::matmulgeluadd<uint16_t, uint8_t, uint16_t>;
-reg_op_with_def_policy_wo_attr<Ty52,3>("MatMulAddGelu",{"uint16","uint8","uint16"},{0,1,5});
-reg_op_with_def_policy_wo_attr<Ty51,3>("QMatMulAddGelu",{"uint8","uint8","uint8"},{0,1,5});
-reg_op_with_def_policy_wo_attr<Ty52,3>("QMatMulAddGelu",{"uint16","uint8","uint16"},{0,1,5});
+reg_op_with_def_policy<Ty52,3>("MatMulAddGelu",{"uint16","uint8","uint16"},{0,1,5});
+reg_op_with_def_policy<Ty51,3>("QMatMulAddGelu",{"uint8","uint8","uint8"},{0,1,5});
+reg_op_with_def_policy<Ty52,3>("QMatMulAddGelu",{"uint16","uint8","uint16"},{0,1,5});
 
 using Ty53 = ryzenai::square<int32_t, int32_t>;
 reg_op_with_def_policy_wo_attr<Ty53,0>("square",{},{});
@@ -247,6 +247,91 @@ reg_op_with_def_policy_wo_attr<Ty72,3>("Mladfelwmul",{"uint16","uint16","uint16"
 
 using Ty73 = ryzenai::sd::conv<uint16_t, uint8_t, float, uint16_t>;
 reg_op_with_def_policy<Ty73,4>("SDConv",{"bfloat16","bfp16ebs8","float","bfloat16"},{0,1,2,3});
+
+using Ty74 = ryzenai::sd::matmul<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty74,3>("SDMatMul",{"bfloat16","bfloat16","bfloat16"},{0,1,2});
+
+using Ty75 = ryzenai::sd::gelu<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty75,3>("SDGelu",{"bfloat16","bfloat16","bfloat16"},{0,1,2});
+
+using Ty76 = ryzenai::sd::silu<uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty76,2>("SDSilu",{"bfloat16","bfloat16"},{0,1});
+
+using Ty77 = ryzenai::sd::concat<uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty77,2>("SDConcat",{"bfloat16","bfloat16"},{0,2});
+
+using Ty78 = ryzenai::sd::elwadd<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty78,3>("SDAdd",{"bfloat16","bfloat16", "bfloat16"},{});
+
+using Ty79 = ryzenai::sd::elwmul<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty79,3>("SDMul",{"bfloat16","bfloat16","bfloat16"},{});
+
+using Ty80 = ryzenai::sd::resize<uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty80,2>("SDResize",{"bfloat16","bfloat16"},{});
+
+using Ty81 = ryzenai::sd::layernorm<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty81,3>("SDLayerNorm",{"bfloat16","bfloat16","bfloat16"},{0,1,2});
+
+using Ty82 = ryzenai::sd::mha<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty82,3>("SDMHA",{"bfloat16","bfloat16","bfloat16"},{0,1,2});
+
+using Ty83 = ryzenai::sd::slice<uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty83,2>("SDSlice",{"bfloat16","bfloat16"},{0,1});
+
+using Ty84 = ryzenai::sd::groupnorm<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty84,3>("SDGroupNorm",{"bfloat16","bfloat16","bfloat16"},{0,1,2});
+
+using Ty85 = ryzenai::mhapsw<uint16_t, uint8_t, uint16_t>;
+reg_op_with_def_policy<Ty85,3>("QDeMHA",{"uint16", "uint8","uint16"},{0,-1,6});
+
+using Ty86 = ryzenai::layernorm<int16_t, int16_t, uint16_t>;
+reg_op_with_def_policy<Ty86,3>("QLayerNorm",{"uint16", "uint16", "uint16"},{0,1,4});
+
+using Ty87 = ryzenai::batch_matmul<uint16_t, uint8_t, uint16_t>;
+reg_op_with_def_policy<Ty87,3>("QBatchMatMul",{"uint16","uint8","uint16"},{0,1,4});
+
+using Ty88 = ryzenai::matmul_v_geluadd<uint16_t, uint8_t, uint16_t>;
+reg_op_with_def_policy<Ty88,3>("QGemmvGelu",{"uint16","uint8","uint16"},{0,1,5});
+
+using Ty89 = ryzenai::flat::mlp<uint16_t, uint8_t, uint16_t>;
+reg_op_with_def_policy<Ty89,3>("FlatMLP", {"bfloat16" ,"int4" ,"bfloat16"},{});
+
+using Ty90 = ryzenai::sd::gemm<uint16_t, uint8_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty90,4>("SDGemm",{"bfloat16","bfp16ebs8","bfloat16","bfloat16"},{0,1,2,3});
+
+
+using Ty91 = ryzenai::conv2matmul<uint16_t, int8_t, uint16_t>;
+reg_op_with_def_policy<Ty91,3>("QConv2MatMul",{"uint16","int8","uint16"},{0,1,4});
+
+using Ty92 = ryzenai::conv2matmul<uint16_t, int8_t, uint16_t>;
+reg_op_with_def_policy<Ty92,3>("QConv2MatMul",{"uint16","int4","uint16"},{0,-1,6});
+
+using Ty93 = ryzenai::qdq_add<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty93,3>("QIntEltwiseAdd",{"uint16","uint16","uint16"},{0,-1,3});
+
+using Ty94 = ryzenai::gather_qdq_add<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty94,3>("QGatherDivAdd",{"uint16","uint16","uint16"},{0,-1,3});
+
+using Ty95 = ryzenai::qdq_mul<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty95,3>("QIntEltwiseMul",{"uint16", "uint16", "uint16"},{0,-1,3});
+
+using Ty96 = ryzenai::AttentionMaskPrePro_win25<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty96,3>("AttentionMaskPrePro_win25",{"uint16","uint16","uint16"},{0,1,2});
+
+using Ty97 = ryzenai::l2_norm<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty97,3>("L2_Norm",{"uint16","uint16","uint16"},{-1,0,2});
+
+using Ty98 = ryzenai::conv2matmul_silu<uint16_t, int8_t, uint16_t>;
+reg_op_with_def_policy<Ty98,3>("QConv2MatMulSilu",{"uint16","int4","uint16"},{0,-1,7});
+
+using Ty99 = ryzenai::elwmul_qdq<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty99,3>("QELWEMUL_qdq",{"uint16", "uint16", "uint16"},{0,1,3});
+
+using Ty100 = ryzenai::flat::mha_v2<uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty100,2>("FLATMHA",{"bfloat16","bfloat16"},{});
+
+using Ty101 = ryzenai::flat::rms_add<uint16_t, uint16_t, uint16_t>;
+reg_op_with_def_policy<Ty101,3>("FlatRMSAdd", {"bfloat16" ,"bfloat16" ,"bfloat16"},{});
 
 reg_op_with_custom_policy("QSlice" ,{"bfloat16","bfloat16"}, {0,2}, [](const OpParams& params) {
   const auto& attr = params.op_info.attr;
@@ -325,6 +410,10 @@ reg_op_with_custom_policy("Mladfsoftmax" ,{"uint16","uint16"}, {0,6}, [](const O
 
 reg_op_with_custom_policy("RECORD_TIMER" ,{}, {}, [](const OpParams& params) {
    return std::make_unique<ryzenai::record_timer>();
+});
+
+reg_op_with_custom_policy("PREEMPTION" ,{}, {}, [](const OpParams& params) {
+   return std::make_unique<ryzenai::preemption>();
 });
 
 reg_op_with_custom_policy("xcom-conv2d" ,{"int8","int8","int8"}, {0,3,11}, [](const OpParams& params) {

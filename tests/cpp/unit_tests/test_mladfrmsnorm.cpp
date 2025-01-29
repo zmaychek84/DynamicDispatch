@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <cmath>
@@ -57,7 +58,14 @@ int test_mladfrmsnormRand(size_t M, size_t K, bool debug = false,
   std::vector<OuT> aie_out(M * K, garbage_value);
   std::vector<OuT> golden_ref(M * K, garbage_value);
   std::map<std::string, std::any> attr;
+  std::vector<int> size_matmul_M{1, 128, 256, 512, 1024, 2048};
+  std::vector<std::vector<int>> shape_list;
+  for (auto M : size_matmul_M) {
+    shape_list.push_back({M, (int)K});
+  }
   attr["op_version"] = op_version;
+  attr["shapes"] = shape_list;
+
   ryzenai::rms_norm mladfrmsnorm_ =
       ryzenai::rms_norm<InT, WtsT, OuT>(a_dtype, true, attr);
 
@@ -156,12 +164,6 @@ int test_mladfrmsnorm(size_t M, size_t K, bool debug = false,
 }
 
 // v1
-TEST(LLAMA2_MLADFRMSNORM_Testa16, Kernel2048x4096_v1) {
-  int err_count = test_mladfrmsnorm<uint16_t, uint16_t, uint16_t>(
-      2048, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
 TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel2048x4096_v1) {
   int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
       2048, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
@@ -261,5 +263,12 @@ TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel1792x4096_v1) {
 TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel1920x4096_v1) {
   int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
       1920, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// tiling
+TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel4096x4096_v1) {
+  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
+      4096, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

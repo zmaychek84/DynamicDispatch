@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 #include <any>
 #include <iostream>
@@ -20,14 +21,19 @@
 #include <xrt_context/xrt_context.hpp>
 
 #include "txn_container.hpp"
+
+#include "utils/ctrl_pkt_utils.hpp"
+
 #include <ops/conv2matmul/conv2matmul.hpp>
 #include <ops/op_interface.hpp>
+#include <ops/ops_common/ctrlpkt.hpp>
 #include <txn_container.hpp>
+#include <utils/instruction_registry.hpp>
 #include <utils/logging.hpp>
 #include <utils/meta_utils.hpp>
 #include <utils/tfuncs.hpp>
 #include <utils/utils.hpp>
-
+#include <xrt_context/xrt_context.hpp>
 // AIE Driver header
 #include "xaiengine.h"
 
@@ -129,17 +135,17 @@ template <typename InT, typename WtT, typename OutT>
 void conv2matmul<InT, WtT, OutT>::setup_instr_registry() {
   std::vector<std::pair<std::string, bool>> instructions;
   std::vector<std::pair<std::string, bool>> layer_params;
-  std::vector<matrix_shapes> supported_shapes =
-      default_shapes_.find(txn_fname_prefix_)->second;
-  for (int i = 0; i < supported_shapes.size(); i++) {
-    auto mat = supported_shapes.at(i);
-    auto key =
-        "conv2gemm_" + get_instr_key(txn_fname_prefix_, mat.M, mat.K, mat.N);
-    auto param_key = "conv2gemm_" +
-                     get_instr_key(param_fname_prefix_, mat.M, mat.K, mat.N) +
-                     "_param";
-    instructions.push_back(std::make_pair(key, false));
-    layer_params.push_back(std::make_pair(param_key, false));
+  for (const auto &[mkey, value] : default_shapes_) {
+    auto iter = default_shapes_.find(mkey);
+    std::vector<matrix_shapes> &supported_shapes = iter->second;
+    for (size_t i = 0; i < supported_shapes.size(); i++) {
+      auto mat = supported_shapes.at(i);
+      auto key = "conv2gemm_" + get_instr_key(mkey, mat.M, mat.K, mat.N);
+      auto param_key =
+          "conv2gemm_" + get_instr_key(mkey, mat.M, mat.K, mat.N) + "_param";
+      instructions.push_back(std::make_pair(key, false));
+      layer_params.push_back(std::make_pair(param_key, false));
+    }
   }
   xrt_ctx_->get_registry().add_instructions(instructions);
   xrt_ctx_->get_registry().add_layer_params(layer_params);
@@ -158,15 +164,16 @@ conv2matmul<InT, WtT, OutT>::conv2matmul(
     const std::string &c_dtype, bool load_xrt,
     const std::map<std::string, std::any> &attr) {
 
-  txnbin_a_header = {{"uint16", "a16"}};
+  txnbin_a_header = {{"uint16", "a16"}, {"int16", "a16"}};
 
-  txnbin_b_header = {{"uint8", "w8"}};
+  txnbin_b_header = {
+      {"uint8", "w8"}, {"int8", "w8"}, {"uint4", "w4"}, {"int4", "w4"}};
 
-  txnbin_acc_header = {{"uint16", "acc16"}};
+  txnbin_acc_header = {{"uint16", "acc16"}, {"int16", "acc16"}};
 
   // default shape is the padded shaped used in AIE for BO allocation
   default_shapes_["conv2gemm_4x4_a16w8acc16"] = std::vector<matrix_shapes>{};
-
+  default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(1, 768, 8); // PSW
   default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(64, 2560, 1280);
   default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(256, 640, 1280);
   default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(256, 1280, 64);
@@ -181,15 +188,28 @@ conv2matmul<InT, WtT, OutT>::conv2matmul(
   default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(4096, 960, 320);
   default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(64, 1280, 64);
   default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(96, 1024, 64);
-  //  default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(128, 1040, 64);
   default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(4096, 320, 64);
   default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(64, 1280, 320);
   default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(64, 1280, 640);
   default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(64, 1280, 1280);
+  default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(64, 3072, 3072);
+  default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(1, 3072, 3072);
+  default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(1, 8192, 3072);
+  default_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(64, 8192, 3072);
+
+  default_shapes_["conv2gemm_4x4_a16w4acc16"] = std::vector<matrix_shapes>{};
+  default_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(1, 3072, 9216);
+  default_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(64, 3072, 9216);
+  default_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(1, 3072, 8192);
+  default_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(64, 3072, 8192);
+  default_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(1, 3072, 3072);
+  default_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(64, 3072, 3072);
+  default_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(1, 8192, 3072);
+  default_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(64, 8192, 3072);
 
   // raw shape is the actual shape from ONNX
   raw_shapes_["conv2gemm_4x4_a16w8acc16"] = std::vector<matrix_shapes>{};
-
+  raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(1, 768, 8); // PSW
   raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(64, 2560, 1280);
   raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(256, 640, 1280);
   raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(256, 1280, 64);
@@ -204,16 +224,33 @@ conv2matmul<InT, WtT, OutT>::conv2matmul(
   raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(4096, 960, 320);
   raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(64, 1280, 64);
   raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(77, 1024, 64);
-  //  raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(128, 1024, 64);
   raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(4096, 320, 64);
   raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(1, 1280, 320);
   raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(1, 1280, 640);
   raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(1, 1280, 1280);
+  raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(64, 3072, 3072);
+  raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(1, 3072, 3072);
+  raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(1, 8192, 3072);
+  raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(64, 8192, 3072);
+
+  raw_shapes_["conv2gemm_4x4_a16w4acc16"] = std::vector<matrix_shapes>{};
+  raw_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(1, 3072, 9216);
+  raw_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(64, 3072, 9216);
+  raw_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(1, 3072, 8192);
+  raw_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(64, 3072, 8192);
+  raw_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(1, 3072, 3072);
+  raw_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(64, 3072, 3072);
+  raw_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(1, 8192, 3072);
+  raw_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(64, 8192, 3072);
 
   a_dtype_ = a_dtype;
   b_dtype_ = b_dtype;
   c_dtype_ = c_dtype;
   a_dtype_size_ = sizeof(InT);
+  b_shift_value_ = 0;
+  if (b_dtype == "int4") {
+    b_shift_value_ = 1;
+  }
   b_dtype_size_ = sizeof(WtT);
   c_dtype_size_ = sizeof(OutT);
 
@@ -241,7 +278,7 @@ conv2matmul<InT, WtT, OutT>::conv2matmul(
              "Expected:1"
           << std::endl;
     }
-    RYZENAI_LOG_TRACE("iConv: DesignFormat: " + design_param_);
+    RYZENAI_LOG_TRACE("conv2gemm: DesignFormat: " + design_param_);
   }
 
   txn_fname_prefix_ = "conv2gemm_4x2_" + txnbin_a_header.at(a_dtype_) +
@@ -277,8 +314,8 @@ conv2matmul<InT, WtT, OutT>::conv2matmul(
             << std::endl;
       }
       RYZENAI_LOG_TRACE(
-          "iConv: InputShape: " + std::to_string(input_shape_vector[0]) + ", " +
-          std::to_string(input_shape_vector[1]) + ", " +
+          "conv2gemm: InputShape: " + std::to_string(input_shape_vector[0]) +
+          ", " + std::to_string(input_shape_vector[1]) + ", " +
           std::to_string(input_shape_vector[2]) + ", " +
           std::to_string(input_shape_vector[3]));
     } else {
@@ -307,7 +344,7 @@ conv2matmul<InT, WtT, OutT>::conv2matmul(
              "Expected:4"
           << std::endl;
     }
-    RYZENAI_LOG_TRACE("iConv: InputFormat: " + input_format_);
+    RYZENAI_LOG_TRACE("conv2gemm: InputFormat: " + input_format_);
   } else {
     std::cout << "Input Format attribute not found or not of correct type."
               << std::endl;
@@ -330,6 +367,7 @@ conv2matmul<InT, WtT, OutT>::conv2matmul(
   run_aie_time_ = 0;
   cpu_acc_time_ = 0;
   num_run_aie_ = 0;
+  is_ctrl_pkt_ = 0;
 
   std::call_once(logger_flag_, []() {
     std::string header =
@@ -355,8 +393,17 @@ void conv2matmul<InT, WtT, OutT>::set_params(const std::string &model_name,
     XCLBIN_FNAME =
         OpInterface::get_dd_base_dir() + ryzenai::mzdk5_A16W8_QDQ_XCLBIN_PATH;
   } else if (model_name == "4x4mzdk5") {
+    is_ctrl_pkt_ = 1;
     XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
                    ryzenai::mzdk54x4_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "4x4PSU") {
+    is_ctrl_pkt_ = 1;
+    XCLBIN_FNAME =
+        OpInterface::get_dd_base_dir() + ryzenai::PSU_4x4_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "4x4PSW1.0") {
+    is_ctrl_pkt_ = 1;
+    XCLBIN_FNAME =
+        OpInterface::get_dd_base_dir() + ryzenai::PSW1_0_A16W8_QDQ_XCLBIN_PATH;
   } else {
     throw std::invalid_argument("model_name is not supported");
   }
@@ -376,7 +423,7 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
   RYZENAI_LOG_TRACE("Conv2Matmul initialize_const_params(ptr) ...");
 
   DD_THROW_IF(
-      (const_params.size() != 3),
+      (const_params.size() < 3),
       OpsFusion::dd_format("Unsupported const spec for Conv2Matmul\n") +
           OpsFusion::dd_format(
               "(Details : #const params == 1 ({}), Const param dim == 2 ({})",
@@ -391,6 +438,12 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
   auto qdq = (int64_t *)const_params.at(1).data;
   auto qdq_params = (int32_t *)const_params.at(2).data;
 
+  int32_t *c1_vec, *c2_vec;
+  if (const_params.size() == 5) {
+    c1_vec = (int32_t *)const_params.at(3).data;
+    c2_vec = (int32_t *)const_params.at(4).data;
+  }
+
   auto Ksubv = matmul_matrix::Ksubv_mzdk5;
   auto Msubv = matmul_matrix::Msubv_mzdk5;
   auto Nsubv = matmul_matrix::Nsubv_mzdk5;
@@ -404,13 +457,21 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
   }
   std::vector<WtT> buf(w_shape_[0] * w_shape_[1]);
   if (design_param_.find("4x4") != std::string::npos) { // mzdk5 4x4 design
-    size_t M = inputShape_[2] * inputShape_[3];
+    size_t M;
+    if (design_param_ == "4x4PSU" && input_format_ == "NHWC") {
+      M = inputShape_[1] * inputShape_[2];
+    } else { // NCHW
+      M = inputShape_[2] * inputShape_[3];
+    }
 
     SUBV_T key = {(int)M, (int)w_shape_[0], (int)w_shape_[1]};
-    auto subv_mode = search_subv_mode(key);
+    auto subv_mode = search_subv_mode(key, b_shift_value_);
+    if (subv_mode < 0) {
+      throw std::runtime_error("Conv2Matmul : Invalid subv mode");
+    }
 
     format_wgt_trans<WtT>(weights, buf.data(), subv_mode, (int)w_shape_[0],
-                          (int)w_shape_[1], (int)K_orig);
+                          (int)w_shape_[1], (int)K_orig, b_shift_value_);
     SUBV_T subv = get_subv(subv_mode);
     Msubv = subv[0];
     Ksubv = subv[1];
@@ -422,18 +483,18 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
     }
 
     if (w_shape_[1] > 640) {
-      matmul_matrix::WgtMatrix<WtT, matmul_matrix::Ksubv_mzdk5,
-                               matmul_matrix::Nsubv_mzdk5_LARGE>
-          W((int)w_shape_[0], (int)w_shape_[1], buf.data());
+      matmul_matrix::WgtMatrix<WtT> W(
+          (int)w_shape_[0], (int)w_shape_[1], matmul_matrix::Ksubv_mzdk5,
+          matmul_matrix::Nsubv_mzdk5_LARGE, buf.data());
       for (int r = 0; r < K_orig; ++r) {
         for (int c = 0; c < w_shape_[1]; ++c) {
           W.at(r, c) = weights[(c * K_orig) + r]; // transpose
         }
       }
     } else {
-      matmul_matrix::WgtMatrix<WtT, matmul_matrix::Ksubv_mzdk5,
-                               matmul_matrix::Nsubv_mzdk5>
-          W((int)w_shape_[0], (int)w_shape_[1], buf.data());
+      matmul_matrix::WgtMatrix<WtT> W((int)w_shape_[0], (int)w_shape_[1],
+                                      matmul_matrix::Ksubv_mzdk5,
+                                      matmul_matrix::Nsubv_mzdk5, buf.data());
       for (int r = 0; r < K_orig; ++r) {
         for (int c = 0; c < w_shape_[1]; ++c) {
           W.at(r, c) = weights[(c * K_orig) + r]; // transpose
@@ -443,25 +504,50 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
   }
 
   // padding Msubv and Nsubv
-  qdq_params[qdq_Mv_idx] = Msubv;
-  qdq_params[qdq_Nv_idx] = Nsubv;
+  qdq_params[qdq_Mv_idx] = 0;
+  qdq_params[qdq_Nv_idx] = 0;
 
-  auto total_size = Ksubv * Nsubv;
+  auto total_size = (Ksubv * Nsubv) >> b_shift_value_;
   auto qdq_size = Nsubv * sizeof(int64_t);
   auto qdq_params_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
+  const int Ngran = 8;
+  auto qdq_ngran_size = Ngran * sizeof(int64_t);
+  auto c1_vec_ngran_size = Ngran * sizeof(int32_t);
+  auto c2_vec_ngran_size = Ngran * sizeof(int32_t);
   //// WGT + Bias(all zeros)
   { // This section of the code interleaves bias with weights Nsubv of bias
     // with every K x N
     size_t write_offset = 0;
     for (int N_shard = 0; N_shard < (w_shape_[1]) / (Nsubv); N_shard++) {
       for (int K_shard = 0; K_shard < (w_shape_[0]) / (Ksubv); K_shard++) {
-        io.write(write_offset,
-                 (void *)&buf[(N_shard * w_shape_[0] * Nsubv) +
-                              (K_shard * total_size)],
-                 (total_size));
+        if (b_shift_value_) {
+          io.write(write_offset,
+                   (void *)&buf[(N_shard * w_shape_[0] * Nsubv) / 2 +
+                                (K_shard * total_size)],
+                   (total_size));
+        } else {
+          io.write(write_offset,
+                   (void *)&buf[(N_shard * w_shape_[0] * Nsubv) +
+                                (K_shard * total_size)],
+                   (total_size));
+        }
         write_offset += total_size;
-        io.write(write_offset, (void *)&qdq[N_shard * Nsubv], qdq_size);
-        write_offset += qdq_size;
+        if (const_params.size() == 5) {
+          for (int Nchunk = 0; Nchunk < Nsubv; Nchunk += Ngran) {
+            io.write(write_offset, (void *)&qdq[N_shard * Nsubv + Nchunk],
+                     qdq_ngran_size);
+            write_offset += qdq_ngran_size;
+            io.write(write_offset, (void *)&c1_vec[N_shard * Nsubv + Nchunk],
+                     c1_vec_ngran_size);
+            write_offset += c1_vec_ngran_size;
+            io.write(write_offset, (void *)&c2_vec[N_shard * Nsubv + Nchunk],
+                     c2_vec_ngran_size);
+            write_offset += c2_vec_ngran_size;
+          }
+        } else {
+          io.write(write_offset, (void *)&qdq[N_shard * Nsubv], qdq_size);
+          write_offset += qdq_size;
+        }
       }
     }
     io.write(write_offset, (void *)qdq_params, qdq_params_size);
@@ -477,8 +563,8 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
   RYZENAI_LOG_TRACE("Conv2Matmul initialize_const_params ...");
 
   DD_THROW_IF(
-      (const_params.size() != 3) || (const_params.at(0).shape.size() != 2),
-      OpsFusion::dd_format("Unsupported const spec for Cpnv2Matmul\n") +
+      (const_params.size() < 3) || (const_params.at(0).shape.size() != 2),
+      OpsFusion::dd_format("Unsupported const spec for Conv2Matmul\n") +
           OpsFusion::dd_format(
               "(Details : #const params == 1 ({}), Const param dim == 2 ({})",
               const_params.size(), const_params.at(0).shape.size()));
@@ -486,12 +572,16 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
   w_shape_[0] = const_params.at(0).shape.at(1); // K
   w_shape_[1] = const_params.at(0).shape.at(0); // N
   int Ksubv;
+  size_t M;
   if (design_param_.find("4x4") != std::string::npos) { // mzdk5 4x4 design
     set_kernel_shapes();
-    size_t M = inputShape_[2] * inputShape_[3];
+    M = inputShape_[2] * inputShape_[3];
 
     SUBV_T key = {(int)M, (int)w_shape_[0], (int)w_shape_[1]};
-    auto subv_mode = search_subv_mode(key);
+    auto subv_mode = search_subv_mode(key, b_shift_value_);
+    if (subv_mode < 0) {
+      throw std::runtime_error("Conv2Matmul : Invalid subv mode");
+    }
     SUBV_T subv = get_subv(subv_mode);
     Ksubv = subv[1];
   } else {
@@ -502,8 +592,16 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
     Ksubv = matmul_matrix::Ksubv_mzdk5;
   }
   // qdqc
-  size_t size_interleaved_qdq =
-      w_shape_[0] * w_shape_[1] / Ksubv * sizeof(int64_t);
+  // auto qdq_params = (int32_t *)const_params.at(2).data;
+  size_t size_interleaved_qdq;
+  if (const_params.size() == 3) {
+    size_interleaved_qdq = w_shape_[0] * w_shape_[1] / Ksubv * sizeof(int64_t);
+  } else { // channelwise qdq
+    // C0, C1 and C2 are all vectors
+    size_interleaved_qdq =
+        w_shape_[0] * w_shape_[1] / Ksubv *
+        (sizeof(int64_t) + sizeof(int32_t) + sizeof(int32_t));
+  }
 
   size_interleaved_qdq += matmul_matrix::QDQparam_size * sizeof(int32_t);
 
@@ -511,9 +609,15 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
   b_format_time_ = 0;
   b_sync_time_ = 0;
   /* Create input/output BOs */
-  const size_t B_BO_SIZE =
-      (kernel_y_shape_[0] * kernel_y_shape_[1] * b_dtype_size_ +
-       size_interleaved_qdq);
+  size_t B_BO_SIZE;
+  if (b_shift_value_) {
+    B_BO_SIZE = (kernel_y_shape_[0] * kernel_y_shape_[1] * b_dtype_size_) / 2 +
+                size_interleaved_qdq;
+  } else {
+    B_BO_SIZE = (kernel_y_shape_[0] * kernel_y_shape_[1] * b_dtype_size_) +
+                size_interleaved_qdq;
+  }
+
   const size_t A_BO_SIZE =
       (kernel_x_shape_[0] * kernel_x_shape_[1] * a_dtype_size_);
   const size_t C_BO_SIZE =
@@ -541,6 +645,61 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
   auto b_sync_stop = GET_ELAPSED_TIME_NS();
   b_copy_time_ = static_cast<int64_t>(b_copy_stop - b_copy_start);
   b_sync_time_ = static_cast<int64_t>(b_sync_stop - b_sync_start);
+
+  if (is_ctrl_pkt_) {
+    auto [Mo, Ko, No] = map_padded_shape(M, w_shape_[0], w_shape_[1]);
+    // Based on the mapped_shape to get the meta json file
+    std::vector<uint8_t> json_data;
+    try {
+      auto json_key = "conv2gemm_" +
+                      get_instr_key(param_fname_prefix_, Mo, Ko, No) +
+                      "_ctrl_meta";
+      Transaction &txn = Transaction::getInstance();
+      json_data = txn.get_txn_bvec(json_key);
+    } catch (...) {
+      is_ctrl_pkt_ = 0;
+    }
+
+    if (is_ctrl_pkt_) {
+      std::cout << "ctrlpkt patching" << std::endl;
+      RYZENAI_LOG_TRACE("Conv2Matmul patch ctrlpkt ... START");
+      // get param_bo address
+      auto param_bo_key = "conv2gemm_" +
+                          get_instr_key(param_fname_prefix_, Mo, Ko, No) +
+                          "_param";
+      const xrt::bo &param_bo =
+          xrt_ctx_->get_registry().get_param_bo(param_bo_key).second;
+
+      // Get ctrl pkt patch info from json
+      std::vector<CtrlPktPatchInfo> ctrlpkt_info;
+      ctrlpkt_info = json_str_to_ctrlpkt_patch_info(json_data);
+
+      // Get the ctrl pkt
+      auto ctrl_bo_key = "conv2gemm_" +
+                         get_instr_key(param_fname_prefix_, Mo, Ko, No) +
+                         "_ctrl";
+      std::string ctrl_params =
+          Transaction::getInstance().get_txn_str(ctrl_bo_key);
+      std::vector<char> ctrl_buffer(ctrl_params.begin(), ctrl_params.end());
+
+      // ctrl pkt patch
+      std::vector<char> ctrl_pkt_new;
+      std::vector<uint64_t> buffer_addrs = {
+          uint64_t(c_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(a_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(b_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(param_bo.address() + DDR_AIE_ADDR_OFFSET)};
+      ctrl_pkt_new = patch_ctrl_bin(ctrl_buffer, ctrlpkt_info, buffer_addrs);
+
+      size_t ctrl_bo_words = ctrl_pkt_new.size();
+      ctrl_bo_ =
+          xrt::bo(xrt_ctx_->get_device(), ctrl_bo_words, XRT_BO_FLAGS_HOST_ONLY,
+                  xrt_ctx_->get_kernel().group_id(8));
+      ctrl_bo_.write(ctrl_pkt_new.data());
+      ctrl_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+      RYZENAI_LOG_TRACE("Conv2Matmul patch ctrlpkt ... DONE");
+    }
+  }
   RYZENAI_LOG_TRACE("Conv2Matmul initialize_const_params ... DONE");
 }
 
@@ -615,17 +774,13 @@ void conv2matmul<InT, WtT, OutT>::execute(std::vector<Tensor> &input,
   uint32_t instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
   auto kernel_ = xrt_ctx_->get_kernel();
 
-  xrt::run run;
   // launch the GEMM kernel
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   // kernel call for GEMM that supports transaction binary flow
   c_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  run = kernel_(2, instr_bo, instr_bo_words,
-                c_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                a_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                b_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                param_bo.address() + DDR_AIE_ADDR_OFFSET, 0);
-  run.wait2();
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, c_bo_, a_bo_, b_bo_, param_bo,
+      ctrl_bo_, true, is_ctrl_pkt_);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   num_run_aie_++;
   // sync output activation to host memory
@@ -683,6 +838,44 @@ const std::vector<uint8_t> conv2matmul<InT, WtT, OutT>::get_super_kernel_params(
 }
 
 template <typename InT, typename WtT, typename OutT>
+std::vector<uint8_t> conv2matmul<InT, WtT, OutT>::get_ctrl_pkts(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto [M, K, N] = extract_MKN(input, input_format_);
+  auto [Mo, Ko, No] = map_padded_shape(M, K, N);
+  // TODO: Add check to validate tensor shapes
+  std::string ctrl_key =
+      "conv2gemm_" + get_instr_key(param_fname_prefix_, Mo, Ko, No) + "_ctrl";
+  try {
+    Transaction &txn = Transaction::getInstance();
+    return txn.get_txn_bvec(ctrl_key);
+  } catch (...) {
+    return {};
+  }
+}
+
+template <typename InT, typename WtT, typename OutT>
+std::vector<CtrlPktPatchInfo>
+conv2matmul<InT, WtT, OutT>::get_ctrl_pkt_patch_info(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto [M, K, N] = extract_MKN(input, input_format_);
+  auto [Mo, Ko, No] = map_padded_shape(M, K, N);
+  // TODO: Add check to validate tensor shapes
+  try {
+    auto ctrl_pkt_meta = "conv2gemm_" +
+                         get_instr_key(param_fname_prefix_, Mo, Ko, No) +
+                         "_ctrl_meta";
+    Transaction &txn = Transaction::getInstance();
+    return json_str_to_ctrlpkt_patch_info(txn.get_txn_bvec(ctrl_pkt_meta));
+  } catch (...) {
+    /*throw std::runtime_error(
+        "Conv2matmul : Can not file the ctrl_meta.json file");*/
+    return {};
+  }
+}
+
+template <typename InT, typename WtT, typename OutT>
 std::vector<OpArgMap> conv2matmul<InT, WtT, OutT>::get_buffer_reqs(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
@@ -694,8 +887,12 @@ std::vector<OpArgMap> conv2matmul<InT, WtT, OutT>::get_buffer_reqs(
 
   int Ksubv;
   if (design_param_.find("4x4") != std::string::npos) { // mzdk5 4x4 design
+    // use raw shape to find subv
     SUBV_T key = {(int)M, (int)K, (int)N};
-    auto subv_mode = search_subv_mode(key);
+    auto subv_mode = search_subv_mode(key, b_shift_value_);
+    if (subv_mode < 0) {
+      throw std::runtime_error("Conv2Matmul : Invalid subv mode");
+    }
     SUBV_T subv = get_subv(subv_mode);
     Ksubv = subv[1];
   } else {
@@ -703,21 +900,37 @@ std::vector<OpArgMap> conv2matmul<InT, WtT, OutT>::get_buffer_reqs(
   }
 
   // qdqc
-  size_t size_interleaved_qdq = Ko * No / Ksubv * sizeof(int64_t);
+  size_t size_interleaved_qdq;
+  size_t out_idx = 4;
+  if (input.size() == 5) {
+    size_interleaved_qdq = Ko * No / Ksubv * sizeof(int64_t);
+    out_idx = 4;
+  } else { // channelwise qdq
+    // C0, C1 and C2 are all vectors
+    size_interleaved_qdq =
+        Ko * No / Ksubv * (sizeof(int64_t) + sizeof(int32_t) + sizeof(int32_t));
+    out_idx = 6;
+  }
   size_interleaved_qdq += matmul_matrix::QDQparam_size * sizeof(int32_t);
 
-  size_t const_params_bo_size =
-      (Ko * No * b_dtype_size_) + size_interleaved_qdq;
+  size_t const_params_bo_size;
+  if (b_shift_value_) {
+    const_params_bo_size = (Ko * No * b_dtype_size_) / 2 + size_interleaved_qdq;
+  } else {
+    const_params_bo_size = (Ko * No * b_dtype_size_) + size_interleaved_qdq;
+  }
   size_t input_bo_size = (Mo * Ko * a_dtype_size_);
   size_t output_bo_size = (Mo * No * c_dtype_size_);
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
+  size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
 
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 4, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, out_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
-       super_kernel_size}};
+       super_kernel_size},
+      {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};
   RYZENAI_LOG_TRACE(
       OpsFusion::dd_format("Conv2Matmul Argmap : {}", cvt_to_string(arg_map)));
   return arg_map;
@@ -733,5 +946,6 @@ template <typename InT, typename WtT, typename OutT>
 std::once_flag conv2matmul<InT, WtT, OutT>::instr_reg_flag_;
 
 template class conv2matmul<uint16_t, uint8_t, uint16_t>;
+template class conv2matmul<uint16_t, int8_t, uint16_t>;
 
 } // namespace ryzenai

@@ -56,7 +56,9 @@ target_link_libraries(${LIBRARY_NAME} PRIVATE ZLIB::ZLIB)
 target_include_directories(
   ${LIBRARY_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/transaction/include
 )
-target_include_directories(${LIBRARY_NAME} PRIVATE ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
+target_include_directories(
+  ${LIBRARY_NAME} PRIVATE ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR}
+)
 
 include(GNUInstallDirs)
 

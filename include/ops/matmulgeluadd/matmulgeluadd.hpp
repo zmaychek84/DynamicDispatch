@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -45,6 +46,7 @@ private:
   std::map<std::string, std::vector<matrix_shapes>> default_shapes_;
   std::map<std::string, std::vector<matrix_shapes>> raw_shapes_;
 
+  std::string design_param_;
   /* M x K dimension of base matmul being offloaded to AIE */
   int64_t kernel_x_shape_[2];
   /* K x N dimension of base matmul being offloaded to AIE */
@@ -73,6 +75,9 @@ private:
   xrt::bo b_bo_;
   /* XRT BO for tiled output matrix */
   xrt::bo c_bo_;
+  /* XRT BO for ctrl packet */
+  xrt::bo ctrl_bo_;
+
   /* size for input activation dtype*/
   int a_dtype_size_;
   /* size for weights dtype*/
@@ -102,6 +107,7 @@ private:
   std::string c_dtype_;
   std::string txn_fname_prefix_;
   std::string param_fname_prefix_;
+  bool is_ctrl_pkt_;
 
   /* Utility function to set the kernel shape based on the weights dimensions
    * Pick kernel shape using weight matrix size
@@ -136,7 +142,9 @@ public:
    *
    */
   matmulgeluadd(const std::string &a_dtype, const std::string &b_dtype,
-                const std::string &c_dtype, bool load_xrt);
+                const std::string &c_dtype, bool load_xrt,
+                const std::map<std::string, std::any> &attr);
+
   void execute(const std::vector<Tensor> &input, std::vector<Tensor> &output);
   void debug(bool enable);
   void set_params(const std::string &model_name,
@@ -150,6 +158,12 @@ public:
   std::vector<OpArgMap> get_buffer_reqs(
       std::vector<Tensor> &input, std::vector<Tensor> &output,
       const std::map<std::string, std::any> &attr = {}) const override;
+  std::vector<uint8_t> get_ctrl_pkts(
+      std::vector<Tensor> &input, std::vector<Tensor> &output,
+      const std::map<std::string, std::any> &attr = {}) const override;
+  std::vector<CtrlPktPatchInfo> get_ctrl_pkt_patch_info(
+      std::vector<Tensor> &input, std::vector<Tensor> &output,
+      const std::map<std::string, std::any> &attr) const override;
   void initialize_const_params(
       ConstBufferIO &io, const std::vector<Tensor> &const_params,
       const std::map<std::string, std::any> &attr = {}) override;

@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -31,10 +32,10 @@
 
 using json = nlohmann::json;
 
-std::vector<char> patch_ctrl_bin(std::vector<char> const &ctrl_bin,
-                                 std::vector<CtrlPktPatchInfo> ctrlpkt_info,
-                                 std::vector<uint64_t> &buffer_addrs,
-                                 bool verbose = false) {
+inline std::vector<char>
+patch_ctrl_bin(std::vector<char> const &ctrl_bin,
+               std::vector<CtrlPktPatchInfo> ctrlpkt_info,
+               std::vector<uint64_t> &buffer_addrs, bool verbose = false) {
   std::vector<char> patch_ctrl(ctrl_bin);
 
   for (auto &patch : ctrlpkt_info) {

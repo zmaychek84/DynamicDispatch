@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -127,10 +128,10 @@ void pm_load::execute(std::string op_name, std::string dtype) {
 
   // Execute kernel to load PM Bin
   auto kernel = xrt_ctx_->get_kernel();
-  auto run = kernel(2, instr_bo_, instr_bo_.size() / sizeof(int),
-                    pm_bo.address() + DDR_AIE_ADDR_OFFSET, 0, 0, 0, 0);
 
-  run.wait2();
+  ryzenai::dynamic_dispatch::execute_kernel(kernel, 2, instr_bo_,
+                                            instr_bo_.size() / sizeof(int),
+                                            pm_bo, 0, 0, 0, 0, true, false);
 }
 
 const std::vector<uint8_t> pm_load::get_transaction_bin(
@@ -234,10 +235,12 @@ const std::vector<uint8_t> pm_load::get_transaction_bin(
   }
 
   // Enable all cores
-  for (int c = 0; c < overlay_meta.num_cols; c++) {
-    for (int r = XAIE_AIE_TILE_ROW_START;
-         r < XAIE_AIE_TILE_NUM_ROWS + XAIE_AIE_TILE_ROW_START; r++) {
-      XAie_CoreEnable(&DevInst, XAie_TileLoc(c, r));
+  if (op_type != "square" && op_type != "cube") {
+    for (int c = 0; c < overlay_meta.num_cols; c++) {
+      for (int r = XAIE_AIE_TILE_ROW_START;
+           r < XAIE_AIE_TILE_NUM_ROWS + XAIE_AIE_TILE_ROW_START; r++) {
+        XAie_CoreEnable(&DevInst, XAie_TileLoc(c, r));
+      }
     }
   }
 

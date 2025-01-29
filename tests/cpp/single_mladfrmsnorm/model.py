@@ -41,8 +41,11 @@ def shape2tuple(shape):
 # Z = RMSNorm(X)
 def create_mladfrmsnorm_model(M, N, LhsT, RhsT, OutT):
     X = make_tensor_value_info("X", LhsT, [M, N])
-    Y = make_tensor_value_info("Y", RhsT, [N])
     Z = make_tensor_value_info("Z", OutT, [M, N])
+
+    np_scales = np.random.randint(low=-5, high=5, size=(N)).astype(np.int16)
+    scales_tsor = make_tensor(f"Y", onnx.TensorProto.BFLOAT16, np_scales.shape, np_scales)
+
 
     mladfrmsnorm = make_node(
         name="mladfrmsnorm",
@@ -53,7 +56,7 @@ def create_mladfrmsnorm_model(M, N, LhsT, RhsT, OutT):
     )
 
     graph = make_graph(
-        [mladfrmsnorm], "mladfrmsnorm", [X,Y], [Z], initializer=[]
+        [mladfrmsnorm], "mladfrmsnorm", [X], [Z], initializer=[scales_tsor]
     )
     onnx_model = make_model(graph, opset_imports=[make_opsetid("", 19)])
     return onnx_model

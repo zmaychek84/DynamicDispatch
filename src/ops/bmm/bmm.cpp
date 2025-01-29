@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 #include <any>
 #include <map>
@@ -18,18 +19,28 @@
 #include <utils/instruction_registry.hpp>
 #include <xrt_context/xrt_context.hpp>
 
-#include "txn_container.hpp"
 #include <ops/bmm/bmm.hpp>
 #include <txn_container.hpp>
 #include <utils/logging.hpp>
 #include <utils/meta_utils.hpp>
 #include <utils/tfuncs.hpp>
 #include <utils/utils.hpp>
+#include <xclbin_container.hpp>
 
 // AIE Driver header
 #include "xaiengine.h"
 
 namespace ryzenai {
+
+namespace {
+std::string getXCLBinName(std::string op_version) {
+  if (op_version == "v1" || op_version == "flat") {
+    return LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  } else {
+    return LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  }
+}
+} // namespace
 
 static std::tuple<size_t, size_t, size_t>
 extract_MKN(const std::vector<Tensor> &inputs) {
@@ -154,20 +165,55 @@ bmm<InT, WtT, OutT>::bmm(const std::string &a_dtype, const std::string &b_dtype,
   op_version_ = "v1";
   if (attr.find("op_version") != attr.end()) {
     op_version_ = std::any_cast<std::string>(attr.find("op_version")->second);
-    if (op_version_ != "v1") {
+    if (op_version_ != "v1" && op_version_ != "flat") {
       throw std::runtime_error("The selected op version does not exist");
     }
   }
 
-  std::string txn_key = "bmm_" + op_version_ + "_" +
-                        txnbin_a_header.at(a_dtype) +
-                        txnbin_b_header.at(b_dtype);
-  std::string txn_key_transpose = "bmm_" + op_version_ + "_" + "trans_" +
+  std::string txn_key =
+      "bmm_v1_" + txnbin_a_header.at(a_dtype) + txnbin_b_header.at(b_dtype);
+  std::string txn_key_transpose = "bmm_v1_trans_" +
                                   txnbin_a_header.at(a_dtype) +
                                   txnbin_b_header.at(b_dtype);
 
   // default shape is the padded shaped used in AIE for BO allocation
   default_shapes_[txn_key_transpose] = std::vector<std::vector<size_t>>{};
+
+  // psu1 bmm1
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 96, 32, 96, 128});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 96, 32, 96, 256});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 96, 32, 96, 384});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 96, 32, 96, 512});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 96, 32, 96, 640});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 96, 32, 96, 768});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 96, 32, 96, 896});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 96, 32, 96, 1024});
+
+  // psu1 bmm2
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 128, 32, 128, 96});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 256, 32, 256, 96});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 384, 32, 384, 96});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 512, 32, 512, 96});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 640, 32, 640, 96});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 768, 32, 768, 96});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 896, 32, 896, 96});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 1024, 32, 1024, 96});
   default_shapes_[txn_key_transpose].emplace_back(
       std::vector<size_t>{32, 2048, 128, 32, 128, 2048});
   default_shapes_[txn_key_transpose].emplace_back(
@@ -524,6 +570,112 @@ bmm<InT, WtT, OutT>::bmm(const std::string &a_dtype, const std::string &b_dtype,
   default_shapes_[txn_key_transpose].emplace_back(
       std::vector<size_t>{32, 3072, 128, 2, 128, 3072});
 
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 2176});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 2304});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 2432});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 2560});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 2688});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 2816});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 2944});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 3072});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 3200});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 3328});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 3456});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 3584});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 3712});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 3840});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 3968});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 4096});
+
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 2176, 8, 2176, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 2304, 8, 2304, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 2432, 8, 2432, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 2560, 8, 2560, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 2688, 8, 2688, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 2816, 8, 2816, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 2944, 8, 2944, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 3072, 8, 3072, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 3200, 8, 3200, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 3328, 8, 3328, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 3456, 8, 3456, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 3584, 8, 3584, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 3712, 8, 3712, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 3840, 8, 3840, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 3968, 8, 3968, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 4096, 8, 4096, 128});
+
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 128});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 256});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 384});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 512});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 640});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 768});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 896});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 1024});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 1152});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 1280});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 1408});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 1536});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 1664});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 1792});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 1920});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{32, 1, 128, 8, 128, 2048});
+
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 1664, 8, 1664, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 1792, 8, 1792, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 1, 1920, 8, 1920, 128});
+
   raw_shapes_[txn_key_transpose] = std::vector<std::vector<size_t>>{};
   raw_shapes_[txn_key] = std::vector<std::vector<size_t>>{};
 
@@ -562,10 +714,30 @@ bmm<InT, WtT, OutT>::bmm(const std::string &a_dtype, const std::string &b_dtype,
 }
 
 template <typename InT, typename WtT, typename OutT>
+xrt::bo bmm<InT, WtT, OutT>::create_bo(void *usr_ptr, size_t size,
+                                       int operand_index) {
+  std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(usr_ptr);
+  constexpr std::uint32_t MASK = ((1 << 12) - 1);
+  DD_ASSERT((addr & MASK) == 0, "addr must be multiple of 4096 address.");
+  auto bo =
+      xrt::bo(xrt_ctx_->get_context(), usr_ptr, size, xrt::bo::flags::host_only,
+              xrt_ctx_->get_kernel().group_id(0));
+  if (operand_index == 0) {
+    a_bo_ = bo;
+  } else if (operand_index == 1) {
+    b_bo_ = bo;
+  } else if (operand_index == 2) {
+    c_bo_ = bo;
+  } else {
+    throw std::runtime_error("create_bo with invalid operand_index " +
+                             std::to_string(operand_index));
+  }
+  return bo;
+}
+template <typename InT, typename WtT, typename OutT>
 void bmm<InT, WtT, OutT>::set_params(
     const std::string &model_name, std::vector<size_t> input_shape,
     const std::map<std::string, std::any> &attr) {
-  std::string XCLBIN_FNAME;
   a_shape_[0] = input_shape.at(0);
   a_shape_[1] = input_shape.at(1);
   a_shape_[2] = input_shape.at(2);
@@ -583,17 +755,12 @@ void bmm<InT, WtT, OutT>::set_params(
   set_kernel_shapes();
 
   // KERNEL_M_MAX = (int)M;
-  if (model_name == "BMM" || model_name == "BMM1" || model_name == "BMM2") {
-    XCLBIN_FNAME =
-        (op_version_ == "v1")
-            ? OpInterface::get_dd_base_dir() +
-                  LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_PATH
-            : OpInterface::get_dd_base_dir() +
-                  LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_PATH;
-  } else {
-    throw std::invalid_argument("model_name is not supported");
-  }
-  xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME);
+
+  std::string XCLBIN_FNAME = getXCLBinName(op_version_);
+
+  xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(
+      XCLBIN_FNAME, 0, {},
+      XclbinContainer::getInstance().get_xclbin_content(XCLBIN_FNAME));
 
   if (transpose_) {
     if (op_version_ == "v1") {
@@ -623,12 +790,25 @@ void bmm<InT, WtT, OutT>::set_params(
                      kernel_x_shape_[2] * a_dtype_size_;
   size_t C_BO_SIZE = kernel_z_shape_[0] * kernel_z_shape_[1] *
                      kernel_z_shape_[2] * c_dtype_size_;
-  if (attr.find("skip_create_input") == attr.end()) {
+
+  const bool skip_create_input_a =
+      (attr.find("skip_create_input_a") != attr.end()) ||
+      (attr.find("skip_create_input") != attr.end());
+
+  const bool skip_create_input_b =
+      (attr.find("skip_create_input_b") != attr.end()) ||
+      (attr.find("skip_create_input") != attr.end());
+
+  if (!skip_create_input_a) {
     a_bo_ = xrt::bo(xrt_ctx_->get_device(), A_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
                     kernel_.group_id(0));
+  }
+
+  if (!skip_create_input_b) {
     b_bo_ = xrt::bo(xrt_ctx_->get_device(), B_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
                     kernel_.group_id(0));
   }
+
   if (attr.find("skip_create_output") == attr.end()) {
     c_bo_ = xrt::bo(xrt_ctx_->get_device(), C_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
                     kernel_.group_id(0));
@@ -642,7 +822,6 @@ void bmm<InT, WtT, OutT>::set_params(
     const std::string &model_name, std::vector<size_t> input_shape,
     std::vector<size_t> weight_shape,
     const std::map<std::string, std::any> &attr) {
-  std::string XCLBIN_FNAME;
   a_shape_[0] = input_shape.at(0);
   a_shape_[1] = input_shape.at(1);
   a_shape_[2] = input_shape.at(2);
@@ -656,17 +835,12 @@ void bmm<InT, WtT, OutT>::set_params(
   set_kernel_shapes();
 
   // KERNEL_M_MAX = (int)M;
-  if (model_name == "BMM" || model_name == "BMM1" || model_name == "BMM2") {
-    XCLBIN_FNAME =
-        (op_version_ == "v1")
-            ? OpInterface::get_dd_base_dir() +
-                  LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_PATH
-            : OpInterface::get_dd_base_dir() +
-                  LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_PATH;
-  } else {
-    throw std::invalid_argument("model_name is not supported");
-  }
-  xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME);
+
+  std::string XCLBIN_FNAME = getXCLBinName(op_version_);
+
+  xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(
+      XCLBIN_FNAME, 0, {},
+      XclbinContainer::getInstance().get_xclbin_content(XCLBIN_FNAME));
 
   if (transpose_) {
     if (op_version_ == "v1") {
@@ -696,12 +870,25 @@ void bmm<InT, WtT, OutT>::set_params(
                      kernel_x_shape_[2] * a_dtype_size_;
   size_t C_BO_SIZE = kernel_z_shape_[0] * kernel_z_shape_[1] *
                      kernel_z_shape_[2] * c_dtype_size_;
-  if (attr.find("skip_create_input") == attr.end()) {
+
+  const bool skip_create_input_a =
+      (attr.find("skip_create_input_a") != attr.end()) ||
+      (attr.find("skip_create_input") != attr.end());
+
+  const bool skip_create_input_b =
+      (attr.find("skip_create_input_b") != attr.end()) ||
+      (attr.find("skip_create_input") != attr.end());
+
+  if (!skip_create_input_a) {
     a_bo_ = xrt::bo(xrt_ctx_->get_device(), A_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
                     kernel_.group_id(0));
+  }
+
+  if (!skip_create_input_b) {
     b_bo_ = xrt::bo(xrt_ctx_->get_device(), B_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
                     kernel_.group_id(0));
   }
+
   if (attr.find("skip_create_output") == attr.end()) {
     c_bo_ = xrt::bo(xrt_ctx_->get_device(), C_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
                     kernel_.group_id(0));
@@ -896,13 +1083,10 @@ void bmm<InT, WtT, OutT>::execute(std::vector<xrt::bo> &input,
   auto instr_bo = xrt_ctx_->get_registry().get_instr_bo(instr_bo_key_);
   auto instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
   auto kernel_ = xrt_ctx_->get_kernel();
-  auto run = kernel_(2, instr_bo, instr_bo_words,
-                     input[0].address() + DDR_AIE_ADDR_OFFSET,
-                     input[1].address() + DDR_AIE_ADDR_OFFSET,
-                     output[0].address() + DDR_AIE_ADDR_OFFSET, 0, 0);
-  if (wait) {
-    run.wait2();
-  }
+
+  ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, instr_bo,
+                                            instr_bo_words, input[0], input[1],
+                                            output[0], 0, 0, wait, false);
 }
 
 /*

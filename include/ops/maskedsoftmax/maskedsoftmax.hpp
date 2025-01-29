@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -55,6 +56,9 @@ private:
   xrt::bo c_bo_;
   /* size for activation dtype*/
   int operand_dtype_size_;
+  /* size of each head, this is required since division by its square root is
+  /* fused into softmax*/
+  int headsize_;
   std::string instr_bo_key_;
 
   /* variables to store profile data */

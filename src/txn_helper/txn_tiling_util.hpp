@@ -79,6 +79,11 @@ std::vector<uint8_t> matmul_nonuniform_tile_transaction_bin(
     std::vector<OpArgMap> &args_map,
     const std::vector<std::vector<int64_t>> &tile_info);
 
+std::vector<uint8_t> rmsnorm_nonuniform_tile_transaction_bin(
+    std::vector<std::vector<uint8_t>> &tiled_base_txn_bin,
+    const std::vector<OpArgMap> &source_arg_map,
+    const std::vector<std::vector<OpArgMap>> &dest_arg_maps);
+
 std::pair<double, std::vector<int64_t>>
 minimum_tiles(const std::set<int64_t> &tile,
               const std::map<int64_t, double> &cost, int64_t V);

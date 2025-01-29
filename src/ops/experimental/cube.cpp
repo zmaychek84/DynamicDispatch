@@ -1,4 +1,6 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
+//
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -96,11 +98,10 @@ void cube<InT, OutT>::execute(std::vector<Tensor> &input,
   output_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
 
   auto kernel = xrt_ctx_->get_kernel();
-  auto run = kernel(2, instr_bo_, instr_bo_.size() / sizeof(int),
-                    input_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                    output_bo_.address() + DDR_AIE_ADDR_OFFSET, 0, 0, 0);
 
-  run.wait2();
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel, 2, instr_bo_, instr_bo_.size() / sizeof(int), input_bo_,
+      output_bo_, 0, 0, 0, true, false);
 
   output_bo_.sync(XCL_BO_SYNC_BO_FROM_DEVICE);
   output_bo_.read(output.at(0).data);
@@ -144,6 +145,9 @@ const std::vector<uint8_t> cube<InT, OutT>::get_transaction_bin(
   ShimDma = XAie_TileLoc(2, 0);
 
   XAie_StartTransaction(&DevInst, XAIE_TRANSACTION_DISABLE_AUTO_FLUSH);
+
+  XAie_CoreEnable(&DevInst, XAie_TileLoc(2, 2));
+
   // Setting lock initial value for gr.sq.in[0]
   XAie_LockSetValue(&DevInst, XAie_TileLoc(2, 2), XAie_LockInit(0, 2));
 

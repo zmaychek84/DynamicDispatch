@@ -1,5 +1,6 @@
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
-// Created by abhbisht on 9/13/2024.
 //
 
 #ifndef GAP_LP_H

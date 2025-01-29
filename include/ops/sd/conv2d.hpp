@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -55,6 +56,7 @@ private:
   int64_t inputShape_[3];
   /* actual output matrix */
   int64_t outputShape_[3];
+  int64_t outputShapeAligned_[3];
   /* actual weight matrix inserted */
   int64_t weightShape_[4];
   /* actual bias matrix inserted */
@@ -70,6 +72,8 @@ private:
   int64_t kh_; // kernel height
   int64_t kw_; // kernel width
   int64_t stride_;
+  int64_t aligned_OC_;
+  int64_t aligned_IC_;
 
   //  static instruction_registry instr_reg_;
   static std::once_flag instr_reg_flag_;
@@ -113,8 +117,11 @@ private:
   std::string biasDtype_;
   std::string ofmDtype_;
   const std::string sd_conv_key_ = "sd_conv2d_";
+  const int ic_min_sub_ = 8;
+  const int oc_min_sub_ = 16;
   std::string txn_fname_prefix_;
   std::string XCLBIN_FNAME_;
+  int batch_;
 
   void setup_instr_registry();
   std::string get_key(std::string prefix, int64_t OC, int64_t IC, int64_t IH,
@@ -152,6 +159,9 @@ public:
       const std::map<std::string, std::any> &attr = {}) const override;
 
   const std::vector<uint8_t> get_super_kernel_params() const;
+  void format_output(const Tensor &out_tensor, void *hw_out_ptr, size_t sz,
+                     size_t tensor_idx,
+                     const std::map<std::string, std::any> &attr = {}) override;
 };
 
 } // namespace sd

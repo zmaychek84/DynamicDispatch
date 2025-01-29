@@ -97,8 +97,9 @@ FILE *MetaStateAPI::get_buffer_file(const dd_proto::BinFile &binfile,
   } else {
 #ifdef _WIN32
     fopen_s(&ret, (fs::path{dir} / file_name).string().c_str(), "rb");
-#endif
+#else
     ret = fopen((fs::path{dir} / file_name).string().c_str(), "rb");
+#endif
   }
   fseek64(ret, 0, SEEK_END);
   auto size = ftell64(ret);
@@ -151,6 +152,9 @@ MetaStateAPI &MetaStateAPI::update_meta(const Metadata &meta) {
       } else if (attr.type() == typeid(unsigned int)) {
         (*proto_op->mutable_attrs())[name] =
             stdany_to_pbany<uint32_t, dd_proto::UInt32>(attr);
+      } else if (attr.type() == typeid(std::string)) {
+        (*proto_op->mutable_attrs())[name] =
+            stdany_to_pbany<std::string, dd_proto::String>(attr);
       } else {
         // std::cout << (attr.type()) << std::endl;
         std::cout << "Op type: " << op.type << std::endl;
@@ -383,6 +387,10 @@ Metadata MetaStateAPI::extract_meta() const {
                  "type.googleapis.com/dd_proto.UInt32") {
         op_info.attr[name] =
             pbany_to_stdany<uint32_t, dd_proto::UInt32>(proto_attr);
+      } else if (proto_attr.type_url() ==
+                 "type.googleapis.com/dd_proto.String") {
+        op_info.attr[name] =
+            pbany_to_stdany<std::string, dd_proto::String>(proto_attr);
       } else {
         DD_THROW("Unsupported data type in attrs : " + proto_attr.type_url());
       }

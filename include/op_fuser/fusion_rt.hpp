@@ -45,11 +45,14 @@ struct DDConfig {
   bool optimize_scratch = true;
   // use fused transaction, but run each op serially
   bool eager_mode = false;
+  // use v1 to v2 conversion
+  bool txn_opt = false;
   // Cache dir containinig dd artifacts
   std::string cache_dir;
   // Key for accessing meta info
   std::string model_name = "";
   std::vector<char> *xclbin_content;
+  bool use_lazy_scratch_bo = true;
 };
 
 class FusionRuntime {
@@ -102,6 +105,7 @@ private:
   void fill_super_instr(const Metadata &meta,
                         std::map<std::string, SimpleSpan> &const_map);
   void fill_ctrl_pkts(const Metadata &meta);
+  void setup_xrt_run_elf(const Metadata &meta);
   void setup_xrt_run(const Metadata &meta);
   void split_outputs(const std::vector<Tensor> &outputs, const Metadata &meta);
   void merge_inputs(const std::vector<Tensor> &inputs, const Metadata &meta);
@@ -116,7 +120,8 @@ private:
   allocate_instr_bos(const std::vector<std::vector<uint8_t>> &fused_instr_vec);
   void
   populate_instr_bos(const std::vector<std::vector<uint8_t>> &fused_instr_vec);
-  void reallocate_xrt_bos(const Metadata &meta);
+  void reallocate_xrt_bos(const Metadata &meta,
+                          bool use_lazy_scratch_bo = true);
   void initialize_inputs(const Metadata &meta);
   void save_buffer_objects();
   void save_bo(xrt::bo &bo, const std::string filename);
@@ -136,17 +141,30 @@ private:
   bool parse_xclbin_metadata(OpPDIMap &op_pdi_map,
                              const std::string &model_name,
                              const std::vector<char> *xclbin_content);
-  void host_to_dev_memcpy();
+  void host_to_dev_memcpy(bool use_lazy_scratch_bo = true);
   void initialize_runtime();
 
   // Device Independent APIs.
   void allocate_host_bos(const Metadata &meta);
+  void release_host_resources();
+  xrt::bo allocate_xrt_buffer(const xrt::hw_context &ctx, const size_t &sz,
+                              xrt::bo::flags flag, xrt::memory_group grp);
+  void initialize_kernels(
+      const Metadata &meta,
+      const std::map<std::string, std::uint32_t> &kernel_name_to_pdi_idx);
+  const std::vector<xrt::module> &
+  convert_to_elf(const std::vector<std::vector<uint8_t>> &fused_bins,
+                 const Metadata &meta, FILE *ctrl_pkt_vec_file_ptr);
+  static bool is_elf_kernel(const std::string &kernel_name);
+  std::string get_canonicalize_kernel_name(const OpPDIMap &op_pdi_map,
+                                           int index);
 
 private:
+  bool elf_flow_ = false;
   static std::once_flag logger_flag_;
-
   bool cpu_only_runtime_ = false;
   bool use_external_ctx_ = false;
+  std::vector<xrt::module> subgraph_elfs_mod_;
 
   std::string xclbin_filename_;
   std::vector<char> xclbin_content_;
@@ -162,12 +180,13 @@ private:
   xrt::bo input_bo_;
   xrt::bo output_bo_;
   xrt::bo scratch_bo_;
-  xrt::bo const_bo_;
+  std::shared_ptr<xrt::bo> const_bo_;
   xrt::bo super_instr_bo_;
 
   // Host buffers.
   FILE *input_vec_file_ptr_;
   FILE *const_vec_file_ptr_;
+  std::string const_vec_file_md5_;
   std::vector<uint8_t> output_vec_;
   std::vector<uint8_t> scratch_vec_;
   FILE *super_instr_vec_file_ptr_;
@@ -186,7 +205,8 @@ private:
   // TODO: can we only keep fused_instr_vec_ ??
   std::vector<std::vector<uint8_t>> txns_;
   std::vector<std::vector<uint8_t>> fused_instr_vec_;
-
+  // scratch bo memory allocation flag
+  bool scratch_bo_allocate_{false};
   // Timers
   int64_t input_copy_time_{0};
   int64_t input_sync_time_{0};
@@ -198,7 +218,7 @@ private:
   std::mutex execute_mutex_;
   std::mutex load_save_state_mutex_;
   // Fallback to dynamically updating instr bo
-  bool use_instr_sw_cache_;
+  bool use_instr_sw_cache_ = false;
 
   // procucer_ops_ = [{op_info1, op1}, {op_info2, op2}, ...]
   std::vector<
@@ -213,15 +233,19 @@ private:
         {"BMM1", 0},
         {"BMM2", 0},
         {"DQAdd", 0},
+        {"FlatMLP", 0},
+        {"FlatRMSAdd", 0},
         {"LayerNorm", 0},
         {"QLayerNorm", 0},
         {"QGroupNorm", 0},
+        {"L2_Norm", 0},
         {"MatMul", 0},
         {"QMatMul", 0},
         {"MatMulAdd", 0},
         {"QMatMulAdd", 0},
         {"MatMulAddGelu", 0},
         {"QMatMulAddGelu", 0},
+        {"QGemmvGelu", 0},
         {"MladfMatMul", 0},
         {"MHAGRPB", 0},
         {"QMHAGRPB", 0},
@@ -247,10 +271,12 @@ private:
         {"square", 0},
         {"cube", 0},
         {"QMHA", 0},
+        {"QDeMHA", 0},
         {"QGlobalAvgPool", 1},
         {"xcom-conv2d", 0},
         {"QConv2MatMul", 0},
         {"QMatMulDynamic", 0},
+        {"QConv2MatMulSilu", 0},
         {"QMatMulDynamicSoftmax", 0},
         {"QMulSoftmax", 0},
         {"mzdk5MHA", 0},
@@ -258,6 +284,7 @@ private:
         {"QSlice", 0},
         {"QConcat", 0},
         {"QResize", 0},
+        {"QBatchMatMul", 0},
         {"DPS", 2},
         {"QBroadcastAdd", 0},
         {"QGelu", 0},
@@ -269,6 +296,7 @@ private:
         {"Mladfelwadd", 0},
         {"QL2norm", 2},
         {"AttentionMaskPrePro", 2},
+        {"AttentionMaskPrePro_win25", 0},
         {"Qtanh_lpnorm", 2},
         {"Qbias_add", 2},
         {"QActConstAdd", 0},
@@ -276,7 +304,23 @@ private:
         {"QEltWiseDiv", 2},
         {"QReduceSum", 2},
         {"Mladfelwmul", 0},
-        {"SDConv", 0}}},
+        {"SDConcat", 0},
+        {"SDConv", 0},
+        {"SDMatMul", 0},
+        {"SDAdd", 0},
+        {"SDMul", 0},
+        {"SDGelu", 0},
+        {"SDResize", 0},
+        {"SDMHA", 0},
+        {"FLATMHA", 0},
+        {"SDSilu", 0},
+        {"SDLayerNorm", 0},
+        {"SDSlice", 0},
+        {"QGatherDivAdd", 0},
+        {"QIntEltwiseAdd", 0},
+        {"QIntEltwiseMul", 0},
+        {"SDGroupNorm", 0},
+        {"SDGemm", 0}}},
       {{{0, "DPU"}, {1, "DPU_1"}, {2, "DPU_2"}}}};
 };
 
@@ -329,6 +373,7 @@ private:
 
   // make copying to input BO, from output BO thread safe
   std::mutex execute_mutex_;
+  bool _elf_flow = false;
 };
 
 } // namespace OpsFusion

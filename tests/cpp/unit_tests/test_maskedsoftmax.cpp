@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <cmath>
@@ -20,7 +21,8 @@
 
 template <typename InT = uint16_t, typename MaskT = uint16_t,
           typename OuT = uint16_t>
-int test_maskedsoftmax(size_t B, size_t M, size_t K, bool debug = false,
+int test_maskedsoftmax(size_t B, size_t M, size_t K, size_t H,
+                       bool debug = false,
                        const std::string &a_dtype = "bfloat16",
                        const std::string &b_dtype = "bfloat16",
                        const std::string &c_dtype = "bfloat16",
@@ -53,6 +55,7 @@ int test_maskedsoftmax(size_t B, size_t M, size_t K, bool debug = false,
 
   std::map<std::string, std::any> attr;
   attr["op_version"] = op_version;
+  attr["headsize"] = static_cast<int>(H);
 
   ryzenai::masked_softmax maskedsoftmax_ =
       ryzenai::masked_softmax<InT, MaskT, OuT>(a_dtype, true, attr);
@@ -89,32 +92,342 @@ int test_maskedsoftmax(size_t B, size_t M, size_t K, bool debug = false,
 
 TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x2048x2048_v1) {
   int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
-      32, 2048, 2048, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      32, 2048, 2048, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
       "v1");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1024x1024_v1) {
   int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
-      32, 1024, 1024, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      32, 1024, 1024, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
       "v1");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x512x512_v1) {
   int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
-      32, 512, 512, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
+      32, 512, 512, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x256x256_v1) {
   int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
-      32, 256, 256, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
+      32, 256, 256, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x128x128_v1) {
   int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
-      32, 128, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
+      32, 128, 128, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x2048x2048_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 2048, 2048, 96, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x1024x1024_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1024, 1024, 96, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x512x512_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 512, 512, 96, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x256x256_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 256, 256, 96, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x128x128_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 128, 128, 96, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x2176_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 2176, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x2304_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 2304, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x2432_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 2432, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x2560_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 2560, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x2688_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 2688, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x2816_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 2816, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x2944_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 2944, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x3072_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 3072, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x3200_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 3200, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x3328_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 3328, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x3456_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 3456, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x3584_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 3584, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x3712_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 3712, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x3840_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 3840, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x3968_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 3968, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x4096_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 4096, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x1x128_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 128, 96, false, "bfloat16", "bfloat16", "bfloat16", "PHI", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x1x256_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 256, 96, false, "bfloat16", "bfloat16", "bfloat16", "PHI", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x1x384_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 384, 96, false, "bfloat16", "bfloat16", "bfloat16", "PHI", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x1x512_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 512, 96, false, "bfloat16", "bfloat16", "bfloat16", "PHI", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x1x640_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 640, 96, false, "bfloat16", "bfloat16", "bfloat16", "PHI", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x1x768_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 768, 96, false, "bfloat16", "bfloat16", "bfloat16", "PHI", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x1x896_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 896, 96, false, "bfloat16", "bfloat16", "bfloat16", "PHI", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PHI_MASKEDSOFTMAX_Testa16, Kernel32x1x1024_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 1024, 96, false, "bfloat16", "bfloat16", "bfloat16", "PHI", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x128_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 128, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x256_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 256, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x384_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 384, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x512_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 512, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x640_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 640, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x768_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 768, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x896_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 896, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x1024_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 1024, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x1152_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 1152, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x1280_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 1280, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x1408_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 1408, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x1536_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 1536, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x1664_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 1664, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x1792_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 1792, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x1920_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 1920, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MASKEDSOFTMAX_Testa16, Kernel32x1x2048_v1) {
+  int err_count = test_maskedsoftmax<uint16_t, uint16_t, uint16_t>(
+      32, 1, 2048, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2",
+      "v1");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

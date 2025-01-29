@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <cmath>
@@ -130,7 +131,7 @@ int test_silu(size_t M, size_t K, bool debug = false,
     }
   }
   attr["op_version"] = op_version;
-  attr["shapes"] = shape_list;
+  // attr["shapes"] = shape_list;
 
   ryzenai::silu silu_ = ryzenai::silu<InT, OuT>(a_dtype, true, attr);
 
@@ -489,6 +490,36 @@ TEST(LLAMA2_SILU_Testa16, Kernel1920x14336_V1) {
 // tiling
 TEST(LLAMA2_SILU_Testa16, Kernel4096x11008_V1) {
   int err_count = test_silu<uint16_t, uint16_t>(4096, 11008, false, "bfloat16",
+                                                "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_SILU_Testa16, Kernel300) {
+  int err_count = test_silu<uint16_t, uint16_t>(300, 11008, false, "bfloat16",
+                                                "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_SILU_Testa16, Kernel600) {
+  int err_count = test_silu<uint16_t, uint16_t>(600, 11008, false, "bfloat16",
+                                                "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_SILU_Testa16, Kernel767) {
+  int err_count = test_silu<uint16_t, uint16_t>(767, 11008, false, "bfloat16",
+                                                "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_SILU_Testa16, Kernel850) {
+  int err_count = test_silu<uint16_t, uint16_t>(850, 11008, false, "bfloat16",
+                                                "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_SILU_Testa16, Kernel2047) {
+  int err_count = test_silu<uint16_t, uint16_t>(2047, 11008, false, "bfloat16",
                                                 "bfloat16", "LLAMA2", "v1");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

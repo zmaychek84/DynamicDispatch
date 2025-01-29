@@ -65,6 +65,9 @@ public:
                            uint64_t ddr_base_param, uint64_t ddr_base_ofm,
                            uint64_t ddr_base_inter, bool pad_control_packet);
 
+  std::vector<uint8_t> convert_to_opt_txn(const std::vector<uint8_t> &base_txn);
+
+  void append_to_txn(XAie_DevInst *DevInst, uint8_t **ptr);
   std::vector<uint8_t> txn;
 
 private:
@@ -112,6 +115,14 @@ public:
   transaction_op(const std::vector<uint8_t> &txn);
   std::vector<uint8_t> get_txn_op();
   size_t get_txn_instr_size();
+
+  static size_t getInstrBufSize(const std::string &txn_str);
+  static void addTxnOp(const std::string &txn_str, void *instr_buf);
+
+  // size of txn op header in bytes
+  // this is the wrapper header around txn format supported by aie-rt
+  constexpr static size_t TXN_OP_SIZE = 8;
+  constexpr static uint32_t TXN_OP_CODE = 0;
 
 private:
   std::vector<uint8_t> txn_op_;

@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <iostream>
@@ -429,6 +430,18 @@ TEST(Qlinear_2Testw3a16, Kernel4mladf45_int4_grp32_v1) {
 TEST(Qlinear_2Testw3a16, Kernel4mladf45_int4_grp128_v1) {
   int err_count = test_matmul_mladf<int16_t, int8_t, int16_t>(
       1, 4096, 6144, false, "bfloat16", "int4", "bfloat16", 128, true, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(Qlinear_2Testw3a16, Kernel4mladf_int4_grp128_v1_oproj) {
+  int err_count = test_matmul_mladf<int16_t, int8_t, int16_t>(
+      1, 3072, 3072, false, "bfloat16", "int4", "bfloat16", 128, true, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(Qlinear_2Testw3a16, Kernel4mladf_int4_grp128_v1_down) {
+  int err_count = test_matmul_mladf<int16_t, int8_t, int16_t>(
+      1, 8192, 3072, false, "bfloat16", "int4", "bfloat16", 128, true, "v1");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 

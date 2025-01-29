@@ -20,9 +20,10 @@
 
 #pragma once
 
-#include <vector>
-
 #include "op_fuser/fuse_types.hpp"
+#include <nlohmann/json.hpp>
+#include <vector>
 
 std::vector<CtrlPktPatchInfo>
 json_str_to_ctrlpkt_patch_info(const std::vector<uint8_t> &json_vec);
+nlohmann::json meta_to_ctrl_pkt_json(const OpsFusion::Metadata &meta);

@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +33,9 @@
 #include <utils/tfuncs.hpp>
 #include <xrt_context/xrt_context.hpp>
 
+#include <experimental/xrt_elf.h>
+#include <experimental/xrt_ext.h>
+#include <experimental/xrt_module.h>
 #include <xrt/xrt_bo.h>
 
 struct Tensor {
@@ -107,7 +111,6 @@ public:
   virtual std::vector<OpArgMap>
   get_buffer_reqs(std::vector<Tensor> &input, std::vector<Tensor> &output,
                   const std::map<std::string, std::any> &attr = {}) const = 0;
-
   virtual std::vector<uint8_t>
   get_ctrl_pkts(std::vector<Tensor> &input, std::vector<Tensor> &output,
                 const std::map<std::string, std::any> &attr = {}) const {

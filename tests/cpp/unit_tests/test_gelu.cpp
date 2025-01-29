@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -111,25 +112,25 @@ int test_gelu(int M, int N, bool debug = false,
 }
 
 // mzdk5 4x4
-TEST(C4mzdk5_GELU_Testa16, Kernel1) {
+TEST(C4mzdk5_GELU_Testa16, Kernel_64_5120) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
       64, 5120, false, "uint16", "uint16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GELU_Testa16, Kernel2) {
+TEST(C4mzdk5_GELU_Testa16, Kernel_256_5120) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
       256, 5120, false, "uint16", "uint16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GELU_Testa16, Kernel3) {
+TEST(C4mzdk5_GELU_Testa16, Kernel_1024_2560) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
       1024, 2560, false, "uint16", "uint16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GELU_Testa16, Kernel4) {
+TEST(C4mzdk5_GELU_Testa16, Kernel_4096_1280) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
       4096, 1280, false, "uint16", "uint16", "bfloat16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;

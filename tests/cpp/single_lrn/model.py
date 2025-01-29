@@ -27,6 +27,7 @@ from onnx.helper import (
     make_opsetid,
     make_tensor_value_info,
     make_tensor,
+    make_attribute
 )
 from onnx.checker import check_model
 import onnxruntime
@@ -68,6 +69,8 @@ def create_lrn_model(S, D, InType, GammaType, BetaType, OutType):
         outputs=["out"],
         domain="com.amd",
     )
+
+    mha.attribute.append(make_attribute("input_shape", [1, S, D]))
 
     graph = make_graph(
         [mha],

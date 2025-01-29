@@ -249,15 +249,14 @@ if __name__ == "__main__":
     onnx_model = Create_unit_tests(
         os.getenv("DD_ROOT") + f"/tests/cpp/matmul6/mdsqr_shapes.csv", num_heads
     )
-    onnx.save_model(onnx_model, f"{dir_name}/Matmuls_6x{num_heads}_for_fusion.onnx")
 
-    op_list, new_tensors, tensor_map = fuse.prepare_metadata(
-        ogm.ONNXGraph(onnx_model), dir_name
-    )
+    onnx.save_model(onnx_model, f"{dir_name}/Matmuls_6x{num_heads}_for_fusion.onnx")
+    op_list, new_tensors, tensor_map , aux_info = fuse.prepare_metadata(ogm.ONNXGraph(onnx_model), dir_name)
     json_str = fuse.save_tensors_to_json(
         f"{dir_name}/Matmuls_6x{num_heads}_for_fusion.onnx.json",
         op_list,
         new_tensors,
         tensor_map,
+        aux_info
     )
     # print("JSON Metadata :\n", json_str)

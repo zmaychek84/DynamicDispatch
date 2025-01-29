@@ -130,7 +130,7 @@ goto :init
     echo %ESC%[1;32m
     echo -- Building ...
     echo %ESC%[0m
-    cmake --build %BuildDir% %CleanFirst% %OptVerbose% --config %BuildType% --target install
+    cmake --build %BuildDir% %CleanFirst% %OptVerbose% --config %BuildType% --target install -j
     if %ERRORLEVEL% NEQ 0 (
         echo %ESC%[31m
         echo -- Build failed: code %ERRORLEVEL%

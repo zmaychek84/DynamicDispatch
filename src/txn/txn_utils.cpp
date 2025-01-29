@@ -24,11 +24,6 @@
 
 #include "txn_utils.hpp"
 
-// size of txn op header in bytes
-// this is the wrapper header around txn format supported by aie-rt
-constexpr size_t TXN_OP_SIZE = 8;
-constexpr uint32_t TXN_OP_CODE = 0;
-
 namespace utils {
 
 static constexpr size_t SUPER_KERNEL_ARGIDX = 4;
@@ -51,7 +46,8 @@ void txn_util::pass_through(uint8_t **ptr) {
     *ptr = *ptr + mw_header->Size;
     break;
   }
-  case XAIE_IO_MASKPOLL: {
+  case XAIE_IO_MASKPOLL:
+  case XAIE_IO_MASKPOLL_BUSY: {
     XAie_MaskPoll32Hdr *mp_header = (XAie_MaskPoll32Hdr *)(*ptr);
     *ptr = *ptr + mp_header->Size;
     break;
@@ -63,6 +59,11 @@ void txn_util::pass_through(uint8_t **ptr) {
   case (XAIE_IO_CUSTOM_OP_MERGE_SYNC): {
     XAie_CustomOpHdr *Hdr = (XAie_CustomOpHdr *)(*ptr);
     *ptr = *ptr + Hdr->Size;
+    break;
+  }
+  case (XAIE_IO_PREEMPT): {
+    XAie_PreemptHdr *Hdr = (XAie_PreemptHdr *)(*ptr);
+    *ptr = *ptr + sizeof(*Hdr);
     break;
   }
   default:
@@ -140,6 +141,131 @@ txn_util::patch(const std::vector<uint8_t> &txn,
     }
   }
   return txn_patch;
+}
+
+void txn_util::append_to_txn(XAie_DevInst *DevInst, uint8_t **ptr) {
+  auto op_hdr = (XAie_OpHdr *)(*ptr);
+  switch (op_hdr->Op) {
+  case XAIE_IO_WRITE: {
+    XAie_Write32Hdr *w_hdr = (XAie_Write32Hdr *)(*ptr);
+    XAie_Write32(DevInst, w_hdr->RegOff, w_hdr->Value);
+    *ptr = *ptr + w_hdr->Size;
+    break;
+  }
+  case XAIE_IO_BLOCKWRITE: {
+    XAie_BlockWrite32Hdr *bw_header = (XAie_BlockWrite32Hdr *)(*ptr);
+    u32 size = (bw_header->Size - sizeof(*bw_header)) / 4;
+    u32 *payload = (u32 *)((*ptr) + sizeof(*bw_header));
+    XAie_BlockWrite32(DevInst, bw_header->RegOff, payload, size);
+    *ptr = *ptr + bw_header->Size;
+    break;
+  }
+  case XAIE_IO_MASKWRITE: {
+    XAie_MaskWrite32Hdr *mw_header = (XAie_MaskWrite32Hdr *)(*ptr);
+    XAie_MaskWrite32(DevInst, mw_header->RegOff, mw_header->Mask,
+                     mw_header->Value);
+    *ptr = *ptr + mw_header->Size;
+    break;
+  }
+  case XAIE_IO_MASKPOLL: {
+    XAie_MaskPoll32Hdr *mp_header = (XAie_MaskPoll32Hdr *)(*ptr);
+    XAie_MaskPoll(DevInst, mp_header->RegOff, mp_header->Mask, mp_header->Value,
+                  0);
+    *ptr = *ptr + mp_header->Size;
+    break;
+  }
+  case (XAIE_IO_PREEMPT): {
+    XAie_PreemptHdr *hdr = (XAie_PreemptHdr *)(*ptr);
+    XAie_Txn_Preempt(DevInst, hdr);
+    *ptr = *ptr + sizeof(*hdr);
+    break;
+  }
+  case (XAIE_IO_CUSTOM_OP_TCT): {
+    XAie_CustomOpHdr *hdr = (XAie_CustomOpHdr *)(*ptr);
+    tct_op_t *op = (tct_op_t *)((*ptr) + sizeof(*hdr));
+    XAie_AddCustomTxnOp(DevInst, XAIE_IO_CUSTOM_OP_TCT, (void *)op,
+                        sizeof(*op));
+    *ptr = *ptr + hdr->Size;
+    break;
+  }
+  case (XAIE_IO_CUSTOM_OP_DDR_PATCH): {
+    XAie_CustomOpHdr *hdr = (XAie_CustomOpHdr *)(*ptr);
+    patch_op_t *op = (patch_op_t *)((*ptr) + sizeof(*hdr));
+    XAie_AddCustomTxnOp(DevInst, XAIE_IO_CUSTOM_OP_DDR_PATCH, (void *)op,
+                        sizeof(*op));
+    *ptr = *ptr + hdr->Size;
+    break;
+  }
+  case (XAIE_IO_CUSTOM_OP_READ_REGS): {
+    XAie_CustomOpHdr *hdr = (XAie_CustomOpHdr *)(*ptr);
+    read_register_op_t *op = (read_register_op_t *)((*ptr) + sizeof(*hdr));
+    XAie_AddCustomTxnOp(DevInst, XAIE_IO_CUSTOM_OP_READ_REGS, (void *)op,
+                        sizeof(*op));
+    *ptr = *ptr + hdr->Size;
+    break;
+  }
+  case (XAIE_IO_CUSTOM_OP_RECORD_TIMER): {
+    XAie_CustomOpHdr *hdr = (XAie_CustomOpHdr *)(*ptr);
+    record_timer_op_t *op = (record_timer_op_t *)((*ptr) + sizeof(*hdr));
+    XAie_AddCustomTxnOp(DevInst, XAIE_IO_CUSTOM_OP_RECORD_TIMER, (void *)op,
+                        sizeof(*op));
+    *ptr = *ptr + hdr->Size;
+    break;
+  }
+  case (XAIE_IO_CUSTOM_OP_MERGE_SYNC): {
+    XAie_CustomOpHdr *hdr = (XAie_CustomOpHdr *)(*ptr);
+    tct_op_t *op = (tct_op_t *)((*ptr) + sizeof(*hdr));
+    XAie_AddCustomTxnOp(DevInst, XAIE_IO_CUSTOM_OP_MERGE_SYNC, (void *)op,
+                        sizeof(*op));
+    *ptr = *ptr + hdr->Size;
+    break;
+  }
+  default:
+    // RYZENAI_LOG_TRACE("Opcode: " + std::to_string(op_hdr->Op));
+    throw std::runtime_error("Unknown op to pass through");
+  }
+}
+
+std::vector<uint8_t>
+txn_util::convert_to_opt_txn(const std::vector<uint8_t> &base_txn) {
+
+  XAie_TxnHeader *Hdr = (XAie_TxnHeader *)base_txn.data();
+  // Initialize AIE Driver. Hardcode for STRIX for now
+  XAie_Config ConfigPtr{
+      XAIE_DEV_GEN_AIE2P,      XAIE_BASE_ADDR,          XAIE_COL_SHIFT,
+      XAIE_ROW_SHIFT,          XAIE_NUM_ROWS,           XAIE_NUM_COLS,
+      XAIE_SHIM_ROW,           XAIE_MEM_TILE_ROW_START, XAIE_MEM_TILE_NUM_ROWS,
+      XAIE_AIE_TILE_ROW_START, XAIE_AIE_TILE_NUM_ROWS,  {0}};
+
+  XAie_InstDeclare(DevInst, &ConfigPtr);
+  ConfigPtr.NumCols = Hdr->NumCols;
+  XAie_CfgInitialize(&(DevInst), &ConfigPtr);
+
+  XAie_StartTransaction(&DevInst, XAIE_TRANSACTION_DISABLE_AUTO_FLUSH);
+
+  RYZENAI_LOG_TRACE(OpsFusion::dd_format(
+      "Before converting v1 to v2, transaction size, num_ops: {}, {}",
+      Hdr->TxnSize, Hdr->NumOps));
+  int num_ops = Hdr->NumOps;
+  uint8_t *ptr = (uint8_t *)base_txn.data() + sizeof(*Hdr);
+  for (int n = 0; n < num_ops; n++) {
+    append_to_txn(&DevInst, &ptr);
+  }
+
+  uint8_t *txn_ptr = XAie_ExportSerializedTransaction_opt(&DevInst, 0, 0);
+  Hdr = (XAie_TxnHeader *)txn_ptr;
+  auto size = Hdr->TxnSize;
+  RYZENAI_LOG_TRACE(OpsFusion::dd_format(
+      "After converting v1 to v2, transaction size, num_ops: {}, {}",
+      Hdr->TxnSize, Hdr->NumOps));
+
+  std::vector<uint8_t> txn(size, 0);
+  memcpy((void *)txn.data(), (void *)txn_ptr, size);
+
+  // check if there is an API to free txn pointer
+  free(txn_ptr);
+  XAie_Finish(&DevInst);
+  return txn;
 }
 
 /**
@@ -256,10 +382,19 @@ void txn_util::patch(const OpsFusion::Metadata::OpInfo &op_info,
             curr_offset, op->argidx, op->argplus));
       } else if (op_arg.arg_type == OpArgMap::CTRL_PKT_BIN) {
         // Ctrl Pkt bin will be packed with super kernel instructions BO
-        auto super_kernel_size = meta.fused_tensors.at("super_instr").size;
-        op->argidx = OpArgMap::CONST_KERNEL_PARAM_INPUT;
-        op->argplus = curr_offset + meta.ctrl_pkt_map.at(op_info.name).offset +
-                      super_kernel_size;
+        const auto &aux_info = meta.aux_info;
+        if (aux_info.find("elf_flow") != aux_info.end() &&
+            std::any_cast<bool>(aux_info.at("elf_flow"))) {
+          op->argidx = OpArgMap::CTRL_PKT_BIN;
+          op->argplus = curr_offset + meta.ctrl_pkt_map.at(op_info.name).offset;
+        } else {
+          auto super_kernel_size = meta.fused_tensors.at("super_instr").size;
+          op->argidx = OpArgMap::CONST_KERNEL_PARAM_INPUT;
+          op->argplus = curr_offset +
+                        meta.ctrl_pkt_map.at(op_info.name).offset +
+                        super_kernel_size;
+        }
+
         RYZENAI_LOG_TRACE(OpsFusion::dd_format(
             "Patched : [{}:{}] -> [ ctrl pkt bin ] -> [{}:{}] ", curr_argidx,
             curr_offset, op->argidx, op->argplus));
@@ -1814,3 +1949,21 @@ size_t transaction_op::get_txn_instr_size() {
 }
 
 std::vector<uint8_t> transaction_op::get_txn_op() { return txn_op_; }
+
+size_t transaction_op::getInstrBufSize(const std::string &txn_str) {
+  return TXN_OP_SIZE + txn_str.size();
+}
+void transaction_op::addTxnOp(const std::string &txn_str, void *instr_buf) {
+
+  XAie_TxnHeader *hdr = (XAie_TxnHeader *)txn_str.data();
+
+  uint32_t *ptr = (uint32_t *)instr_buf;
+  // set op code
+  *ptr = TXN_OP_CODE;
+  ptr++;
+  *ptr = hdr->TxnSize + TXN_OP_SIZE;
+
+  uint8_t *instr_ptr = (uint8_t *)instr_buf;
+
+  memcpy(instr_ptr + TXN_OP_SIZE, txn_str.data(), txn_str.size());
+}

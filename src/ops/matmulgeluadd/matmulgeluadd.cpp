@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <any>
@@ -21,13 +22,13 @@
 #include <utils/instruction_registry.hpp>
 #include <xrt_context/xrt_context.hpp>
 
+#include "utils/ctrl_pkt_utils.hpp"
+
 #include <ops/matmulgeluadd/matmulgeluadd.hpp>
 #include <ops/op_interface.hpp>
+#include <ops/ops_common/ctrlpkt.hpp>
 #include <utils/logging.hpp>
 #include <utils/utils.hpp>
-
-#include <utils/instruction_registry.hpp>
-#include <xrt_context/xrt_context.hpp>
 
 // AIE Driver header
 #include "xaiengine.h"
@@ -87,18 +88,6 @@ matmulgeluadd<InT, WtT, OutT>::map_padded_shape(size_t M, size_t N) const {
 }
 
 template <typename InT, typename WtT, typename OutT>
-std::once_flag matmulgeluadd<InT, WtT, OutT>::logger_flag_;
-
-template <typename InT, typename WtT, typename OutT>
-uint64_t matmulgeluadd<InT, WtT, OutT>::matmulgeluadd_count = 0;
-
-// template <typename InT, typename WtT, typename OutT>
-// instruction_registry matmulgeluadd<InT, WtT, OutT>::instr_reg_;
-
-template <typename InT, typename WtT, typename OutT>
-std::once_flag matmulgeluadd<InT, WtT, OutT>::instr_reg_flag_;
-
-template <typename InT, typename WtT, typename OutT>
 void matmulgeluadd<InT, WtT, OutT>::debug(bool enable) {
   debug_ = enable;
 }
@@ -118,12 +107,12 @@ void matmulgeluadd<InT, WtT, OutT>::setup_instr_registry() {
   std::vector<std::pair<std::string, bool>> instructions;
   std::vector<std::pair<std::string, bool>> layer_params;
   // GEMM
-  txn_fname_prefix_ = "gemmgelu_" + txnbin_a_header.at(a_dtype_) +
-                      txnbin_b_header.at(b_dtype_) +
-                      txnbin_acc_header.at(c_dtype_);
-  param_fname_prefix_ = "gemmgelu_" + txnbin_a_header.at(a_dtype_) +
-                        txnbin_b_header.at(b_dtype_) +
-                        txnbin_acc_header.at(c_dtype_);
+  // txn_fname_prefix_ = "gemmgelu_" + txnbin_a_header.at(a_dtype_) +
+  //                    txnbin_b_header.at(b_dtype_) +
+  //                    txnbin_acc_header.at(c_dtype_);
+  // param_fname_prefix_ = "gemmgelu_" + txnbin_a_header.at(a_dtype_) +
+  //                      txnbin_b_header.at(b_dtype_) +
+  //                      txnbin_acc_header.at(c_dtype_);
   std::vector<matrix_shapes> supported_shapes =
       default_shapes_.find(txn_fname_prefix_)->second;
   for (size_t i = 0; i < supported_shapes.size(); i++) {
@@ -143,13 +132,12 @@ void matmulgeluadd<InT, WtT, OutT>::setup_instr_registry() {
 }
 
 template <typename InT, typename WtT, typename OutT>
-matmulgeluadd<InT, WtT, OutT>::matmulgeluadd(const std::string &a_dtype,
-                                             const std::string &b_dtype,
-                                             const std::string &c_dtype,
-                                             bool load_xrt) {
+matmulgeluadd<InT, WtT, OutT>::matmulgeluadd(
+    const std::string &a_dtype, const std::string &b_dtype,
+    const std::string &c_dtype, bool load_xrt,
+    const std::map<std::string, std::any> &attr) {
 
-  matmulgeluadd<InT, WtT, OutT>::txnbin_a_header = {{"uint16", "a16"},
-                                                    {"uint8", "a8"}};
+  txnbin_a_header = {{"uint16", "a16"}, {"uint8", "a8"}};
 
   txnbin_b_header = {{"int8", "w8"}, {"uint8", "w8"}};
 
@@ -159,6 +147,7 @@ matmulgeluadd<InT, WtT, OutT>::matmulgeluadd(const std::string &a_dtype,
   // default shape is the padded shaped used in AIE for BO allocation
   default_shapes_["gemmgelu_a8w8acc8"] = std::vector<matrix_shapes>();
   default_shapes_["gemmgelu_a16w8acc16"] = std::vector<matrix_shapes>();
+  default_shapes_["gemmgelu_4x4_a16w8acc16"] = std::vector<matrix_shapes>();
 
   default_shapes_["gemmgelu_a8w8acc8"].emplace_back(512, 768, 3072);
   default_shapes_["gemmgelu_a8w8acc8"].emplace_back(256, 768, 3072);
@@ -173,10 +162,12 @@ matmulgeluadd<InT, WtT, OutT>::matmulgeluadd(const std::string &a_dtype,
   default_shapes_["gemmgelu_a16w8acc16"].emplace_back(832, 256, 1024);
   default_shapes_["gemmgelu_a16w8acc16"].emplace_back(3136, 128, 512);
   default_shapes_["gemmgelu_a16w8acc16"].emplace_back(128, 1024, 4096);
+  default_shapes_["gemmgelu_4x4_a16w8acc16"].emplace_back(64, 768, 3072);
 
   // raw shape is the actual shape from ONNX
   raw_shapes_["gemmgelu_a8w8acc8"] = std::vector<matrix_shapes>();
   raw_shapes_["gemmgelu_a16w8acc16"] = std::vector<matrix_shapes>();
+  raw_shapes_["gemmgelu_4x4_a16w8acc16"] = std::vector<matrix_shapes>();
 
   raw_shapes_["gemmgelu_a8w8acc8"].emplace_back(512, 768, 3072);
   raw_shapes_["gemmgelu_a8w8acc8"].emplace_back(256, 768, 3072);
@@ -191,6 +182,7 @@ matmulgeluadd<InT, WtT, OutT>::matmulgeluadd(const std::string &a_dtype,
   raw_shapes_["gemmgelu_a16w8acc16"].emplace_back(784, 256, 1024);
   raw_shapes_["gemmgelu_a16w8acc16"].emplace_back(3136, 128, 512);
   raw_shapes_["gemmgelu_a16w8acc16"].emplace_back(77, 1024, 4096);
+  raw_shapes_["gemmgelu_4x4_a16w8acc16"].emplace_back(64, 768, 3072);
 
   DPU_DIR = OpInterface::get_dd_base_dir() + "//transaction//" + "stx";
 
@@ -212,12 +204,43 @@ matmulgeluadd<InT, WtT, OutT>::matmulgeluadd(const std::string &a_dtype,
     XCLBIN_FNAME =
         OpInterface::get_dd_base_dir() + ryzenai::mxpzi_A16W8_QDQ_XCLBIN_PATH;
   }
+
+  design_param_ = "";
+  if (attr.count("design_param") &&
+      attr.at("design_param").type() == typeid(std::vector<std::string>)) {
+    const auto &design_param_vector =
+        std::any_cast<const std::vector<std::string> &>(
+            attr.at("design_param"));
+
+    if (design_param_vector.size() == 1) {
+      design_param_ = design_param_vector[0];
+    } else {
+      std::cout
+          << "Design Format attribute does not have the expected number of "
+             "elements.Number of passed : design_param_vector.size(), "
+             "Expected:1"
+          << std::endl;
+    }
+    RYZENAI_LOG_TRACE("iConv: DesignFormat: " + design_param_);
+  }
+
   txn_fname_prefix_ = "gemmgelu_" + txnbin_a_header.at(a_dtype_) +
                       txnbin_b_header.at(b_dtype_) +
                       txnbin_acc_header.at(c_dtype_);
   param_fname_prefix_ = "gemmgelu_" + txnbin_a_header.at(a_dtype_) +
                         txnbin_b_header.at(b_dtype_) +
                         txnbin_acc_header.at(c_dtype_);
+
+  if (design_param_.find("4x4") != std::string::npos) { // 4x4 design
+    txn_fname_prefix_ = "gemmgelu_4x4_" + txnbin_a_header.at(a_dtype_) +
+                        txnbin_b_header.at(b_dtype_) +
+                        txnbin_acc_header.at(c_dtype_);
+
+    param_fname_prefix_ = "gemmgelu_4x4_" + txnbin_a_header.at(a_dtype_) +
+                          txnbin_b_header.at(b_dtype_) +
+                          txnbin_acc_header.at(c_dtype_);
+  }
+
   if (load_xrt) {
     xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME);
     std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
@@ -234,6 +257,7 @@ matmulgeluadd<InT, WtT, OutT>::matmulgeluadd(const std::string &a_dtype,
   run_aie_time_ = 0;
   cpu_acc_time_ = 0;
   num_run_aie_ = 0;
+  is_ctrl_pkt_ = 0;
 
   std::call_once(logger_flag_, []() {
     std::string header =
@@ -276,6 +300,10 @@ void matmulgeluadd<InT, WtT, OutT>::set_params(
   } else if (model_name == "mxganv1.2") {
     XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
                    ryzenai::mxganv1_2_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "4x4PSW1.0") {
+    is_ctrl_pkt_ = 1;
+    XCLBIN_FNAME =
+        OpInterface::get_dd_base_dir() + ryzenai::PSW1_0_A16W8_QDQ_XCLBIN_PATH;
   } else {
     throw std::invalid_argument("model_name is not supported");
   }
@@ -342,25 +370,64 @@ void matmulgeluadd<InT, WtT, OutT>::initialize_const_params(
   }
   qdq_params[qdq_Nv_idx] = matmul_matrix::Nsubv;
 
-  // SW convert scale to 1/scale and bfloat16 for Q
-
   size_t write_offset = 0;
-
   std::vector<WtT> buf(w_shape_[0] * w_shape_[1]);
-  matmul_matrix::WgtMatrix<WtT, Ksubv, Nsubv> W((int)w_shape_[0],
-                                                (int)w_shape_[1], buf.data());
-  for (int r = 0; r < w_shape_[0]; ++r) {
-    for (int c = 0; c < w_shape_[1]; ++c) {
-      W.at(r, c) = weights[(r * w_shape_[1]) + c];
+  if ((design_param_.find("4x4") != std::string::npos)) { // PSW 1.0 4x4 design
+    qdq_params[qdq_Mv_idx] = matmul_matrix::Msubv_PSW;
+    qdq_params[qdq_Nv_idx] = matmul_matrix::Nsubv_PSW_GeMM_GeLU;
+
+    matmul_matrix::WgtMatrix<WtT> W(
+        (int)w_shape_[0], (int)w_shape_[1], matmul_matrix::Ksubv_PSW,
+        matmul_matrix::Nsubv_PSW_GeMM_GeLU, buf.data());
+    for (int r = 0; r < w_shape_[0]; ++r) {
+      for (int c = 0; c < w_shape_[1]; ++c) {
+        W.at(r, c) = weights[(r * w_shape_[1]) + c];
+      }
+    }
+  } else {
+    matmul_matrix::WgtMatrix<WtT> W((int)w_shape_[0], (int)w_shape_[1], Ksubv,
+                                    Nsubv, buf.data());
+    for (int r = 0; r < w_shape_[0]; ++r) {
+      for (int c = 0; c < w_shape_[1]; ++c) {
+        W.at(r, c) = weights[(r * w_shape_[1]) + c];
+      }
     }
   }
 
-  auto total_size = matmul_matrix::Ksubv * matmul_matrix::Nsubv;
-  auto qdq_size = matmul_matrix::Nsubv * sizeof(int64_t);
-  auto qdq_params_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
-  //// WGT + Bias
-  { // This section of the code interleaves bias with weights Nsubv of bias
-    // with every K x N
+  /* This section of the code interleaves bias with weights Nsubv of bias
+     with every K x N */
+  if ((design_param_.find("4x4") != std::string::npos)) { // PSW 1.0 4x4 design
+    auto total_size =
+        matmul_matrix::Ksubv_PSW * matmul_matrix::Nsubv_PSW_GeMM_GeLU;
+    auto qdq_size = matmul_matrix::Nsubv_PSW_GeMM_GeLU * sizeof(int64_t);
+    auto qdq_params_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
+
+    for (int N_shard = 0;
+         N_shard < (w_shape_[1]) / (matmul_matrix::Nsubv_PSW_GeMM_GeLU);
+         N_shard++) {
+      for (int K_shard = 0;
+           K_shard < (w_shape_[0]) / (matmul_matrix::Ksubv_PSW); K_shard++) {
+        io.write(write_offset,
+                 (void *)&buf[(N_shard * w_shape_[0] *
+                               matmul_matrix::Nsubv_PSW_GeMM_GeLU) +
+                              (K_shard * total_size)],
+                 (total_size));
+        write_offset += total_size;
+        io.write(write_offset,
+                 (void *)&qdq[N_shard * matmul_matrix::Nsubv_PSW_GeMM_GeLU],
+                 qdq_size);
+        write_offset += qdq_size;
+      }
+    }
+    io.write(write_offset, (void *)qdq_params, qdq_params_size);
+    write_offset += qdq_params_size;
+
+    io.write(write_offset, (void *)gelu_qdq_params, qdq_params_size);
+    write_offset += qdq_params_size;
+  } else {
+    auto total_size = matmul_matrix::Ksubv * matmul_matrix::Nsubv;
+    auto qdq_size = matmul_matrix::Nsubv * sizeof(int64_t);
+    auto qdq_params_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
 
     for (int N_shard = 0; N_shard < (w_shape_[1]) / (matmul_matrix::Nsubv);
          N_shard++) {
@@ -389,6 +456,45 @@ void matmulgeluadd<InT, WtT, OutT>::initialize_const_params(
   RYZENAI_LOG_TRACE("Matmulgelu initialize_const_params(ptr) ... DONE");
 }
 
+template <typename InT, typename WtT, typename OutT>
+std::vector<uint8_t> matmulgeluadd<InT, WtT, OutT>::get_ctrl_pkts(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+
+  auto [M, K, N] = extract_MKN(input);
+  auto [Mo, Ko] = map_padded_shape(M, K);
+  // TODO: Add check to validate tensor shapes
+  std::string ctrl_key =
+      "gemmgelu_" + get_instr_key(param_fname_prefix_, Mo, Ko, N) + "_ctrl";
+  try {
+    Transaction &txn = Transaction::getInstance();
+    return txn.get_txn_bvec(ctrl_key);
+  } catch (...) {
+    return {};
+  }
+}
+
+template <typename InT, typename WtT, typename OutT>
+std::vector<CtrlPktPatchInfo>
+matmulgeluadd<InT, WtT, OutT>::get_ctrl_pkt_patch_info(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto [M, K, N] = extract_MKN(input);
+  auto [Mo, Ko] = map_padded_shape(M, K);
+  // TODO: Add check to validate tensor shapes
+  try {
+    auto ctrl_pkt_meta = "gemmgelu_" +
+                         get_instr_key(param_fname_prefix_, Mo, Ko, N) +
+                         "_ctrl_meta";
+    Transaction &txn = Transaction::getInstance();
+    return json_str_to_ctrlpkt_patch_info(txn.get_txn_bvec(ctrl_pkt_meta));
+  } catch (...) {
+    // throw std::runtime_error("elwadd : Can not file the ctrl_meta.json
+    // file");
+    return {};
+  }
+}
+
 // For MATMULGELU: weight + bias + lutab + lutcd
 template <typename InT, typename WtT, typename OutT>
 void matmulgeluadd<InT, WtT, OutT>::initialize_const_params(
@@ -407,8 +513,14 @@ void matmulgeluadd<InT, WtT, OutT>::initialize_const_params(
   w_shape_[1] = shape[1];
 
   shape = const_params.at(qdq_idx).shape;
-  size_t size_interleaved_qdq =
-      w_shape_[0] * w_shape_[1] / matmul_matrix::Ksubv * sizeof(int64_t);
+  size_t size_interleaved_qdq;
+  if ((design_param_.find("4x4") != std::string::npos)) { // PSW 1.0 4x4 design
+    size_interleaved_qdq =
+        w_shape_[0] * w_shape_[1] / matmul_matrix::Ksubv_PSW * sizeof(int64_t);
+  } else {
+    size_interleaved_qdq =
+        w_shape_[0] * w_shape_[1] / matmul_matrix::Ksubv * sizeof(int64_t);
+  }
   size_interleaved_qdq += 2 * matmul_matrix::QDQparam_size * sizeof(int32_t);
 
   const size_t size_lutab = sizeof(lnr_lutab);
@@ -435,6 +547,10 @@ void matmulgeluadd<InT, WtT, OutT>::initialize_const_params(
   c_bo_ = xrt::bo(xrt_ctx_->get_device(), C_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
                   xrt_ctx_->get_kernel().group_id(8));
 
+  // std::cout << "a bo size: " << A_BO_SIZE << std::endl;
+  // std::cout << "b bo size: " << B_BO_SIZE << std::endl;
+  // std::cout << "c bo size: " << C_BO_SIZE << std::endl;
+
   // copy b_bo
   b_copy_time_ = 0;
   b_format_time_ = 0;
@@ -454,6 +570,64 @@ void matmulgeluadd<InT, WtT, OutT>::initialize_const_params(
   b_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
   auto b_sync_stop = GET_ELAPSED_TIME_NS();
   b_sync_time_ = static_cast<int64_t>(b_sync_stop - b_sync_start);
+
+  if (is_ctrl_pkt_) {
+    // Based on the mapped_shape to get the meta json file
+    auto Mo = (size_t)kernel_x_shape_[0];
+    auto Ko = (size_t)w_shape_[0];
+    auto No = (size_t)w_shape_[1];
+
+    std::vector<uint8_t> json_data;
+    try {
+      auto json_key = "gemmgelu_" +
+                      get_instr_key(param_fname_prefix_, Mo, Ko, No) +
+                      "_ctrl_meta";
+      Transaction &txn = Transaction::getInstance();
+      json_data = txn.get_txn_bvec(json_key);
+    } catch (...) {
+      is_ctrl_pkt_ = 0;
+    }
+
+    if (is_ctrl_pkt_) {
+      std::cout << "ctrlpkt patching" << std::endl;
+      RYZENAI_LOG_TRACE("elwadd patch ctrlpkt ... START");
+      // get param_bo address
+      auto param_bo_key = "gemmgelu_" +
+                          get_instr_key(param_fname_prefix_, Mo, Ko, No) +
+                          "_param";
+      const xrt::bo &param_bo =
+          xrt_ctx_->get_registry().get_param_bo(param_bo_key).second;
+
+      // Get ctrl pkt patch info from json
+      std::vector<CtrlPktPatchInfo> ctrlpkt_info;
+      ctrlpkt_info = json_str_to_ctrlpkt_patch_info(json_data);
+
+      // Get the ctrl pkt
+      auto ctrl_bo_key = "gemmgelu_" +
+                         get_instr_key(param_fname_prefix_, Mo, Ko, No) +
+                         "_ctrl";
+      std::string ctrl_params =
+          Transaction::getInstance().get_txn_str(ctrl_bo_key);
+      std::vector<char> ctrl_buffer(ctrl_params.begin(), ctrl_params.end());
+
+      // ctrl pkt patch
+      std::vector<char> ctrl_pkt_new;
+      std::vector<uint64_t> buffer_addrs = {
+          uint64_t(c_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(a_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(b_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(param_bo.address() + DDR_AIE_ADDR_OFFSET)};
+      ctrl_pkt_new = patch_ctrl_bin(ctrl_buffer, ctrlpkt_info, buffer_addrs);
+
+      size_t ctrl_bo_words = ctrl_pkt_new.size();
+      ctrl_bo_ =
+          xrt::bo(xrt_ctx_->get_device(), ctrl_bo_words, XRT_BO_FLAGS_HOST_ONLY,
+                  xrt_ctx_->get_kernel().group_id(8));
+      ctrl_bo_.write(ctrl_pkt_new.data());
+      ctrl_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+      RYZENAI_LOG_TRACE("matmulgeluadd patch ctrlpkt ... DONE");
+    }
+  }
 }
 
 // matmulgelu
@@ -521,15 +695,12 @@ void matmulgeluadd<InT, WtT, OutT>::execute(const std::vector<Tensor> &input,
   auto kernel_ = xrt_ctx_->get_kernel();
 
   // launch the kernel
-  xrt::run run;
+
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   c_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  run = kernel_(2, instr_bo, instr_bo_words,
-                c_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                a_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                b_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                param_bo.address() + DDR_AIE_ADDR_OFFSET, 0);
-  run.wait2();
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, c_bo_, a_bo_, b_bo_, param_bo,
+      ctrl_bo_, true, is_ctrl_pkt_);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);
   num_run_aie_++;
@@ -602,7 +773,14 @@ std::vector<OpArgMap> matmulgeluadd<InT, WtT, OutT>::get_buffer_reqs(
   auto [M, K, N] = extract_MKN(input);
   auto [Mo, Ko] = map_padded_shape(M, K);
 
-  size_t size_interleaved_qdq = Ko * N / matmul_matrix::Ksubv * sizeof(int64_t);
+  int Ksubv;
+  if (design_param_.find("4x4") != std::string::npos) { // PSW 1.0 4x4 design
+    Ksubv = matmul_matrix::Ksubv_PSW;
+  } else { // 4x2 design
+    Ksubv = matmul_matrix::Ksubv;
+  }
+
+  size_t size_interleaved_qdq = Ko * N / Ksubv * sizeof(int64_t);
   size_interleaved_qdq += 2 * matmul_matrix::QDQparam_size * sizeof(int32_t);
 
   size_t const size_lutab = sizeof(lnr_lutab);
@@ -614,15 +792,26 @@ std::vector<OpArgMap> matmulgeluadd<InT, WtT, OutT>::get_buffer_reqs(
   size_t A_BO_SIZE = (Mo * Ko * sizeof(InT));
   size_t C_BO_SIZE = (Mo * N * sizeof(OutT));
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
+  size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
 
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, A_BO_SIZE},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, B_BO_SIZE},
       {OpArgMap::OpArgType::OUTPUT, 0, 5, 0, C_BO_SIZE},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
-       super_kernel_size}};
+       super_kernel_size},
+      {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};
   return arg_map;
-};
+}
+
+template <typename InT, typename WtT, typename OutT>
+std::once_flag matmulgeluadd<InT, WtT, OutT>::logger_flag_;
+
+template <typename InT, typename WtT, typename OutT>
+uint64_t matmulgeluadd<InT, WtT, OutT>::matmulgeluadd_count = 0;
+
+template <typename InT, typename WtT, typename OutT>
+std::once_flag matmulgeluadd<InT, WtT, OutT>::instr_reg_flag_;
 
 template class matmulgeluadd<uint8_t, uint8_t, uint8_t>;
 template class matmulgeluadd<uint16_t, uint8_t, uint16_t>;

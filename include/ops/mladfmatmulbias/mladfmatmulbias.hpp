@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -119,6 +120,8 @@ private:
   /*tiling information*/
   std::map<int64_t, double> m_tiling_cost_;
   static std::mutex instr_reg_mutex_;
+  bool input_realloc_;
+  bool output_realloc_;
 
   std::vector<mladf_matrix_shapes> supported_shapes_;
 
@@ -138,6 +141,11 @@ private:
                         const int64_t &K, const int64_t &N,
                         const int64_t &group_size) const;
 
+  void reformat_const(const std::vector<Tensor> &const_params,
+                      const std::map<std::string, std::any> &attr,
+                      std::vector<std::vector<std::uint8_t>> &const_vecs,
+                      bool is_online);
+
 public:
   mladfmatmulbias(const std::string &a_dtype, const std::string &b_dtype,
                   const std::string &c_dtype, bool load_xrt,
@@ -148,6 +156,9 @@ public:
   void initialize_const_params(
       const std::vector<Tensor> &const_params,
       const std::map<std::string, std::any> &attr = {}) override;
+  std::vector<std::vector<std::uint8_t>>
+  export_const_params(const std::vector<Tensor> &const_params,
+                      const std::map<std::string, std::any> &attr = {});
   void execute(std::vector<Tensor> &input,
                std::vector<Tensor> &output) override;
 
@@ -175,6 +186,8 @@ public:
   void set_shape_2(std::vector<size_t> a_shape, std::vector<size_t> wt_shape,
                    int group_size);
   void debug(bool enable);
+  std::vector<mladf_matrix_shapes> &get_supported_shapes();
+
   const std::vector<uint8_t> get_transaction_bin(
       std::vector<Tensor> &input, std::vector<Tensor> &output,
       const std::map<std::string, std::any> &attr = {}) const override;
@@ -190,6 +203,7 @@ public:
   void set_kernel_shapes_m_mladf(int64_t input_m);
   void run_aie(InT *a, xrt::bo &w_bo, int64_t *input_shape, bool wait = true);
   void run_aie_2(InT *a, xrt::bo &w_bo, int64_t *input_shape, bool wait = true);
+  bool create_bo(void *use_ptr, size_t size, int operand_index);
 };
 
 } // namespace ryzenai

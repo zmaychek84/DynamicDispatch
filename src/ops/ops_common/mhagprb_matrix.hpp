@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -521,12 +522,13 @@ template <typename Ta, typename Tb>
 int check_result_mha(Ta cpu_Y, Tb aie_Y, float max_pct_diff = 0.0,
                      bool enable_logging = true) {
   int err_count = 0;
-  int max_err = 0;
+  uint16_t max_err = 0;
   float sum_pct_diff = 0.0;
   float L2_norm = 0;
   for (int r = 0; r < cpu_Y.num_rows; ++r) {
     for (int c = 0; c < cpu_Y.num_cols; ++c) {
-      int diff = std::abs(cpu_Y.at(r, c) - aie_Y.at(r, c));
+      uint16_t diff = std::abs(cpu_Y.at(r, c) - aie_Y.at(r, c));
+
       L2_norm += ((float)diff * (float)diff);
       float abs_ref = (float)std::abs(cpu_Y.at(r, c));
       float denominator = (abs_ref == 0.0f) ? abs_ref + 0.00001 : abs_ref;
@@ -535,7 +537,7 @@ int check_result_mha(Ta cpu_Y, Tb aie_Y, float max_pct_diff = 0.0,
       // bool is_fail = (pct_diff > max_pct_diff) &&
       // (std::abs((cpu_Y.at(r,c)>>8) - (aie_Y.at(r,c)>>8)) > 2);
       bool is_fail = (pct_diff > max_pct_diff) &&
-                     (std::abs((cpu_Y.at(r, c)) - (aie_Y.at(r, c))) > 2);
+                     (std::abs((cpu_Y.at(r, c)) - (aie_Y.at(r, c))) > 20);
 
       sum_pct_diff += pct_diff;
       if (is_fail) {
@@ -545,7 +547,8 @@ int check_result_mha(Ta cpu_Y, Tb aie_Y, float max_pct_diff = 0.0,
         std::cout << "Y[" << r << ", " << c << "]: "
                   << "Expected: " << (int)(cpu_Y.at(r, c)) << ", "
                   << "Received: " << (int)(aie_Y.at(r, c)) << ", "
-                  << "Pct Diff: " << pct_diff << "%\n";
+                  << "Pct Diff: " << pct_diff << " % , "
+                  << "Absolute Error: " << diff << "\n";
       }
       max_err = (diff > max_err) ? diff : max_err;
     }

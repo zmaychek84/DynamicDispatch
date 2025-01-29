@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -61,6 +62,14 @@ int test_concat(size_t MA, size_t KA, size_t MB, size_t KB, size_t N,
   ryzenai::concat concat_ =
       ryzenai::concat<InT, OuT>(a_dtype, c_dtype, true, attr);
 
+  std::vector<size_t> param_shape = {MA, KA};
+  concat_.set_params(model_name, param_shape);
+
+  std::vector<Tensor> const_Tensor;
+  concat_.initialize_const_params(
+      const_Tensor); // passing empty const tensor. call used only to initialize
+                     // control packet related items
+
   std::vector<Tensor> input_Tensor;
   struct Tensor a_T = {a.data(), a_shape, a_dtype};
   input_Tensor.push_back(a_T);
@@ -99,73 +108,73 @@ int test_concat(size_t MA, size_t KA, size_t MB, size_t KB, size_t N,
 }
 
 // CONCAT 4x4
-TEST(C4mzdk5_CONCAT_a16, Kernel1) {
+TEST(C4mzdk5_CONCAT_a16, Kernel_64_64_64_64_19) {
   int err_count = test_concat<uint16_t, uint16_t>(
       64, 64, 64, 64, 19, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_CONCAT_a16, Kernel2) {
+TEST(C4mzdk5_CONCAT_a16, Kernel_256_64_256_64_19) {
   int err_count = test_concat<uint16_t, uint16_t>(
       256, 64, 256, 64, 19, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_CONCAT_a16, Kernel3) {
+TEST(C4mzdk5_CONCAT_a16, Kernel_1024_64_1024_64_9) {
   int err_count = test_concat<uint16_t, uint16_t>(
       1024, 64, 1024, 64, 9, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_CONCAT_a16, Kernel4) {
+TEST(C4mzdk5_CONCAT_a16, Kernel_4096_64_4096_64_4) {
   int err_count = test_concat<uint16_t, uint16_t>(
       4096, 64, 4096, 64, 4, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_CONCAT_a16, Kernel5) {
+TEST(C4mzdk5_CONCAT_a16, Kernel_4096_640_4096_320_1) {
   int err_count = test_concat<uint16_t, uint16_t>(
       4096, 640, 4096, 320, 1, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_CONCAT_a16, Kernel6) {
+TEST(C4mzdk5_CONCAT_a16, Kernel_64_1280_64_1280_1) {
   int err_count = test_concat<uint16_t, uint16_t>(
       64, 1280, 64, 1280, 1, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_CONCAT_a16, Kernel7) {
+TEST(C4mzdk5_CONCAT_a16, Kernel_256_1280_256_640_1) {
   int err_count = test_concat<uint16_t, uint16_t>(
       256, 1280, 256, 640, 1, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_CONCAT_a16, Kernel8) {
+TEST(C4mzdk5_CONCAT_a16, Kernel_256_1280_256_1280_1) {
   int err_count = test_concat<uint16_t, uint16_t>(
       256, 1280, 256, 1280, 1, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_CONCAT_a16, Kernel9) {
+TEST(C4mzdk5_CONCAT_a16, Kernel_1024_640_1024_320_1) {
   int err_count = test_concat<uint16_t, uint16_t>(
       1024, 640, 1024, 320, 1, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_CONCAT_a16, Kernel10) {
+TEST(C4mzdk5_CONCAT_a16, Kernel_1024_640_1024_640_1) {
   int err_count = test_concat<uint16_t, uint16_t>(
       1024, 640, 1024, 640, 1, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_CONCAT_a16, Kernel11) {
+TEST(C4mzdk5_CONCAT_a16, Kernel_1024_1280_1024_640_1) {
   int err_count = test_concat<uint16_t, uint16_t>(
       1024, 1280, 1024, 640, 1, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_CONCAT_a16, Kernel12) {
+TEST(C4mzdk5_CONCAT_a16, Kernel_4096_320_4096_320_1) {
   int err_count = test_concat<uint16_t, uint16_t>(
       4096, 320, 4096, 320, 1, false, "uint16", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;

@@ -1,5 +1,6 @@
 ##
-## Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+# Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+# Licensed under the MIT License.
 ##
 
 import onnx
@@ -34,7 +35,12 @@ class ONNXGraph:
     def __init__(self, model):
         self.nodev = {}
         self.aux_info = {}  # placeholder to keep any new random hacks coming in.
-        self.model = model
+        if isinstance(model, onnx.ModelProto):
+            self.graph = model.graph
+        elif isinstance(model, onnx.GraphProto):
+            self.graph = model
+        else:
+            raise ValueError(f"Unknown initializer: {type(model)}")
         # Dictionary to store all named proto tensors in self.model.
         self._proto_tensors = {}
         ##Exclude list contains initializer items + tensors which are driven by constant operator
@@ -45,23 +51,23 @@ class ONNXGraph:
         self.initializer_info_cache = {}
 
         # Collect all IO tensor objs ...
-        for obj in model.graph.value_info:
+        for obj in self.graph.value_info:
             self._proto_tensors[obj.name] = obj
 
-        for obj in model.graph.initializer:
+        for obj in self.graph.initializer:
             self._proto_tensors[obj.name] = obj
 
-        for obj in model.graph.input:
+        for obj in self.graph.input:
             self._proto_tensors[obj.name] = obj
 
-        for obj in model.graph.output:
+        for obj in self.graph.output:
             self._proto_tensors[obj.name] = obj
         # ...
 
-        for vi in model.graph.value_info:
+        for vi in self.graph.value_info:
             self.value_info_cache[vi.name] = vi
 
-        for ci in model.graph.initializer:
+        for ci in self.graph.initializer:
             # self.exclude_list[ci.name] = ci
             self.initializer_info_cache[ci.name] = ci
 
@@ -71,7 +77,7 @@ class ONNXGraph:
         #             self.exclude_list[out] = node
         #         self.exclude_list[node.name] = node
 
-        for node in model.graph.node:
+        for node in self.graph.node:
             if self.is_excluded(node.name):
                 continue
 
@@ -109,14 +115,14 @@ class ONNXGraph:
         # for n in self.nodev.values():
         #     if not n.inputs:
         #         ret.append(n)
-        for inp in self.model.graph.input:
+        for inp in self.graph.input:
             ret.append(self.nodev[inp.name])
         return ret
 
     def getPrimaryOutputs(self):
         """Returns the GraphNodes representing primary output tensors"""
         ret = []
-        for outp in self.model.graph.output:
+        for outp in self.graph.output:
             ret.append(self.nodev[outp.name])
         return ret
 
@@ -204,12 +210,13 @@ class ONNXGraph:
         print("Tensor Info")
         print(self.value_info_cache.get(name))
 
-    def writeConsts(self, tensors, dir_path, prefix=""):
+    def writeConsts(self, tensors, dir_path, prefix="", use_abs_paths=True):
         const_file_info = {}
         for idx, tensor in enumerate(tensors):
             if isinstance(tensor.op, onnx.onnx_ml_pb2.TensorProto):
                 filename = os.path.join(dir_path, f"{prefix}{idx}.const")
-                filename = os.path.abspath(filename)
+                if use_abs_paths:
+                    filename = os.path.abspath(filename)
                 size = saveTensorToFile(tensor.op, filename)
                 # print(f"Writing {tensor.name}'s data to {filename} ... Done")
                 const_file_info[tensor.name] = (filename, size)
@@ -218,7 +225,7 @@ class ONNXGraph:
     """ Returns a list of ops sorted topologically"""
 
     def topologicalSortOpsviaONNX(self):
-        res = [node.name for node in self.model.graph.node]
+        res = [node.name for node in self.graph.node]
         return res
 
     # FIXME : Incorrect functionality. Fix required
@@ -352,36 +359,42 @@ def parseTensorGraphNode(graph_node):
     return parse_fn(op)
 
 
-def saveTensorToFile(tensor: onnx.onnx_ml_pb2.TensorProto, filename):
+def tensor_proto_to_numpy(tensor: onnx.onnx_ml_pb2.TensorProto):
+    shape = onnx_tool.tensor.shape_of_initializer(tensor)
     onnx_dtype = tensor.data_type
     np_dtype = onnx.helper.tensor_dtype_to_np_dtype(onnx_dtype)
-    if onnx_dtype in {onnx.TensorProto.FLOAT}:
-        np_array = np.array(tensor.float_data).astype(np.float32)
-    elif onnx_dtype in {onnx.TensorProto.INT64}:
-        if len(tensor.raw_data) > 0:
-            np_array = np.frombuffer(tensor.raw_data, dtype=np_dtype)
-        else:
+    if tensor.raw_data == b"":
+        if onnx_dtype in {onnx.TensorProto.FLOAT}:
+            np_array = np.array(tensor.float_data).astype(np.float32)
+        elif onnx_dtype in {onnx.TensorProto.INT64}:
             np_array = np.array(tensor.int64_data).astype(np.int64)
-    elif onnx_dtype in {
-        onnx.TensorProto.INT32,
-        onnx.TensorProto.UINT16,
-        onnx.TensorProto.INT16,
-        onnx.TensorProto.UINT8,
-        onnx.TensorProto.INT8,
-    }:
-        if len(tensor.raw_data) > 0:
-            np_array = np.frombuffer(tensor.raw_data, dtype=np_dtype)
+        elif onnx_dtype in {
+            onnx.TensorProto.INT32,
+            onnx.TensorProto.UINT16,
+            onnx.TensorProto.INT16,
+            onnx.TensorProto.UINT8,
+            onnx.TensorProto.INT8,
+        }:
+            if len(tensor.raw_data) > 0:
+                np_array = np.frombuffer(tensor.raw_data, dtype=np_dtype)
+            else:
+                np_array = np.array(tensor.int32_data).astype(np_dtype)
+        elif onnx_dtype in {onnx.TensorProto.BFLOAT16}:
+            np_array = np.array(tensor.int32_data).astype(np.uint16)
+            # print("weights sum : ", np_array.astype(np.int64).sum(), filename)
         else:
-            np_array = np.array(tensor.int32_data).astype(np_dtype)
-    elif onnx_dtype in {onnx.TensorProto.BFLOAT16}:
-        np_array = np.array(tensor.int32_data).astype(np.uint16)
-        # print("weights sum : ", np_array.astype(np.int64).sum(), filename)
+            str_type = onnx.helper.tensor_dtype_to_string(onnx_dtype)
+            raise Exception(f"Unsupported data type : {str_type}")
     else:
-        str_type = onnx.helper.tensor_dtype_to_string(onnx_dtype)
-        raise Exception("Unsupported data type : {str_type}")
-
+        np_array = np.frombuffer(tensor.raw_data, dtype=np_dtype)
     if np_array.size == 0:
         raise RuntimeError(f"couldn't find data for {tensor.name}")
+
+    return np_array.reshape(shape)
+
+
+def saveTensorToFile(tensor: onnx.onnx_ml_pb2.TensorProto, filename):
+    np_array = tensor_proto_to_numpy(tensor)
 
     np_array.tofile(filename)
     return np_array.nbytes

@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 #include <any>
 #include <iostream>
@@ -20,7 +21,8 @@
 #include <utils/instruction_registry.hpp>
 #include <xrt_context/xrt_context.hpp>
 
-#include <ops/op_interface.hpp>
+#include "utils/ctrl_pkt_utils.hpp"
+#include <ops/ops_common/ctrlpkt.hpp>
 #include <ops/slice/slice.hpp>
 #include <utils/logging.hpp>
 #include <utils/utils.hpp>
@@ -201,7 +203,6 @@ slice<InT, OutT>::slice(const std::string &a_dtype, const std::string &c_dtype,
 
   if (design_param_.find("4x4") != std::string::npos) { // 4x4 design
     txn_fname_prefix_ = "slice_4x4_" + txnbin_a_header.at(a_dtype_);
-
     param_fname_prefix_ = "slice_4x4_" + txnbin_a_header.at(a_dtype_);
   } else {
     throw std::runtime_error("slice IPU Wrapper only support 4x4 design.");
@@ -219,6 +220,7 @@ slice<InT, OutT>::slice(const std::string &a_dtype, const std::string &c_dtype,
   run_aie_time_ = 0;
   cpu_acc_time_ = 0;
   num_run_aie_ = 0;
+  is_ctrl_pkt_ = 1;
 
   std::call_once(logger_flag_, []() {
     std::string header = "slice_id H W C kernel_h kernel_w kernel_c Execute"
@@ -235,11 +237,103 @@ slice<InT, OutT>::slice(const std::string &a_dtype, const std::string &c_dtype,
 }
 
 template <typename InT, typename OutT>
+void slice<InT, OutT>::set_params(const std::string &model_name,
+                                  std::vector<size_t> input_shape) {
+  std::string XCLBIN_FNAME =
+      OpInterface::get_dd_base_dir() + ryzenai::mzdk54x4_A16W8_QDQ_XCLBIN_PATH;
+
+  kernel_x_shape_[0] = input_shape.at(0); // M
+  kernel_x_shape_[1] = input_shape.at(1); // K
+
+  xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME);
+  std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
+}
+
+template <typename InT, typename OutT>
 void slice<InT, OutT>::initialize_const_params(
     ConstBufferIO &io, const std::vector<Tensor> &const_params,
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("slice initialize_const_params(ptr) ...");
 
+  RYZENAI_LOG_TRACE("slice initialize_const_params(ptr) ... DONE");
+}
+
+template <typename InT, typename OutT>
+void slice<InT, OutT>::initialize_const_params(
+    const std::vector<Tensor> &const_params,
+    const std::map<std::string, std::any> &attr) {
+  RYZENAI_LOG_TRACE("slice initialize_const_params(ptr) ...");
+
+  const auto a_bo_size_in_bytes =
+      kernel_x_shape_[0] * kernel_x_shape_[1] * a_dtype_size_;
+  const auto c_bo_size_in_bytes =
+      kernel_x_shape_[0] * kernel_x_shape_[1] / 2 * c_dtype_size_;
+
+  /* Create input/output BOs */
+  const size_t A_BO_SIZE = a_bo_size_in_bytes;
+  const size_t C_BO_SIZE = c_bo_size_in_bytes;
+  RYZENAI_LOG_TRACE("slice: A_BO_SIZE:" + std::to_string(A_BO_SIZE) +
+                    " C_BO_SIZE:" + std::to_string(C_BO_SIZE));
+
+  a_bo_ = xrt::bo(xrt_ctx_->get_device(), A_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
+                  xrt_ctx_->get_kernel().group_id(8));
+
+  c_bo_ = xrt::bo(xrt_ctx_->get_device(), C_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
+                  xrt_ctx_->get_kernel().group_id(8));
+
+  auto M = kernel_x_shape_[0];
+  auto K = kernel_x_shape_[1];
+  auto [Mo, Ko, So] = map_padded_shape(M, K, slice_idx_);
+  if (is_ctrl_pkt_) {
+    // Based on the mapped_shape to get the meta json file
+    std::vector<uint8_t> json_data;
+    try {
+      auto json_key =
+          get_instr_key(param_fname_prefix_, Mo, Ko, So) + "_ctrl_meta";
+      Transaction &txn = Transaction::getInstance();
+      json_data = txn.get_txn_bvec(json_key);
+    } catch (...) {
+      is_ctrl_pkt_ = 0;
+    }
+
+    if (is_ctrl_pkt_) {
+      std::cout << "ctrlpkt patching" << std::endl;
+      RYZENAI_LOG_TRACE("slice patch ctrlpkt ... START");
+      // get param_bo address
+      auto param_bo_key =
+          get_instr_key(param_fname_prefix_, Mo, Ko, So) + "_param";
+      const xrt::bo &param_bo =
+          xrt_ctx_->get_registry().get_param_bo(param_bo_key).second;
+
+      // Get ctrl pkt patch info from json
+      std::vector<CtrlPktPatchInfo> ctrlpkt_info;
+      ctrlpkt_info = json_str_to_ctrlpkt_patch_info(json_data);
+
+      // Get the ctrl pkt
+      auto ctrl_bo_key =
+          get_instr_key(param_fname_prefix_, Mo, Ko, So) + "_ctrl";
+      std::string ctrl_params =
+          Transaction::getInstance().get_txn_str(ctrl_bo_key);
+      std::vector<char> ctrl_buffer(ctrl_params.begin(), ctrl_params.end());
+
+      // ctrl pkt patch
+      std::vector<char> ctrl_pkt_new;
+      std::vector<uint64_t> buffer_addrs = {
+          uint64_t(c_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(a_bo_.address() + DDR_AIE_ADDR_OFFSET),
+          uint64_t(0 + DDR_AIE_ADDR_OFFSET), // No b_bo/const bo for slice
+          uint64_t(param_bo.address() + DDR_AIE_ADDR_OFFSET)};
+      ctrl_pkt_new = patch_ctrl_bin(ctrl_buffer, ctrlpkt_info, buffer_addrs);
+
+      size_t ctrl_bo_words = ctrl_pkt_new.size();
+      ctrl_bo_ =
+          xrt::bo(xrt_ctx_->get_device(), ctrl_bo_words, XRT_BO_FLAGS_HOST_ONLY,
+                  xrt_ctx_->get_kernel().group_id(8));
+      ctrl_bo_.write(ctrl_pkt_new.data());
+      ctrl_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+      RYZENAI_LOG_TRACE("slice patch ctrlpkt ... DONE");
+    }
+  }
   RYZENAI_LOG_TRACE("slice initialize_const_params(ptr) ... DONE");
 }
 
@@ -272,6 +366,7 @@ void slice<InT, OutT>::execute(std::vector<Tensor> &input,
   c_shape_[0] = output.at(c_idx).shape.at(0);
   c_shape_[1] = output.at(c_idx).shape.at(1);
 
+#if 0
   kernel_x_shape_[0] = M;
   kernel_x_shape_[1] = K;
 
@@ -291,6 +386,7 @@ void slice<InT, OutT>::execute(std::vector<Tensor> &input,
 
   c_bo_ = xrt::bo(xrt_ctx_->get_device(), C_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
                   xrt_ctx_->get_kernel().group_id(8));
+#endif
 
   size_t a_size = a_shape_[0] * a_shape_[1] * sizeof(InT);
   RYZENAI_LOG_TRACE("slice: a_size:" + std::to_string(a_size));
@@ -317,16 +413,15 @@ void slice<InT, OutT>::execute(std::vector<Tensor> &input,
   const xrt::bo &param_bo =
       xrt_ctx_->get_registry().get_param_bo(param_bo_key).second;
   uint32_t instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
+
   auto kernel_ = xrt_ctx_->get_kernel();
   // launch the kernel
-  xrt::run run;
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   c_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  run = kernel_(2, instr_bo, instr_bo_words,
-                c_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                a_bo_.address() + DDR_AIE_ADDR_OFFSET, 0,
-                param_bo.address() + DDR_AIE_ADDR_OFFSET, 0);
-  run.wait2();
+
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, c_bo_, a_bo_, 0, param_bo, ctrl_bo_,
+      true, is_ctrl_pkt_);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);
   num_run_aie_++;
@@ -383,6 +478,42 @@ const std::vector<uint8_t> slice<InT, OutT>::get_super_kernel_params(
 }
 
 template <typename InT, typename OutT>
+std::vector<uint8_t> slice<InT, OutT>::get_ctrl_pkts(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto [M, K] = extract_MK(input);
+  auto [Mo, Ko, So] = map_padded_shape(M, K, slice_idx_);
+  // TODO: Add check to validate tensor shapes
+  std::string ctrl_key =
+      get_instr_key(param_fname_prefix_, Mo, Ko, So) + "_ctrl";
+  // std::cout << "Super kernel params name : " << fname << std::endl;
+  try {
+    Transaction &txn = Transaction::getInstance();
+    return txn.get_txn_bvec(ctrl_key);
+  } catch (...) {
+    return {};
+  }
+}
+
+template <typename InT, typename OutT>
+std::vector<CtrlPktPatchInfo> slice<InT, OutT>::get_ctrl_pkt_patch_info(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  auto [M, K] = extract_MK(input);
+  auto [Mo, Ko, So] = map_padded_shape(M, K, slice_idx_);
+  // TODO: Add check to validate tensor shapes
+  try {
+    auto ctrl_pkt_meta =
+        get_instr_key(param_fname_prefix_, Mo, Ko, So) + "_ctrl_meta";
+    Transaction &txn = Transaction::getInstance();
+    return json_str_to_ctrlpkt_patch_info(txn.get_txn_bvec(ctrl_pkt_meta));
+  } catch (...) {
+    // throw std::runtime_error("slice : Can not file the ctrl_meta.json file");
+    return {};
+  }
+}
+
+template <typename InT, typename OutT>
 std::vector<OpArgMap> slice<InT, OutT>::get_buffer_reqs(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
@@ -394,6 +525,7 @@ std::vector<OpArgMap> slice<InT, OutT>::get_buffer_reqs(
   size_t input_bo_size = (Mo * Ko * sizeof(InT));
   size_t output_bo_size = (out_shape * sizeof(OutT));
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
+  size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
 
   // Slice does not require any const bo by default.
   // If we are not passing const BO to to arg map, we are seeing error.
@@ -406,7 +538,8 @@ std::vector<OpArgMap> slice<InT, OutT>::get_buffer_reqs(
        const_params_bo_size}, // Dummy allocation
       {OpArgMap::OpArgType::OUTPUT, 0, 2, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
-       super_kernel_size}};
+       super_kernel_size},
+      {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};
 
   return arg_map;
 }

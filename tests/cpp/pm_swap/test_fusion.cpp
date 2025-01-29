@@ -74,14 +74,20 @@ int test_pm_swap(const std::string &meta_json, size_t M, size_t K,
   }
 
   std::string xclbin_fname =
-      Utils::get_env_var("DD_ROOT") + "xclbin\\stx\\square_cube.xclbin";
+      Utils::get_env_var("DD_ROOT") + "\\xclbin\\stx\\square_cube.xclbin";
 
   auto meta = OpsFusion::load_meta_json(meta_json);
-  auto xclbin_content = OpsFusion::read_bin_file<char>(xclbin_fname);
-  OpsFusion::FusionRuntime rt(xclbin_fname, xclbin_content);
+
+  OpsFusion::FusionRuntime rt_cmp;
   OpsFusion::DDConfig cfg = {3, true};
-  rt.compile(meta, "", cfg);
-  rt.init(meta, "", cfg);
+  auto xclbin_content = OpsFusion::read_bin_file<char>(xclbin_fname);
+  cfg.xclbin_content = &xclbin_content;
+  rt_cmp.compile(meta, "", cfg);
+  rt_cmp.save_state("dd_metastate");
+
+  OpsFusion::FusionRuntime rt(xclbin_fname, xclbin_content);
+  rt.load_state("dd_metastate");
+  rt.init(meta);
 
   struct Tensor a_T = {a.data(), a_shape, "int32"};
   struct Tensor c_T = {aie_out.data(), a_shape, "int32"};

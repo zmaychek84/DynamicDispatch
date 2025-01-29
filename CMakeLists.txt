@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Advanced Micro Devices, Inc
+# Copyright (c) 2025 Advanced Micro Devices, Inc
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of
 # this software and associated documentation files (the "Software"), to deal in
@@ -36,12 +36,20 @@ if(PROJECT_IS_TOP_LEVEL)
   set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
 endif()
 
-set(DD_SRC_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/src
-                        ${PROJECT_SOURCE_DIR}/transaction/include
+set(DD_SRC_INCLUDE_DIRS
+    ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/transaction/include
+    ${PROJECT_SOURCE_DIR}/xclbin/include ${PROJECT_SOURCE_DIR}/tests
 )
 
 if(MSVC)
   set(DD_DEFAULT_COMPILE_OPTIONS "/Zc:__cplusplus" "/W3")
+
+  # set DEFAULT PARALLEL Level
+  if(NOT DEFINED ENV{NUMBER_OF_PROCESSORS})
+    set(CMAKE_BUILD_PARALLEL_LEVEL 8)
+  else()
+    set(CMAKE_BUILD_PARALLEL_LEVEL $ENV{NUMBER_OF_PROCESSORS})
+  endif()
 endif()
 
 include(FetchContent)
@@ -110,6 +118,7 @@ endif()
 
 add_subdirectory(src)
 add_subdirectory(transaction)
+add_subdirectory(xclbin)
 
 if(ENABLE_DD_TESTS)
   add_subdirectory(tests)

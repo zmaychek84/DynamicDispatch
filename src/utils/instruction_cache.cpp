@@ -112,9 +112,8 @@ void instruction_cache::put(const std::string &key,
     throw std::runtime_error(
         "Transaction string is smaller than the size reported in the header.");
   }
-  std::vector<uint8_t> txn_bin(txn_string.begin(), txn_string.end());
-  auto i_buf = transaction_op(txn_bin);
-  size_t instr_bo_size = i_buf.get_txn_instr_size();
+
+  size_t instr_bo_size = transaction_op::getInstrBufSize(txn_string);
   std::size_t instr_bo_aligned_size =
       Utils::align_to_next(instr_bo_size, INSTR_BO_ALIGNMENT);
 
@@ -139,7 +138,7 @@ void instruction_cache::put(const std::string &key,
     }
   }
 
-  instr_bo.write(i_buf.get_txn_op().data());
+  transaction_op::addTxnOp(txn_string, instr_bo.map<void *>());
   instr_bo.sync(XCL_BO_SYNC_BO_TO_DEVICE);
 
   list_.push_front(std::make_tuple(key, instr_bo_aligned_size, instr_bo));

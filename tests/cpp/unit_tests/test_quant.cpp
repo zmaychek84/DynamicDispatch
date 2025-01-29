@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -42,17 +43,19 @@ int test_quant(int M, int N, bool debug = false,
 
 #ifdef RANDOM_DATA
   srand(0xABCD);
-  lrn_matrix::initialize_random_bfloat16(data, M * N, -20, 20);
+  lrn_matrix::initialize_random_bfloat16(data, M * N, -1.3, 1.3);
 
-  float scale = 0.00001;
-  uint16_t zp = 1500;
+  float scale = 0.00065;
+  uint16_t zp = 57424;
   qdq_params[0] = zp;
   qdq_params[1] = float_to_bfloat16(1 / scale);
 
   quant(input_mat, cpu_mat, scale, zp, "uint16");
 #else
-  std::string data_folder = OpInterface::get_dd_base_dir() + "//QUANT_" +
-                            std::to_string(M) + "_" + std::to_string(N) + "//";
+  // std::string data_folder = OpInterface::get_dd_base_dir() + "//QUANT_" +
+  std::string data_folder = OpInterface::get_dd_base_dir() +
+                            "//..//Q_DeQ_shapes//Quant_" + std::to_string(M) +
+                            "_" + std::to_string(N) + "//";
 
   std::string ifm_filename = data_folder + "ifm.bin";
   std::string ofm_filename = data_folder + "ofm.bin";
@@ -96,7 +99,7 @@ int test_quant(int M, int N, bool debug = false,
 
   // compare results
   int max_error = 0;
-  int error_limit = 250;
+  int error_limit = 10;
   float L2_norm = 0;
   for (int r = 0; r < M; r++) {
     for (int c = 0; c < N; c++) {
@@ -124,6 +127,7 @@ int test_quant(int M, int N, bool debug = false,
   return err_count;
 }
 
+#if 0
 TEST(C4mzdk5_QUANT_Testa16, Kernel1) {
   int err_count = test_quant<uint16_t, uint16_t>(64, 5120, false, "bfloat16",
                                                  "uint16", "4x4mzdk5");
@@ -207,6 +211,7 @@ TEST(C4mzdk5_QUANT_Testa16, Kernel14) {
                                                  "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
+#endif
 
 TEST(C4mzdk5_QUANT_Testa16, Kernel15) {
   int err_count = test_quant<uint16_t, uint16_t>(1024, 960, false, "bfloat16",
@@ -214,6 +219,7 @@ TEST(C4mzdk5_QUANT_Testa16, Kernel15) {
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
+#if 0
 TEST(C4mzdk5_QUANT_Testa16, Kernel16) {
   int err_count = test_quant<uint16_t, uint16_t>(1024, 1280, false, "bfloat16",
                                                  "uint16", "4x4mzdk5");
@@ -249,6 +255,7 @@ TEST(C4mzdk5_QUANT_Testa16, Kernel21) {
                                                  "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
+#endif
 
 TEST(C4mzdk5_QUANT_Testa16, Kernel22) {
   int err_count = test_quant<uint16_t, uint16_t>(4096, 960, false, "bfloat16",

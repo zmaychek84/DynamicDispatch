@@ -3,7 +3,8 @@
 #include "op_fuser/fuse_ops.hpp"
 #include "op_fuser/fusion_rt.hpp"
 #include "ops/op_builder.hpp"
-#include "ops/ops_common/weight_bias_f2bfp.hpp"
+#include "ops/ops_common/matmulnbits_pack_const.hpp"
+#include "ops/sd/wts_packing.hpp"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
@@ -152,7 +153,17 @@ NB_MODULE(_DynamicDispatch, m) {
       .def("execute", &FusionRuntime::execute_ndarrays,
            "Function to initiate inference.");
 
-  auto bfp16 = m.def_submodule("bfp16", "bfp16 submodule");
-  bfp16.def("const_from_fp32_to_bfp16", &const_from_fp32_to_bfp16,
-            "Convert weight and bias from float(2D) to 1D bfp16 array");
+  auto sd = m.def_submodule("sd", "stable diffusion submodule");
+  sd.def("matmul_to_bf16", &ryzenai::sd::matmul_to_bf16,
+         "Convert matmul weight from float to shuffled bf16 array");
+  sd.def("conv_to_bfp16", &ryzenai::sd::conv_to_bfp16,
+         "Convert weight and bias from float(2D) to 1D bfp16 array");
+  sd.def("gemm_to_bfp16", &ryzenai::sd::gemm_to_bfp16,
+         "Convert gemm weight(bias) from float to shuffled bfp16 array");
+
+  auto matmulnbits = m.def_submodule("matmulnbits", "matmulnbits submodule");
+  matmulnbits.def("matmulnbits_pack_const_float32",
+                  &matmulnbits_pack_const_float32,
+                  "Reformat weights/scale/bias/zero-point from ONNX to "
+                  "NPU kernel layout");
 }

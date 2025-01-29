@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 #include <any>
 #include <iostream>
@@ -735,18 +736,15 @@ void conv2d<InT, WtT, BiasT, OutT, DWC>::execute(std::vector<Tensor> &input,
   uint32_t instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
   auto kernel_ = xrt_ctx_->get_kernel();
   // launch the kernel
-  xrt::run run;
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   output_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  run = kernel_(2, instr_bo, instr_bo_words,
-                input_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                param_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                output_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                scratch_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                0); // TO DO: this is shim-dma control packets
-                    // will need to remap arg_idx 5 to 4 when converting from
-                    // DPU sequence to TXN sequence
-  run.wait2();
+
+  ryzenai::dynamic_dispatch::execute_kernel(
+      kernel_, 2, instr_bo, instr_bo_words, input_bo_, param_bo_, output_bo_,
+      scratch_bo_, 0, true,
+      false); // TO DO: this is shim-dma control packets
+              // will need to remap arg_idx 5 to 4 when converting from
+              // DPU sequence to TXN sequence
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   run_aie_time_ += static_cast<int64_t>(run_aie_stop - run_aie_start);
   num_run_aie_++;

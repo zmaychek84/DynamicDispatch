@@ -1,5 +1,6 @@
 /*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <fstream>
@@ -49,6 +50,12 @@ int test_matmul(int M, int K, int N, int shape_format = 0, bool debug = false,
     Msubv_act = subv[0];
     Ksubv_act = subv[1];
     Nsubv_act = subv[2];
+  }
+
+  if (model_name == "4x4PSW1.0") {
+    Msubv_act = Msubv_PSW;
+    Ksubv_act = Ksubv_PSW;
+    Nsubv_act = Nsubv_PSW;
   }
 
   int N_w = N;
@@ -139,7 +146,7 @@ int test_matmul(int M, int K, int N, int shape_format = 0, bool debug = false,
                                     cpu_Y_qdq, "uint8");
   }
 #else
-
+#if 0
 std:
   string fld_name = "//bin_files//m3uec_Matmul0";
   std::vector<uint32_t> aint(M * K);
@@ -196,11 +203,17 @@ std:
     cpu_out_qdq[r] = (OuT)(outint[r]);
   }
 #endif
+#endif
   std::map<std::string, std::any> attr;
 
   if (model_name == "4x4mzdk5") {
     attr["design_param"] = std::vector<string>{"4x4"};
     attr["input_shape"] = std::vector<int>{1, P, P, N};
+  }
+
+  if (model_name == "4x4PSW1.0") {
+    attr["design_param"] = std::vector<string>{"4x4"};
+    attr["input_shape"] = std::vector<int>{1, M, N};
   }
 
   ryzenai::matmul matmul_ =
@@ -553,73 +566,73 @@ TEST(m7h4xjg_GEMM_Testa16w8, Kernel19) {
 }
 
 // mzdk5 4x4
-TEST(C4mzdk5_GEMM_Testa16w8, Kernel1) {
+TEST(C4mzdk5_GEMM_Testa16w8, Kernel_64_1280_10240) {
   int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
       64, 1280, 10240, 1, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GEMM_Testa16w8, Kernel2) {
+TEST(C4mzdk5_GEMM_Testa16w8, Kernel_64_1280_1280) {
   int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
       64, 1280, 1280, 1, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GEMM_Testa16w8, Kernel3) {
+TEST(C4mzdk5_GEMM_Testa16w8, Kernel_64_5120_1280) {
   int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
       64, 5120, 1280, 1, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GEMM_Testa16w8, Kernel4) {
+TEST(C4mzdk5_GEMM_Testa16w8, Kernel_256_5120_1280) {
   int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
       256, 5120, 1280, 1, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GEMM_Testa16w8, Kernel5) {
+TEST(C4mzdk5_GEMM_Testa16w8, Kernel_256_1280_10240) {
   int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
       256, 1280, 10240, 1, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GEMM_Testa16w8, Kernel6) {
+TEST(C4mzdk5_GEMM_Testa16w8, Kernel_256_1280_1280) {
   int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
       256, 1280, 1280, 1, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GEMM_Testa16w8, Kernel7) {
+TEST(C4mzdk5_GEMM_Testa16w8, Kernel_1024_640_5120) {
   int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
       1024, 640, 5120, 1, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GEMM_Testa16w8, Kernel8) {
+TEST(C4mzdk5_GEMM_Testa16w8, Kernel_1024_2560_640) {
   int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
       1024, 2560, 640, 1, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GEMM_Testa16w8, Kernel9) {
+TEST(C4mzdk5_GEMM_Testa16w8, Kernel_1024_640_640) {
   int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
       1024, 640, 640, 1, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GEMM_Testa16w8, Kernel10) {
+TEST(C4mzdk5_GEMM_Testa16w8, Kernel_4096_1280_320) {
   int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
       4096, 1280, 320, 1, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GEMM_Testa16w8, Kernel11) {
+TEST(C4mzdk5_GEMM_Testa16w8, Kernel_4096_320_320) {
   int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
       4096, 320, 320, 1, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(C4mzdk5_GEMM_Testa16w8, Kernel12) {
+TEST(C4mzdk5_GEMM_Testa16w8, Kernel_4096_320_2560) {
   int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
       4096, 320, 2560, 1, false, "uint16", "uint8", "uint16", "4x4mzdk5");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
@@ -671,5 +684,19 @@ TEST(mdsqrv1_1_GEMM_Testa8w8, Kernel7) {
 TEST(mdsqrv1_1_GEMM_Testa8w8, Kernel8) {
   int err_count = test_matmul<uint8_t, uint8_t, uint8_t>(
       256, 768, 26, 0, false, "uint8", "uint8", "uint8", "mdsqrv1.1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// PSW 1.0 Q K V proj
+TEST(PSW_GEMM_Testa16w8, Kernel_a16_w8_acc16_64x768_768x768) {
+  int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
+      64, 768, 768, 0, false, "uint16", "uint8", "uint16", "4x4PSW1.0");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// PSW 1.0 Post GeLU Matmul Add
+TEST(PSW_GEMM_Testa16w8, Kernel_a16_w8_acc16_64x3072_3072x768) {
+  int err_count = test_matmul<uint16_t, uint8_t, uint16_t>(
+      64, 3072, 768, 0, false, "uint16", "uint8", "uint16", "4x4PSW1.0");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

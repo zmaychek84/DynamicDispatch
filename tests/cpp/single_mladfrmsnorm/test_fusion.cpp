@@ -77,8 +77,7 @@ static int test_mladfrmsnorm(const std::string &meta_json, size_t M, size_t K,
   rt.load_state("dd_metastate");
   rt.init(meta);
   std::vector<Tensor> input_Tensors;
-  input_Tensors = {{a.data(), a_shape, a_dtype},
-                   {wts.data(), wts_shape, wts_dtype}};
+  input_Tensors = {{a.data(), a_shape, a_dtype}};
 
   std::vector<Tensor> output_Tensors;
   output_Tensors = {{aie_out.data(), a_shape, c_dtype}};

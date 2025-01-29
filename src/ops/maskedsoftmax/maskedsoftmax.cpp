@@ -1,5 +1,6 @@
 /*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 #include <iostream>
 #include <map>
@@ -19,6 +20,7 @@
 
 #include <txn_container.hpp>
 #include <utils/instruction_registry.hpp>
+#include <xclbin_container.hpp>
 #include <xrt_context/xrt_context.hpp>
 
 #include <ops/maskedsoftmax/maskedsoftmax.hpp>
@@ -30,13 +32,12 @@ namespace ryzenai {
 
 namespace {
 std::string getXCLBinName(std::string op_version) {
-  return (op_version == "v1")
-             ? OpInterface::get_dd_base_dir() +
-                   LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_PATH
-             : OpInterface::get_dd_base_dir() +
-                   LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_PATH;
+  if (op_version == "v1" || op_version == "flat") {
+    return LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  } else {
+    return LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  }
 }
-
 } // namespace
 
 static std::tuple<size_t, size_t, size_t> extract_BMK(const Tensor &input) {
@@ -90,7 +91,8 @@ std::string masked_softmax<LhsT, MaskT, OutT>::get_instr_key(std::string prefix,
                                                              size_t m,
                                                              size_t k) const {
   return "maskedsoftmax_" + prefix + "_" + std::to_string(batch) + "_" +
-         std::to_string(m) + "_" + std::to_string(k);
+         std::to_string(m) + "_" + std::to_string(k) + "_" +
+         std::to_string(headsize_);
 }
 
 template <typename LhsT, typename MaskT, typename OutT>
@@ -145,13 +147,18 @@ masked_softmax<LhsT, MaskT, OutT>::masked_softmax(
   op_version_ = "v1";
   if (attr.find("op_version") != attr.end()) {
     op_version_ = std::any_cast<std::string>(attr.find("op_version")->second);
-    if (op_version_ != "v1") {
+    if (op_version_ != "v1" && op_version_ != "flat") {
       throw std::runtime_error("The selected op version does not exist");
     }
   }
 
-  txn_fname_prefix_ = "maskedsoftmax_" + op_version_ + "_" +
-                      txnbin_operand_header.at(operand_dtype_);
+  headsize_ = 128;
+  if (attr.find("headsize") != attr.end()) {
+    headsize_ = std::any_cast<int>(attr.find("headsize")->second);
+  }
+
+  txn_fname_prefix_ =
+      "maskedsoftmax_v1_" + txnbin_operand_header.at(operand_dtype_);
 
   default_shapes_[txn_fname_prefix_] = std::vector<std::tuple<int, int, int>>();
 
@@ -189,6 +196,40 @@ masked_softmax<LhsT, MaskT, OutT>::masked_softmax(
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 128, 3072));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 3072, 3072));
 
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 2176));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 2304));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 2432));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 2560));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 2688));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 2816));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 2944));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 3072));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 3200));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 3328));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 3456));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 3584));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 3712));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 3840));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 3968));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 4096));
+
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 256));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 384));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 512));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 640));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 768));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 896));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 1024));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 1152));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 1280));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 1408));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 1536));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 1664));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 1792));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 1920));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(32, 1, 2048));
+
   masked_softmax_id_ = masked_softmax_count++;
 
   /*select xclbin based on the input/output types*/
@@ -208,8 +249,12 @@ masked_softmax<LhsT, MaskT, OutT>::masked_softmax(
                         sizeof(MaskT);
 
   if (load_xrt) {
-    xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME);
-    if (op_version_ == "v1") {
+
+    xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(
+        XCLBIN_FNAME, 0, {},
+        XclbinContainer::getInstance().get_xclbin_content(XCLBIN_FNAME));
+
+    if (op_version_ == "v1" || op_version_ == "flat") {
       std::call_once(instr_reg_v1_flag_,
                      [this, &attr]() { setup_instr_registry(attr); });
     } else {
@@ -381,13 +426,10 @@ void masked_softmax<LhsT, MaskT, OutT>::execute(std::vector<xrt::bo> &input,
   auto kernel_ = xrt_ctx_->get_kernel();
   // launch the kernel
   // do we really need to sync before? c_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  auto run = kernel_(2, instr_bo, instr_bo_words,
-                     input[0].address() + DDR_AIE_ADDR_OFFSET,
-                     input[1].address() + DDR_AIE_ADDR_OFFSET,
-                     output[0].address() + DDR_AIE_ADDR_OFFSET, 0, 0);
-  if (wait) {
-    run.wait2();
-  }
+
+  ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, instr_bo,
+                                            instr_bo_words, input[0], input[1],
+                                            output[0], 0, 0, wait, false);
 }
 template <typename LhsT, typename MaskT, typename OutT>
 std::vector<xrt::bo> masked_softmax<LhsT, MaskT, OutT>::get_inputs() {

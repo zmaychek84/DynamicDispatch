@@ -1,5 +1,6 @@
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
-// Created by abhbisht on 8/14/2024.
 //
 
 #include <iostream>
@@ -11,6 +12,1143 @@
 #include <vector>
 
 namespace conv_lp {
+struct mswbjvw_08_160_Layer1 : TilingInfo {
+  mswbjvw_08_160_Layer1() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {3, 1, 3, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {16, 64, 160};
+    this->align_ofm_shape = {16, 64, 160};
+    this->align_ifm = {3, 60, 160};
+    this->ofmsv_chunk = {8, 16, 16};
+    this->ifmsv_chunk = {8, 18, 24};
+    this->width_iter = 10;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {2, 2};
+    this->pool_strides = {2, 2};
+  }
+};
+struct mswbjvw_08_160_Layer2 : TilingInfo {
+  mswbjvw_08_160_Layer2() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {32, 32, 80};
+    this->align_ofm_shape = {32, 32, 80};
+    this->align_ifm = {16, 32, 80};
+    this->ofmsv_chunk = {16, 8, 16};
+    this->ifmsv_chunk = {16, 10, 24};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {2, 2};
+    this->pool_strides = {2, 2};
+  }
+};
+struct mswbjvw_08_160_Layer3 : TilingInfo {
+  mswbjvw_08_160_Layer3() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {16, 16, 40};
+    this->align_ofm_shape = {16, 16, 40};
+    this->align_ifm = {32, 16, 40};
+    this->ofmsv_chunk = {8, 4, 8};
+    this->ifmsv_chunk = {32, 4, 8};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer4 : TilingInfo {
+  mswbjvw_08_160_Layer4() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 29150;
+    this->ofm_shape = {32, 16, 40};
+    this->align_ofm_shape = {32, 16, 40};
+    this->align_ifm = {16, 16, 40};
+    this->ofmsv_chunk = {16, 4, 8};
+    this->ifmsv_chunk = {16, 6, 16};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer5 : TilingInfo {
+  mswbjvw_08_160_Layer5() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {128, 16, 40};
+    this->align_ofm_shape = {128, 16, 40};
+    this->align_ifm = {32, 16, 40};
+    this->ofmsv_chunk = {16, 4, 8};
+    this->ifmsv_chunk = {32, 4, 8};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 4;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer6 : TilingInfo {
+  mswbjvw_08_160_Layer6() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {16, 16, 40};
+    this->align_ofm_shape = {16, 16, 40};
+    this->align_ifm = {128, 16, 40};
+    this->ofmsv_chunk = {8, 4, 8};
+    this->ifmsv_chunk = {128, 4, 8};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer7 : TilingInfo {
+  mswbjvw_08_160_Layer7() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 29150;
+    this->ofm_shape = {32, 16, 40};
+    this->align_ofm_shape = {32, 16, 40};
+    this->align_ifm = {16, 16, 40};
+    this->ofmsv_chunk = {16, 4, 8};
+    this->ifmsv_chunk = {16, 6, 16};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer8 : TilingInfo {
+  mswbjvw_08_160_Layer8() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {128, 16, 40};
+    this->align_ofm_shape = {128, 16, 40};
+    this->align_ifm = {32, 16, 40};
+    this->ofmsv_chunk = {16, 4, 8};
+    this->ifmsv_chunk = {32, 4, 8};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 4;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {2, 1};
+    this->pool_strides = {2, 1};
+  }
+};
+struct mswbjvw_08_160_Layer9 : TilingInfo {
+  mswbjvw_08_160_Layer9() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {32, 8, 40};
+    this->align_ofm_shape = {32, 8, 40};
+    this->align_ifm = {128, 8, 40};
+    this->ofmsv_chunk = {16, 2, 8};
+    this->ifmsv_chunk = {128, 2, 8};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer10 : TilingInfo {
+  mswbjvw_08_160_Layer10() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 29920;
+    this->ofm_shape = {48, 8, 40};
+    this->align_ofm_shape = {48, 8, 40};
+    this->align_ifm = {32, 8, 40};
+    this->ofmsv_chunk = {8, 2, 40};
+    this->ifmsv_chunk = {16, 4, 48};
+    this->width_iter = 1;
+    this->depth_iter = 2;
+    this->height_iter = 1;
+    this->channel_iter = 3;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer11 : TilingInfo {
+  mswbjvw_08_160_Layer11() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {256, 8, 40};
+    this->align_ofm_shape = {256, 8, 40};
+    this->align_ifm = {48, 8, 40};
+    this->ofmsv_chunk = {16, 2, 8};
+    this->ifmsv_chunk = {48, 2, 8};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 8;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer12 : TilingInfo {
+  mswbjvw_08_160_Layer12() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {32, 8, 40};
+    this->align_ofm_shape = {32, 8, 40};
+    this->align_ifm = {256, 8, 40};
+    this->ofmsv_chunk = {16, 2, 8};
+    this->ifmsv_chunk = {64, 2, 8};
+    this->width_iter = 5;
+    this->depth_iter = 4;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer13 : TilingInfo {
+  mswbjvw_08_160_Layer13() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 29920;
+    this->ofm_shape = {48, 8, 40};
+    this->align_ofm_shape = {48, 8, 40};
+    this->align_ifm = {32, 8, 40};
+    this->ofmsv_chunk = {8, 2, 40};
+    this->ifmsv_chunk = {16, 4, 48};
+    this->width_iter = 1;
+    this->depth_iter = 2;
+    this->height_iter = 1;
+    this->channel_iter = 3;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer14 : TilingInfo {
+  mswbjvw_08_160_Layer14() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {256, 8, 40};
+    this->align_ofm_shape = {256, 8, 40};
+    this->align_ifm = {48, 8, 40};
+    this->ofmsv_chunk = {32, 2, 8};
+    this->ifmsv_chunk = {48, 2, 8};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 4;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {2, 1};
+    this->pool_strides = {2, 1};
+  }
+};
+struct mswbjvw_08_160_Layer15 : TilingInfo {
+  mswbjvw_08_160_Layer15() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {64, 4, 40};
+    this->align_ofm_shape = {64, 4, 40};
+    this->align_ifm = {256, 4, 40};
+    this->ofmsv_chunk = {16, 1, 40};
+    this->ifmsv_chunk = {64, 1, 40};
+    this->width_iter = 1;
+    this->depth_iter = 4;
+    this->height_iter = 1;
+    this->channel_iter = 2;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer16 : TilingInfo {
+  mswbjvw_08_160_Layer16() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 40924;
+    this->ofm_shape = {80, 4, 40};
+    this->align_ofm_shape = {80, 4, 40};
+    this->align_ifm = {64, 4, 40};
+    this->ofmsv_chunk = {8, 1, 40};
+    this->ifmsv_chunk = {16, 3, 48};
+    this->width_iter = 1;
+    this->depth_iter = 4;
+    this->height_iter = 1;
+    this->channel_iter = 5;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer17 : TilingInfo {
+  mswbjvw_08_160_Layer17() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {512, 4, 40};
+    this->align_ofm_shape = {512, 4, 40};
+    this->align_ifm = {80, 4, 40};
+    this->ofmsv_chunk = {32, 1, 8};
+    this->ifmsv_chunk = {80, 1, 8};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 8;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer18 : TilingInfo {
+  mswbjvw_08_160_Layer18() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {64, 4, 40};
+    this->align_ofm_shape = {64, 4, 40};
+    this->align_ifm = {512, 4, 40};
+    this->ofmsv_chunk = {16, 1, 40};
+    this->ifmsv_chunk = {64, 1, 40};
+    this->width_iter = 1;
+    this->depth_iter = 8;
+    this->height_iter = 1;
+    this->channel_iter = 2;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer19 : TilingInfo {
+  mswbjvw_08_160_Layer19() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 40924;
+    this->ofm_shape = {80, 4, 40};
+    this->align_ofm_shape = {80, 4, 40};
+    this->align_ifm = {64, 4, 40};
+    this->ofmsv_chunk = {8, 1, 40};
+    this->ifmsv_chunk = {16, 3, 48};
+    this->width_iter = 1;
+    this->depth_iter = 4;
+    this->height_iter = 1;
+    this->channel_iter = 5;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer20 : TilingInfo {
+  mswbjvw_08_160_Layer20() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {512, 4, 40};
+    this->align_ofm_shape = {512, 4, 40};
+    this->align_ifm = {80, 4, 40};
+    this->ofmsv_chunk = {32, 1, 8};
+    this->ifmsv_chunk = {80, 1, 8};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 8;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_160_Layer21 : TilingInfo {
+  mswbjvw_08_160_Layer21() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {16, 4, 40};
+    this->align_ofm_shape = {16, 4, 40};
+    this->align_ifm = {512, 4, 40};
+    this->ofmsv_chunk = {8, 1, 40};
+    this->ifmsv_chunk = {64, 1, 40};
+    this->width_iter = 1;
+    this->depth_iter = 8;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+
+/* mswbjvw 08_80 tiling information */
+struct mswbjvw_08_80_Layer1 : TilingInfo {
+  mswbjvw_08_80_Layer1() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {3, 1, 3, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {16, 64, 80};
+    this->align_ofm_shape = {16, 64, 80};
+    this->align_ifm = {3, 60, 80};
+    this->ofmsv_chunk = {8, 16, 16};
+    this->ifmsv_chunk = {8, 18, 24};
+    this->width_iter = 5;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {2, 2};
+    this->pool_strides = {2, 2};
+  }
+};
+struct mswbjvw_08_80_Layer2 : TilingInfo {
+  mswbjvw_08_80_Layer2() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {32, 32, 40};
+    this->align_ofm_shape = {32, 32, 48};
+    this->align_ifm = {16, 32, 40};
+    this->ofmsv_chunk = {16, 8, 16};
+    this->ifmsv_chunk = {16, 10, 24};
+    this->width_iter = 3;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {2, 2};
+    this->pool_strides = {2, 2};
+  }
+};
+struct mswbjvw_08_80_Layer3 : TilingInfo {
+  mswbjvw_08_80_Layer3() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {16, 16, 20};
+    this->align_ofm_shape = {16, 16, 24};
+    this->align_ifm = {32, 16, 20};
+    this->ofmsv_chunk = {8, 4, 24};
+    this->ifmsv_chunk = {32, 4, 24};
+    this->width_iter = 1;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer4 : TilingInfo {
+  mswbjvw_08_80_Layer4() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 29150;
+    this->ofm_shape = {32, 16, 20};
+    this->align_ofm_shape = {32, 16, 24};
+    this->align_ifm = {16, 16, 20};
+    this->ofmsv_chunk = {16, 4, 8};
+    this->ifmsv_chunk = {16, 6, 16};
+    this->width_iter = 3;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer5 : TilingInfo {
+  mswbjvw_08_80_Layer5() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {128, 16, 20};
+    this->align_ofm_shape = {128, 16, 24};
+    this->align_ifm = {32, 16, 20};
+    this->ofmsv_chunk = {16, 4, 8};
+    this->ifmsv_chunk = {32, 4, 8};
+    this->width_iter = 3;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 4;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer6 : TilingInfo {
+  mswbjvw_08_80_Layer6() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {16, 16, 20};
+    this->align_ofm_shape = {16, 16, 24};
+    this->align_ifm = {128, 16, 20};
+    this->ofmsv_chunk = {8, 4, 24};
+    this->ifmsv_chunk = {32, 4, 24};
+    this->width_iter = 1;
+    this->depth_iter = 4;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer7 : TilingInfo {
+  mswbjvw_08_80_Layer7() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 29150;
+    this->ofm_shape = {32, 16, 20};
+    this->align_ofm_shape = {32, 16, 24};
+    this->align_ifm = {16, 16, 20};
+    this->ofmsv_chunk = {16, 4, 8};
+    this->ifmsv_chunk = {16, 6, 16};
+    this->width_iter = 3;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer8 : TilingInfo {
+  mswbjvw_08_80_Layer8() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {128, 16, 20};
+    this->align_ofm_shape = {128, 16, 24};
+    this->align_ifm = {32, 16, 20};
+    this->ofmsv_chunk = {32, 4, 8};
+    this->ifmsv_chunk = {32, 4, 8};
+    this->width_iter = 3;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 2;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {2, 1};
+    this->pool_strides = {2, 1};
+  }
+};
+struct mswbjvw_08_80_Layer9 : TilingInfo {
+  mswbjvw_08_80_Layer9() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {32, 8, 20};
+    this->align_ofm_shape = {32, 8, 24};
+    this->align_ifm = {128, 8, 20};
+    this->ofmsv_chunk = {16, 2, 24};
+    this->ifmsv_chunk = {64, 2, 24};
+    this->width_iter = 1;
+    this->depth_iter = 2;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer10 : TilingInfo {
+  mswbjvw_08_80_Layer10() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 29920;
+    this->ofm_shape = {48, 8, 20};
+    this->align_ofm_shape = {48, 8, 24};
+    this->align_ifm = {32, 8, 20};
+    this->ofmsv_chunk = {8, 2, 24};
+    this->ifmsv_chunk = {32, 4, 32};
+    this->width_iter = 1;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 3;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer11 : TilingInfo {
+  mswbjvw_08_80_Layer11() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {256, 8, 20};
+    this->align_ofm_shape = {256, 8, 24};
+    this->align_ifm = {48, 8, 20};
+    this->ofmsv_chunk = {32, 2, 8};
+    this->ifmsv_chunk = {48, 2, 8};
+    this->width_iter = 3;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 4;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer12 : TilingInfo {
+  mswbjvw_08_80_Layer12() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {32, 8, 20};
+    this->align_ofm_shape = {32, 8, 24};
+    this->align_ifm = {256, 8, 20};
+    this->ofmsv_chunk = {16, 2, 24};
+    this->ifmsv_chunk = {64, 2, 24};
+    this->width_iter = 1;
+    this->depth_iter = 4;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer13 : TilingInfo {
+  mswbjvw_08_80_Layer13() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 29920;
+    this->ofm_shape = {48, 8, 20};
+    this->align_ofm_shape = {48, 8, 24};
+    this->align_ifm = {32, 8, 20};
+    this->ofmsv_chunk = {8, 2, 24};
+    this->ifmsv_chunk = {32, 4, 32};
+    this->width_iter = 1;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 3;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer14 : TilingInfo {
+  mswbjvw_08_80_Layer14() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {256, 8, 20};
+    this->align_ofm_shape = {256, 8, 24};
+    this->align_ifm = {48, 8, 20};
+    this->ofmsv_chunk = {64, 2, 8};
+    this->ifmsv_chunk = {48, 2, 8};
+    this->width_iter = 3;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 2;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {2, 1};
+    this->pool_strides = {2, 1};
+  }
+};
+struct mswbjvw_08_80_Layer15 : TilingInfo {
+  mswbjvw_08_80_Layer15() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {64, 4, 20};
+    this->align_ofm_shape = {64, 4, 24};
+    this->align_ifm = {256, 4, 20};
+    this->ofmsv_chunk = {16, 1, 24};
+    this->ifmsv_chunk = {64, 1, 24};
+    this->width_iter = 1;
+    this->depth_iter = 4;
+    this->height_iter = 1;
+    this->channel_iter = 2;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer16 : TilingInfo {
+  mswbjvw_08_80_Layer16() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 40924;
+    this->ofm_shape = {80, 4, 20};
+    this->align_ofm_shape = {80, 4, 24};
+    this->align_ifm = {64, 4, 20};
+    this->ofmsv_chunk = {8, 1, 24};
+    this->ifmsv_chunk = {16, 3, 32};
+    this->width_iter = 1;
+    this->depth_iter = 4;
+    this->height_iter = 1;
+    this->channel_iter = 5;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer17 : TilingInfo {
+  mswbjvw_08_80_Layer17() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {512, 4, 20};
+    this->align_ofm_shape = {512, 4, 24};
+    this->align_ifm = {80, 4, 20};
+    this->ofmsv_chunk = {32, 1, 8};
+    this->ifmsv_chunk = {80, 1, 8};
+    this->width_iter = 3;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 8;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer18 : TilingInfo {
+  mswbjvw_08_80_Layer18() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {64, 4, 20};
+    this->align_ofm_shape = {64, 4, 24};
+    this->align_ifm = {512, 4, 20};
+    this->ofmsv_chunk = {16, 1, 24};
+    this->ifmsv_chunk = {64, 1, 24};
+    this->width_iter = 1;
+    this->depth_iter = 8;
+    this->height_iter = 1;
+    this->channel_iter = 2;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer19 : TilingInfo {
+  mswbjvw_08_80_Layer19() {
+    this->stride = {1, 1};
+    this->kernel_size = 3;
+    this->padding = {1, 1, 1, 1};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 40924;
+    this->ofm_shape = {80, 4, 20};
+    this->align_ofm_shape = {80, 4, 24};
+    this->align_ifm = {64, 4, 20};
+    this->ofmsv_chunk = {8, 1, 24};
+    this->ifmsv_chunk = {16, 3, 32};
+    this->width_iter = 1;
+    this->depth_iter = 4;
+    this->height_iter = 1;
+    this->channel_iter = 5;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer20 : TilingInfo {
+  mswbjvw_08_80_Layer20() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {512, 4, 20};
+    this->align_ofm_shape = {512, 4, 24};
+    this->align_ifm = {80, 4, 20};
+    this->ofmsv_chunk = {32, 1, 8};
+    this->ifmsv_chunk = {80, 1, 8};
+    this->width_iter = 3;
+    this->depth_iter = 1;
+    this->height_iter = 1;
+    this->channel_iter = 8;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+struct mswbjvw_08_80_Layer21 : TilingInfo {
+  mswbjvw_08_80_Layer21() {
+    this->stride = {1, 1};
+    this->kernel_size = 1;
+    this->padding = {0, 0, 0, 0};
+    this->ifm_type = "uint16";
+    this->wgt_type = "uint16";
+    this->ofm_type = "uint16";
+    this->oh = 1;
+    this->ow = 8;
+    this->ic = 8;
+    this->oc = 8;
+    this->pad_value = 0;
+    this->ofm_shape = {16, 4, 20};
+    this->align_ofm_shape = {16, 4, 24};
+    this->align_ifm = {512, 4, 20};
+    this->ofmsv_chunk = {8, 1, 24};
+    this->ifmsv_chunk = {128, 1, 24};
+    this->width_iter = 1;
+    this->depth_iter = 4;
+    this->height_iter = 1;
+    this->channel_iter = 1;
+    this->super_iter = {1, 1};
+    this->pool_ksize = {};
+    this->pool_strides = {};
+  }
+};
+
 /* mswbjvw 320 tiling information */
 struct mswbjvw_320_Layer1 : TilingInfo {
   mswbjvw_320_Layer1() {
@@ -1971,16 +3109,16 @@ struct mswbjvw_2560_Layer10 : TilingInfo {
     this->ow = 8;
     this->ic = 8;
     this->oc = 8;
-    this->pad_value = 35018;
+    this->pad_value = 30902;
     this->ofm_shape = {48, 8, 640};
     this->align_ofm_shape = {48, 8, 640};
     this->align_ifm = {32, 8, 640};
-    this->ofmsv_chunk = {24, 2, 32};
-    this->ifmsv_chunk = {8, 4, 40};
-    this->width_iter = 20;
+    this->ofmsv_chunk = {8, 2, 80};
+    this->ifmsv_chunk = {8, 4, 88};
+    this->width_iter = 8;
     this->depth_iter = 4;
     this->height_iter = 1;
-    this->channel_iter = 1;
+    this->channel_iter = 3;
     this->super_iter = {1, 1};
     this->pool_ksize = {};
     this->pool_strides = {};
@@ -2052,16 +3190,16 @@ struct mswbjvw_2560_Layer13 : TilingInfo {
     this->ow = 8;
     this->ic = 8;
     this->oc = 8;
-    this->pad_value = 35018;
+    this->pad_value = 30902;
     this->ofm_shape = {48, 8, 640};
     this->align_ofm_shape = {48, 8, 640};
     this->align_ifm = {32, 8, 640};
-    this->ofmsv_chunk = {24, 2, 32};
-    this->ifmsv_chunk = {8, 4, 40};
-    this->width_iter = 20;
+    this->ofmsv_chunk = {8, 2, 80};
+    this->ifmsv_chunk = {8, 4, 88};
+    this->width_iter = 8;
     this->depth_iter = 4;
     this->height_iter = 1;
-    this->channel_iter = 1;
+    this->channel_iter = 3;
     this->super_iter = {1, 1};
     this->pool_ksize = {};
     this->pool_strides = {};
@@ -2360,7 +3498,7 @@ struct mswbjvw_08_5120_Layer3 : TilingInfo {
     this->depth_iter = 1;
     this->height_iter = 16;
     this->channel_iter = 1;
-    this->super_iter = {};
+    this->super_iter = {1, 1};
     this->pool_ksize = {};
     this->pool_strides = {};
   }
@@ -2404,7 +3542,7 @@ struct mswbjvw_08_5120_Layer5 : TilingInfo {
     this->ow = 8;
     this->ic = 8;
     this->oc = 8;
-    this->pad_value = 33130;
+    this->pad_value = 28685;
     this->ofm_shape = {128, 16, 1280};
     this->align_ofm_shape = {128, 16, 1280};
     this->align_ifm = {32, 16, 1280};
@@ -2485,7 +3623,7 @@ struct mswbjvw_08_5120_Layer8 : TilingInfo {
     this->ow = 8;
     this->ic = 8;
     this->oc = 8;
-    this->pad_value = 34359;
+    this->pad_value = 32593;
     this->ofm_shape = {128, 16, 1280};
     this->align_ofm_shape = {128, 16, 1280};
     this->align_ifm = {32, 16, 1280};
@@ -2543,12 +3681,12 @@ struct mswbjvw_08_5120_Layer10 : TilingInfo {
     this->ofm_shape = {48, 8, 1280};
     this->align_ofm_shape = {48, 8, 1280};
     this->align_ifm = {32, 8, 1280};
-    this->ofmsv_chunk = {8, 2, 80};
-    this->ifmsv_chunk = {8, 4, 88};
-    this->width_iter = 16;
+    this->ofmsv_chunk = {24, 2, 32};
+    this->ifmsv_chunk = {8, 4, 40};
+    this->width_iter = 40;
     this->depth_iter = 4;
     this->height_iter = 1;
-    this->channel_iter = 3;
+    this->channel_iter = 1;
     this->super_iter = {};
     this->pool_ksize = {};
     this->pool_strides = {};
@@ -2566,7 +3704,7 @@ struct mswbjvw_08_5120_Layer11 : TilingInfo {
     this->ow = 8;
     this->ic = 8;
     this->oc = 8;
-    this->pad_value = 31202;
+    this->pad_value = 31148;
     this->ofm_shape = {256, 8, 1280};
     this->align_ofm_shape = {256, 8, 1280};
     this->align_ifm = {48, 8, 1280};
@@ -2624,12 +3762,12 @@ struct mswbjvw_08_5120_Layer13 : TilingInfo {
     this->ofm_shape = {48, 8, 1280};
     this->align_ofm_shape = {48, 8, 1280};
     this->align_ifm = {32, 8, 1280};
-    this->ofmsv_chunk = {8, 2, 80};
-    this->ifmsv_chunk = {8, 4, 88};
-    this->width_iter = 16;
+    this->ofmsv_chunk = {24, 2, 32};
+    this->ifmsv_chunk = {8, 4, 40};
+    this->width_iter = 40;
     this->depth_iter = 4;
     this->height_iter = 1;
-    this->channel_iter = 3;
+    this->channel_iter = 1;
     this->super_iter = {};
     this->pool_ksize = {};
     this->pool_strides = {};
@@ -2647,7 +3785,7 @@ struct mswbjvw_08_5120_Layer14 : TilingInfo {
     this->ow = 8;
     this->ic = 8;
     this->oc = 8;
-    this->pad_value = 28147;
+    this->pad_value = 33026;
     this->ofm_shape = {256, 8, 1280};
     this->align_ofm_shape = {256, 8, 1280};
     this->align_ifm = {48, 8, 1280};
@@ -2728,7 +3866,7 @@ struct mswbjvw_08_5120_Layer17 : TilingInfo {
     this->ow = 8;
     this->ic = 8;
     this->oc = 8;
-    this->pad_value = 29060;
+    this->pad_value = 25478;
     this->ofm_shape = {512, 4, 1280};
     this->align_ofm_shape = {512, 4, 1280};
     this->align_ifm = {80, 4, 1280};
@@ -2809,7 +3947,7 @@ struct mswbjvw_08_5120_Layer20 : TilingInfo {
     this->ow = 8;
     this->ic = 8;
     this->oc = 8;
-    this->pad_value = 29060;
+    this->pad_value = 25478;
     this->ofm_shape = {512, 4, 1280};
     this->align_ofm_shape = {512, 4, 1280};
     this->align_ifm = {80, 4, 1280};
@@ -2852,8 +3990,8 @@ struct mswbjvw_08_5120_Layer21 : TilingInfo {
   }
 };
 
-struct mswbjvw_8000_Layer1 : TilingInfo {
-  mswbjvw_8000_Layer1() {
+struct mswbjvw_08_8000_Layer1 : TilingInfo {
+  mswbjvw_08_8000_Layer1() {
     this->stride = {1, 1};
     this->kernel_size = 3;
     this->padding = {3, 1, 3, 1};
@@ -2879,8 +4017,8 @@ struct mswbjvw_8000_Layer1 : TilingInfo {
     this->pool_strides = {2, 2};
   }
 };
-struct mswbjvw_8000_Layer2 : TilingInfo {
-  mswbjvw_8000_Layer2() {
+struct mswbjvw_08_8000_Layer2 : TilingInfo {
+  mswbjvw_08_8000_Layer2() {
     this->stride = {1, 1};
     this->kernel_size = 3;
     this->padding = {1, 1, 1, 1};
@@ -2906,8 +4044,8 @@ struct mswbjvw_8000_Layer2 : TilingInfo {
     this->pool_strides = {2, 2};
   }
 };
-struct mswbjvw_8000_Layer3 : TilingInfo {
-  mswbjvw_8000_Layer3() {
+struct mswbjvw_08_8000_Layer3 : TilingInfo {
+  mswbjvw_08_8000_Layer3() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -2933,8 +4071,8 @@ struct mswbjvw_8000_Layer3 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer4 : TilingInfo {
-  mswbjvw_8000_Layer4() {
+struct mswbjvw_08_8000_Layer4 : TilingInfo {
+  mswbjvw_08_8000_Layer4() {
     this->stride = {1, 1};
     this->kernel_size = 3;
     this->padding = {1, 1, 1, 1};
@@ -2960,8 +4098,8 @@ struct mswbjvw_8000_Layer4 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer5 : TilingInfo {
-  mswbjvw_8000_Layer5() {
+struct mswbjvw_08_8000_Layer5 : TilingInfo {
+  mswbjvw_08_8000_Layer5() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -2987,8 +4125,8 @@ struct mswbjvw_8000_Layer5 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer6 : TilingInfo {
-  mswbjvw_8000_Layer6() {
+struct mswbjvw_08_8000_Layer6 : TilingInfo {
+  mswbjvw_08_8000_Layer6() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -3014,8 +4152,8 @@ struct mswbjvw_8000_Layer6 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer7 : TilingInfo {
-  mswbjvw_8000_Layer7() {
+struct mswbjvw_08_8000_Layer7 : TilingInfo {
+  mswbjvw_08_8000_Layer7() {
     this->stride = {1, 1};
     this->kernel_size = 3;
     this->padding = {1, 1, 1, 1};
@@ -3041,8 +4179,8 @@ struct mswbjvw_8000_Layer7 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer8 : TilingInfo {
-  mswbjvw_8000_Layer8() {
+struct mswbjvw_08_8000_Layer8 : TilingInfo {
+  mswbjvw_08_8000_Layer8() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -3068,8 +4206,8 @@ struct mswbjvw_8000_Layer8 : TilingInfo {
     this->pool_strides = {2, 1};
   }
 };
-struct mswbjvw_8000_Layer9 : TilingInfo {
-  mswbjvw_8000_Layer9() {
+struct mswbjvw_08_8000_Layer9 : TilingInfo {
+  mswbjvw_08_8000_Layer9() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -3095,8 +4233,8 @@ struct mswbjvw_8000_Layer9 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer10 : TilingInfo {
-  mswbjvw_8000_Layer10() {
+struct mswbjvw_08_8000_Layer10 : TilingInfo {
+  mswbjvw_08_8000_Layer10() {
     this->stride = {1, 1};
     this->kernel_size = 3;
     this->padding = {1, 1, 1, 1};
@@ -3122,8 +4260,8 @@ struct mswbjvw_8000_Layer10 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer11 : TilingInfo {
-  mswbjvw_8000_Layer11() {
+struct mswbjvw_08_8000_Layer11 : TilingInfo {
+  mswbjvw_08_8000_Layer11() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -3149,8 +4287,8 @@ struct mswbjvw_8000_Layer11 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer12 : TilingInfo {
-  mswbjvw_8000_Layer12() {
+struct mswbjvw_08_8000_Layer12 : TilingInfo {
+  mswbjvw_08_8000_Layer12() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -3176,8 +4314,8 @@ struct mswbjvw_8000_Layer12 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer13 : TilingInfo {
-  mswbjvw_8000_Layer13() {
+struct mswbjvw_08_8000_Layer13 : TilingInfo {
+  mswbjvw_08_8000_Layer13() {
     this->stride = {1, 1};
     this->kernel_size = 3;
     this->padding = {1, 1, 1, 1};
@@ -3203,8 +4341,8 @@ struct mswbjvw_8000_Layer13 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer14 : TilingInfo {
-  mswbjvw_8000_Layer14() {
+struct mswbjvw_08_8000_Layer14 : TilingInfo {
+  mswbjvw_08_8000_Layer14() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -3230,8 +4368,8 @@ struct mswbjvw_8000_Layer14 : TilingInfo {
     this->pool_strides = {2, 1};
   }
 };
-struct mswbjvw_8000_Layer15 : TilingInfo {
-  mswbjvw_8000_Layer15() {
+struct mswbjvw_08_8000_Layer15 : TilingInfo {
+  mswbjvw_08_8000_Layer15() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -3257,8 +4395,8 @@ struct mswbjvw_8000_Layer15 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer16 : TilingInfo {
-  mswbjvw_8000_Layer16() {
+struct mswbjvw_08_8000_Layer16 : TilingInfo {
+  mswbjvw_08_8000_Layer16() {
     this->stride = {1, 1};
     this->kernel_size = 3;
     this->padding = {1, 1, 1, 1};
@@ -3284,8 +4422,8 @@ struct mswbjvw_8000_Layer16 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer17 : TilingInfo {
-  mswbjvw_8000_Layer17() {
+struct mswbjvw_08_8000_Layer17 : TilingInfo {
+  mswbjvw_08_8000_Layer17() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -3311,8 +4449,8 @@ struct mswbjvw_8000_Layer17 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer18 : TilingInfo {
-  mswbjvw_8000_Layer18() {
+struct mswbjvw_08_8000_Layer18 : TilingInfo {
+  mswbjvw_08_8000_Layer18() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -3338,8 +4476,8 @@ struct mswbjvw_8000_Layer18 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer19 : TilingInfo {
-  mswbjvw_8000_Layer19() {
+struct mswbjvw_08_8000_Layer19 : TilingInfo {
+  mswbjvw_08_8000_Layer19() {
     this->stride = {1, 1};
     this->kernel_size = 3;
     this->padding = {1, 1, 1, 1};
@@ -3365,8 +4503,8 @@ struct mswbjvw_8000_Layer19 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer20 : TilingInfo {
-  mswbjvw_8000_Layer20() {
+struct mswbjvw_08_8000_Layer20 : TilingInfo {
+  mswbjvw_08_8000_Layer20() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -3392,8 +4530,8 @@ struct mswbjvw_8000_Layer20 : TilingInfo {
     this->pool_strides = {};
   }
 };
-struct mswbjvw_8000_Layer21 : TilingInfo {
-  mswbjvw_8000_Layer21() {
+struct mswbjvw_08_8000_Layer21 : TilingInfo {
+  mswbjvw_08_8000_Layer21() {
     this->stride = {1, 1};
     this->kernel_size = 1;
     this->padding = {0, 0, 0, 0};
@@ -3989,6 +5127,50 @@ struct mswbjvw_06_1280_Layer21 : TilingInfo {
 };
 
 std::map<std::string, TilingInfo> TILING_INFO_MAP = {
+    {"1_8_60_160_1_16_32_80_16_8_3_3_2_2_2_2", mswbjvw_08_160_Layer1()},
+    {"1_16_32_80_1_32_16_40_32_16_3_3_2_2_2_2", mswbjvw_08_160_Layer2()},
+    {"1_32_16_40_1_16_16_40_16_32_1_1_0_0_0_0", mswbjvw_08_160_Layer3()},
+    {"1_16_16_40_1_32_16_40_32_16_3_3_0_0_0_0", mswbjvw_08_160_Layer4()},
+    {"1_32_16_40_1_128_16_40_128_32_1_1_0_0_0_0", mswbjvw_08_160_Layer5()},
+    {"1_128_16_40_1_16_16_40_16_128_1_1_0_0_0_0", mswbjvw_08_160_Layer6()},
+    {"1_16_16_40_1_32_16_40_32_16_3_3_0_0_0_0", mswbjvw_08_160_Layer7()},
+    {"1_32_16_40_1_128_8_40_128_32_1_1_2_1_2_1", mswbjvw_08_160_Layer8()},
+    {"1_128_8_40_1_32_8_40_32_128_1_1_0_0_0_0", mswbjvw_08_160_Layer9()},
+    {"1_32_8_40_1_48_8_40_48_32_3_3_0_0_0_0", mswbjvw_08_160_Layer10()},
+    {"1_48_8_40_1_256_8_40_256_48_1_1_0_0_0_0", mswbjvw_08_160_Layer11()},
+    {"1_256_8_40_1_32_8_40_32_256_1_1_0_0_0_0", mswbjvw_08_160_Layer12()},
+    {"1_32_8_40_1_48_8_40_48_32_3_3_0_0_0_0", mswbjvw_08_160_Layer13()},
+    {"1_48_8_40_1_256_4_40_256_48_1_1_2_1_2_1", mswbjvw_08_160_Layer14()},
+    {"1_256_4_40_1_64_4_40_64_256_1_1_0_0_0_0", mswbjvw_08_160_Layer15()},
+    {"1_64_4_40_1_80_4_40_80_64_3_3_0_0_0_0", mswbjvw_08_160_Layer16()},
+    {"1_80_4_40_1_512_4_40_512_80_1_1_0_0_0_0", mswbjvw_08_160_Layer17()},
+    {"1_512_4_40_1_64_4_40_64_512_1_1_0_0_0_0", mswbjvw_08_160_Layer18()},
+    {"1_64_4_40_1_80_4_40_80_64_3_3_0_0_0_0", mswbjvw_08_160_Layer19()},
+    {"1_80_4_40_1_512_4_40_512_80_1_1_0_0_0_0", mswbjvw_08_160_Layer20()},
+    {"1_512_4_40_1_16_4_40_16_512_1_1_0_0_0_0", mswbjvw_08_160_Layer21()},
+
+    {"1_8_60_80_1_16_32_40_16_8_3_3_2_2_2_2", mswbjvw_08_80_Layer1()},
+    {"1_16_32_40_1_32_16_20_32_16_3_3_2_2_2_2", mswbjvw_08_80_Layer2()},
+    {"1_32_16_20_1_16_16_20_16_32_1_1_0_0_0_0", mswbjvw_08_80_Layer3()},
+    {"1_16_16_20_1_32_16_20_32_16_3_3_0_0_0_0", mswbjvw_08_80_Layer4()},
+    {"1_32_16_20_1_128_16_20_128_32_1_1_0_0_0_0", mswbjvw_08_80_Layer5()},
+    {"1_128_16_20_1_16_16_20_16_128_1_1_0_0_0_0", mswbjvw_08_80_Layer6()},
+    {"1_16_16_20_1_32_16_20_32_16_3_3_0_0_0_0", mswbjvw_08_80_Layer7()},
+    {"1_32_16_20_1_128_8_20_128_32_1_1_2_1_2_1", mswbjvw_08_80_Layer8()},
+    {"1_128_8_20_1_32_8_20_32_128_1_1_0_0_0_0", mswbjvw_08_80_Layer9()},
+    {"1_32_8_20_1_48_8_20_48_32_3_3_0_0_0_0", mswbjvw_08_80_Layer10()},
+    {"1_48_8_20_1_256_8_20_256_48_1_1_0_0_0_0", mswbjvw_08_80_Layer11()},
+    {"1_256_8_20_1_32_8_20_32_256_1_1_0_0_0_0", mswbjvw_08_80_Layer12()},
+    {"1_32_8_20_1_48_8_20_48_32_3_3_0_0_0_0", mswbjvw_08_80_Layer13()},
+    {"1_48_8_20_1_256_4_20_256_48_1_1_2_1_2_1", mswbjvw_08_80_Layer14()},
+    {"1_256_4_20_1_64_4_20_64_256_1_1_0_0_0_0", mswbjvw_08_80_Layer15()},
+    {"1_64_4_20_1_80_4_20_80_64_3_3_0_0_0_0", mswbjvw_08_80_Layer16()},
+    {"1_80_4_20_1_512_4_20_512_80_1_1_0_0_0_0", mswbjvw_08_80_Layer17()},
+    {"1_512_4_20_1_64_4_20_64_512_1_1_0_0_0_0", mswbjvw_08_80_Layer18()},
+    {"1_64_4_20_1_80_4_20_80_64_3_3_0_0_0_0", mswbjvw_08_80_Layer19()},
+    {"1_80_4_20_1_512_4_20_512_80_1_1_0_0_0_0", mswbjvw_08_80_Layer20()},
+    {"1_512_4_20_1_16_4_20_16_512_1_1_0_0_0_0", mswbjvw_08_80_Layer21()},
+
     {"1_8_60_320_1_16_32_160_16_8_3_3_2_2_2_2", mswbjvw_320_Layer1()},
     {"1_16_32_160_1_32_16_80_32_16_3_3_2_2_2_2", mswbjvw_320_Layer2()},
     {"1_32_16_80_1_16_16_80_16_32_1_1_0_0_0_0", mswbjvw_320_Layer3()},
@@ -4077,20 +5259,20 @@ std::map<std::string, TilingInfo> TILING_INFO_MAP = {
     {"1_80_4_640_1_512_4_640_512_80_1_1_0_0_0_0", mswbjvw_2560_Layer20()},
     {"1_512_4_640_1_16_4_640_16_512_1_1_0_0_0_0", mswbjvw_2560_Layer21()},
 
-    {"1_8_60_5120_1_16_64_5120_16_8_3_3_2_2_2_2", mswbjvw_08_5120_Layer1()},
-    {"1_16_32_2560_1_32_32_2560_32_16_3_3_2_2_2_2", mswbjvw_08_5120_Layer2()},
+    {"1_8_60_5120_1_16_32_2560_16_8_3_3_2_2_2_2", mswbjvw_08_5120_Layer1()},
+    {"1_16_32_2560_1_32_16_1280_32_16_3_3_2_2_2_2", mswbjvw_08_5120_Layer2()},
     {"1_32_16_1280_1_16_16_1280_16_32_1_1_0_0_0_0", mswbjvw_08_5120_Layer3()},
     {"1_16_16_1280_1_32_16_1280_32_16_3_3_0_0_0_0", mswbjvw_08_5120_Layer4()},
     {"1_32_16_1280_1_128_16_1280_128_32_1_1_0_0_0_0", mswbjvw_08_5120_Layer5()},
     {"1_128_16_1280_1_16_16_1280_16_128_1_1_0_0_0_0", mswbjvw_08_5120_Layer6()},
     {"1_16_16_1280_1_32_16_1280_32_16_3_3_0_0_0_0", mswbjvw_08_5120_Layer7()},
-    {"1_32_16_1280_1_128_16_1280_128_32_1_1_2_1_2_1", mswbjvw_08_5120_Layer8()},
+    {"1_32_16_1280_1_128_8_1280_128_32_1_1_2_1_2_1", mswbjvw_08_5120_Layer8()},
     {"1_128_8_1280_1_32_8_1280_32_128_1_1_0_0_0_0", mswbjvw_08_5120_Layer9()},
     {"1_32_8_1280_1_48_8_1280_48_32_3_3_0_0_0_0", mswbjvw_08_5120_Layer10()},
     {"1_48_8_1280_1_256_8_1280_256_48_1_1_0_0_0_0", mswbjvw_08_5120_Layer11()},
     {"1_256_8_1280_1_32_8_1280_32_256_1_1_0_0_0_0", mswbjvw_08_5120_Layer12()},
     {"1_32_8_1280_1_48_8_1280_48_32_3_3_0_0_0_0", mswbjvw_08_5120_Layer13()},
-    {"1_48_8_1280_1_256_8_1280_256_48_1_1_2_1_2_1", mswbjvw_08_5120_Layer14()},
+    {"1_48_8_1280_1_256_4_1280_256_48_1_1_2_1_2_1", mswbjvw_08_5120_Layer14()},
     {"1_256_4_1280_1_64_4_1280_64_256_1_1_0_0_0_0", mswbjvw_08_5120_Layer15()},
     {"1_64_4_1280_1_80_4_1280_80_64_3_3_0_0_0_0", mswbjvw_08_5120_Layer16()},
     {"1_80_4_1280_1_512_4_1280_512_80_1_1_0_0_0_0", mswbjvw_08_5120_Layer17()},
@@ -4099,27 +5281,27 @@ std::map<std::string, TilingInfo> TILING_INFO_MAP = {
     {"1_80_4_1280_1_512_4_1280_512_80_1_1_0_0_0_0", mswbjvw_08_5120_Layer20()},
     {"1_512_4_1280_1_16_4_1280_16_512_1_1_0_0_0_0", mswbjvw_08_5120_Layer21()},
 
-    {"1_8_60_8000_1_16_64_8000_16_8_3_3_2_2_2_2", mswbjvw_8000_Layer1()},
-    {"1_16_32_4000_1_32_32_4000_32_16_3_3_2_2_2_2", mswbjvw_8000_Layer2()},
-    {"1_32_16_2000_1_16_16_2000_16_32_1_1_0_0_0_0", mswbjvw_8000_Layer3()},
-    {"1_16_16_2000_1_32_16_2000_32_16_3_3_0_0_0_0", mswbjvw_8000_Layer4()},
-    {"1_32_16_2000_1_128_16_2000_128_32_1_1_0_0_0_0", mswbjvw_8000_Layer5()},
-    {"1_128_16_2000_1_16_16_2000_16_128_1_1_0_0_0_0", mswbjvw_8000_Layer6()},
-    {"1_16_16_2000_1_32_16_2000_32_16_3_3_0_0_0_0", mswbjvw_8000_Layer7()},
-    {"1_32_16_2000_1_128_16_2000_128_32_1_1_2_1_2_1", mswbjvw_8000_Layer8()},
-    {"1_128_8_2000_1_32_8_2000_32_128_1_1_0_0_0_0", mswbjvw_8000_Layer9()},
-    {"1_32_8_2000_1_48_8_2000_48_32_3_3_0_0_0_0", mswbjvw_8000_Layer10()},
-    {"1_48_8_2000_1_256_8_2000_256_48_1_1_0_0_0_0", mswbjvw_8000_Layer11()},
-    {"1_256_8_2000_1_32_8_2000_32_256_1_1_0_0_0_0", mswbjvw_8000_Layer12()},
-    {"1_32_8_2000_1_48_8_2000_48_32_3_3_0_0_0_0", mswbjvw_8000_Layer13()},
-    {"1_48_8_2000_1_256_8_2000_256_48_1_1_2_1_2_1", mswbjvw_8000_Layer14()},
-    {"1_256_4_2000_1_64_4_2000_64_256_1_1_0_0_0_0", mswbjvw_8000_Layer15()},
-    {"1_64_4_2000_1_80_4_2000_80_64_3_3_0_0_0_0", mswbjvw_8000_Layer16()},
-    {"1_80_4_2000_1_512_4_2000_512_80_1_1_0_0_0_0", mswbjvw_8000_Layer17()},
-    {"1_512_4_2000_1_64_4_2000_64_512_1_1_0_0_0_0", mswbjvw_8000_Layer18()},
-    {"1_64_4_2000_1_80_4_2000_80_64_3_3_0_0_0_0", mswbjvw_8000_Layer19()},
-    {"1_80_4_2000_1_512_4_2000_512_80_1_1_0_0_0_0", mswbjvw_8000_Layer20()},
-    {"1_512_4_2000_1_16_4_2000_16_512_1_1_0_0_0_0", mswbjvw_8000_Layer21()},
+    {"1_8_60_8000_1_16_32_4000_16_8_3_3_2_2_2_2", mswbjvw_08_8000_Layer1()},
+    {"1_16_32_4000_1_32_16_2000_32_16_3_3_2_2_2_2", mswbjvw_08_8000_Layer2()},
+    {"1_32_16_2000_1_16_16_2000_16_32_1_1_0_0_0_0", mswbjvw_08_8000_Layer3()},
+    {"1_16_16_2000_1_32_16_2000_32_16_3_3_0_0_0_0", mswbjvw_08_8000_Layer4()},
+    {"1_32_16_2000_1_128_16_2000_128_32_1_1_0_0_0_0", mswbjvw_08_8000_Layer5()},
+    {"1_128_16_2000_1_16_16_2000_16_128_1_1_0_0_0_0", mswbjvw_08_8000_Layer6()},
+    {"1_16_16_2000_1_32_16_2000_32_16_3_3_0_0_0_0", mswbjvw_08_8000_Layer7()},
+    {"1_32_16_2000_1_128_8_2000_128_32_1_1_2_1_2_1", mswbjvw_08_8000_Layer8()},
+    {"1_128_8_2000_1_32_8_2000_32_128_1_1_0_0_0_0", mswbjvw_08_8000_Layer9()},
+    {"1_32_8_2000_1_48_8_2000_48_32_3_3_0_0_0_0", mswbjvw_08_8000_Layer10()},
+    {"1_48_8_2000_1_256_8_2000_256_48_1_1_0_0_0_0", mswbjvw_08_8000_Layer11()},
+    {"1_256_8_2000_1_32_8_2000_32_256_1_1_0_0_0_0", mswbjvw_08_8000_Layer12()},
+    {"1_32_8_2000_1_48_8_2000_48_32_3_3_0_0_0_0", mswbjvw_08_8000_Layer13()},
+    {"1_48_8_2000_1_256_4_2000_256_48_1_1_2_1_2_1", mswbjvw_08_8000_Layer14()},
+    {"1_256_4_2000_1_64_4_2000_64_256_1_1_0_0_0_0", mswbjvw_08_8000_Layer15()},
+    {"1_64_4_2000_1_80_4_2000_80_64_3_3_0_0_0_0", mswbjvw_08_8000_Layer16()},
+    {"1_80_4_2000_1_512_4_2000_512_80_1_1_0_0_0_0", mswbjvw_08_8000_Layer17()},
+    {"1_512_4_2000_1_64_4_2000_64_512_1_1_0_0_0_0", mswbjvw_08_8000_Layer18()},
+    {"1_64_4_2000_1_80_4_2000_80_64_3_3_0_0_0_0", mswbjvw_08_8000_Layer19()},
+    {"1_80_4_2000_1_512_4_2000_512_80_1_1_0_0_0_0", mswbjvw_08_8000_Layer20()},
+    {"1_512_4_2000_1_16_4_2000_16_512_1_1_0_0_0_0", mswbjvw_08_8000_Layer21()},
 
     {"1_8_60_1280_1_16_32_640_16_8_3_3_2_2_2_2", mswbjvw_06_1280_Layer1()},
     {"1_16_32_640_1_32_16_320_32_16_3_3_2_2_2_2", mswbjvw_06_1280_Layer2()},
@@ -4205,13 +5387,13 @@ std::vector<std::vector<uint8_t>> computeUtil(bool do_maxpool,
     OWP = 4;
     OCP = 8;
     ICP = 8;
-    std::cout << "\tOHP, OWP, OCP, ICP: ", OHP, OWP, OCP, ICP;
+    // std::cout << "\tOHP, OWP, OCP, ICP: ", OHP, OWP, OCP, ICP;
   } else if (stride == 1) {
     OHP = 1;
     OWP = 8;
     OCP = 8;
     ICP = 8;
-    std::cout << "\tOHP, OWP, OCP, ICP: ", OHP, OWP, OCP, ICP;
+    // std::cout << "\tOHP, OWP, OCP, ICP: ", OHP, OWP, OCP, ICP;
   } else {
     std::cout << "\tstride error! now just support 1 and 2!";
     throw new std::logic_error("error - given stride not supported");
@@ -4415,7 +5597,7 @@ generate_tiling_key(const std::vector<int32_t> &input_shape,
   }
   /* ignore last "_" */
   tiling_key = tiling_key.substr(0, tiling_key.size() - 1);
-  std::cout << "Tiling filename : " << tiling_key << std::endl;
+  // std::cout << "Tiling filename : " << tiling_key << std::endl;
   return tiling_key;
 }
 

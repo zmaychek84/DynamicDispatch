@@ -1,5 +1,5 @@
-//
-// Created by abhbisht on 8/14/2024.
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 
 #ifndef LP_COMPUTATION_H

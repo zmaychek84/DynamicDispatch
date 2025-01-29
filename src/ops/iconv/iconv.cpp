@@ -1,5 +1,6 @@
 /*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
+ Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
+ Licensed under the MIT License.
  */
 
 #include <any>
@@ -320,9 +321,6 @@ iconv<InT, WtT, OutT>::iconv(const std::string &a_dtype,
     param_fname_prefix_ = "iconv_4x4_" + txnbin_a_header.at(a_dtype_) +
                           txnbin_b_header.at(b_dtype_) +
                           txnbin_acc_header.at(c_dtype_);
-    json_fname_prefix_ = "iconv_4x4_" + txnbin_a_header.at(a_dtype_) +
-                         txnbin_b_header.at(b_dtype_) +
-                         txnbin_acc_header.at(c_dtype_);
   }
 
   RYZENAI_LOG_TRACE(
@@ -785,7 +783,7 @@ void iconv<InT, WtT, OutT>::initialize_const_params(
     std::vector<uint8_t> json_data;
     try {
       auto json_key =
-          get_instr_key(json_fname_prefix_, mapped_shape) + "_ctrl_meta";
+          get_instr_key(param_fname_prefix_, mapped_shape) + "_ctrl_meta";
       Transaction &txn = Transaction::getInstance();
       json_data = txn.get_txn_bvec(json_key);
     } catch (...) {
@@ -927,22 +925,15 @@ void iconv<InT, WtT, OutT>::execute(std::vector<Tensor> &input,
   i_bo.sync(XCL_BO_SYNC_BO_TO_DEVICE);
   i_bo_words = i_bo.size() / sizeof(int);
 
-  uint64_t ctrl_address = 0;
-  if (is_ctrl_pkt_) {
-    ctrl_address = ctrl_bo_.address() + DDR_AIE_ADDR_OFFSET;
-  }
   auto kernel_ = xrt_ctx_->get_kernel();
 
-  xrt::run run;
   // launch the kernel
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   // kernel call for GEMM that supports transaction binary flow
   c_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  run = kernel_(2, i_bo, i_bo_words, c_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                a_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                b_bo_.address() + DDR_AIE_ADDR_OFFSET,
-                param_bo.address() + DDR_AIE_ADDR_OFFSET, ctrl_address);
-  run.wait2();
+  ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, i_bo, i_bo_words, c_bo_,
+                                            a_bo_, b_bo_, param_bo, ctrl_bo_,
+                                            true, is_ctrl_pkt_);
   auto run_aie_stop = GET_ELAPSED_TIME_NS();
   num_run_aie_++;
   // sync output activation to host memory
@@ -1041,14 +1032,14 @@ std::vector<CtrlPktPatchInfo> iconv<InT, WtT, OutT>::get_ctrl_pkt_patch_info(
   std::vector<size_t> input_shape = {CI, YI, XI, CO, YO, XO, KY, KX};
   auto ctrl_pkt_shape = map_padded_shape(input_shape);
   // TODO: Add check to validate tensor shapes
-  std::string ctrl_pkt_meta =
-      get_instr_key(param_fname_prefix_, ctrl_pkt_shape) + "_ctrl_meta";
 
-  if (ctrl_pkt_meta ==
-      "iconv_iconv_4x4_a16w8acc16_320_32_32_640_32_32_3_3_ctrl_meta") {
+  try {
+    std::string ctrl_pkt_meta =
+        get_instr_key(param_fname_prefix_, ctrl_pkt_shape) + "_ctrl_meta";
     Transaction &txn = Transaction::getInstance();
     return json_str_to_ctrlpkt_patch_info(txn.get_txn_bvec(ctrl_pkt_meta));
-  } else {
+  } catch (...) {
+    // throw std::runtime_error("iCONV : Can not file the ctrl_meta.json file");
     return {};
   }
 }
@@ -1066,12 +1057,10 @@ std::vector<uint8_t> iconv<InT, WtT, OutT>::get_ctrl_pkts(
   // TODO: Add check to validate tensor shapes
   std::string ctrl_pkt_key =
       get_instr_key(param_fname_prefix_, ctrl_pkt_shape) + "_ctrl";
-
-  if (ctrl_pkt_key ==
-      "iconv_iconv_4x4_a16w8acc16_320_32_32_640_32_32_3_3_ctrl") {
+  try {
     Transaction &txn = Transaction::getInstance();
     return txn.get_txn_bvec(ctrl_pkt_key);
-  } else {
+  } catch (...) {
     return {};
   }
 }

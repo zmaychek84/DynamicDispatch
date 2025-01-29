@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -65,12 +66,16 @@ private:
   xrt::bo b_bo_;
   /* XRT BO for tiled output matrix */
   xrt::bo c_bo_;
+  /* XRT BO for ctrl packet */
+  xrt::bo ctrl_bo_;
   /* size for input activation dtype*/
   int a_dtype_size_;
   /* size for weights dtype*/
   int b_dtype_size_;
   /* size for output activation dtype*/
   int c_dtype_size_;
+  /* weights size shift value */
+  int b_shift_value_;
   /* variables to store profile data */
   int64_t a_copy_time_;
   int64_t a_sync_time_;
@@ -94,6 +99,7 @@ private:
   std::string c_dtype_;
   std::string txn_fname_prefix_;
   std::string param_fname_prefix_;
+  bool is_ctrl_pkt_;
 
   void set_kernel_shapes();
   void setup_instr_registry();
@@ -126,6 +132,12 @@ public:
   std::vector<OpArgMap> get_buffer_reqs(
       std::vector<Tensor> &input, std::vector<Tensor> &output,
       const std::map<std::string, std::any> &attr = {}) const override;
+  std::vector<uint8_t> get_ctrl_pkts(
+      std::vector<Tensor> &input, std::vector<Tensor> &output,
+      const std::map<std::string, std::any> &attr = {}) const override;
+  std::vector<CtrlPktPatchInfo> get_ctrl_pkt_patch_info(
+      std::vector<Tensor> &input, std::vector<Tensor> &output,
+      const std::map<std::string, std::any> &attr) const override;
 };
 
 } // namespace ryzenai

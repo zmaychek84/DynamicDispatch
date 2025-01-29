@@ -1,0 +1,245 @@
+{
+  "version": "1.0",
+  "ctrl_pkt_patch_info": [
+    {
+      "offset": 8460,
+      "size": 6,
+      "xrt_arg_idx": 3,
+      "bo_offset": 0
+    },
+    {
+      "offset": 8508,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 14155776
+    },
+    {
+      "offset": 8556,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 0
+    },
+    {
+      "offset": 8604,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 0
+    },
+    {
+      "offset": 8652,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 2359296
+    },
+    {
+      "offset": 8700,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 4718592
+    },
+    {
+      "offset": 8748,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 7077888
+    },
+    {
+      "offset": 8796,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 9437184
+    },
+    {
+      "offset": 8844,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 11796480
+    },
+    {
+      "offset": 8892,
+      "size": 6,
+      "xrt_arg_idx": 0,
+      "bo_offset": 0
+    },
+    {
+      "offset": 9012,
+      "size": 6,
+      "xrt_arg_idx": 3,
+      "bo_offset": 0
+    },
+    {
+      "offset": 9060,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 14155776
+    },
+    {
+      "offset": 9108,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 0
+    },
+    {
+      "offset": 9156,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 589824
+    },
+    {
+      "offset": 9204,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 2949120
+    },
+    {
+      "offset": 9252,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 5308416
+    },
+    {
+      "offset": 9300,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 7667712
+    },
+    {
+      "offset": 9348,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 10027008
+    },
+    {
+      "offset": 9396,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 12386304
+    },
+    {
+      "offset": 9444,
+      "size": 6,
+      "xrt_arg_idx": 0,
+      "bo_offset": 256
+    },
+    {
+      "offset": 9564,
+      "size": 6,
+      "xrt_arg_idx": 3,
+      "bo_offset": 0
+    },
+    {
+      "offset": 9612,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 14155776
+    },
+    {
+      "offset": 9660,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 0
+    },
+    {
+      "offset": 9708,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 1179648
+    },
+    {
+      "offset": 9756,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 3538944
+    },
+    {
+      "offset": 9804,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 5898240
+    },
+    {
+      "offset": 9852,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 8257536
+    },
+    {
+      "offset": 9900,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 10616832
+    },
+    {
+      "offset": 9948,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 12976128
+    },
+    {
+      "offset": 9996,
+      "size": 6,
+      "xrt_arg_idx": 0,
+      "bo_offset": 512
+    },
+    {
+      "offset": 10116,
+      "size": 6,
+      "xrt_arg_idx": 3,
+      "bo_offset": 0
+    },
+    {
+      "offset": 10164,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 14155776
+    },
+    {
+      "offset": 10212,
+      "size": 6,
+      "xrt_arg_idx": 1,
+      "bo_offset": 0
+    },
+    {
+      "offset": 10260,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 1769472
+    },
+    {
+      "offset": 10308,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 4128768
+    },
+    {
+      "offset": 10356,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 6488064
+    },
+    {
+      "offset": 10404,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 8847360
+    },
+    {
+      "offset": 10452,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 11206656
+    },
+    {
+      "offset": 10500,
+      "size": 6,
+      "xrt_arg_idx": 2,
+      "bo_offset": 13565952
+    },
+    {
+      "offset": 10548,
+      "size": 6,
+      "xrt_arg_idx": 0,
+      "bo_offset": 768
+    }
+  ]
+}

@@ -19,13 +19,16 @@
 // SOFTWARE.
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <mutex>
+
 #include <op_fuser/fuse_ops.hpp>
 #include <op_fuser/fusion_rt.hpp>
 #include <ops/op_builder.hpp>
 #include <ops/record_timer/record_timer.hpp>
 #include <ops/xcom/subgraph/subgraph.hpp>
+// #include "aiebu_assembler.h"
 
 #include <utils/logging.hpp>
 #include <utils/meta_utils.hpp>
@@ -36,9 +39,12 @@
 #include "metastate_api.hpp"
 #include "passes/passes.hpp"
 #include "txn/txn_utils.hpp"
+#include "utils/ctrl_pkt_utils.hpp"
 #include "utils/dpu_mdata.hpp"
 #include <utils/tmpfile.hpp>
 
+#include "md5.h"
+#include "weak.hpp"
 #include <experimental/xrt_error.h>
 namespace fs = std::filesystem;
 
@@ -54,17 +60,21 @@ static constexpr size_t XRT_BO_INIT_VALUE = 0;
 static constexpr size_t INSTR_XRT_BO_MAX_SIZE = 64ULL * 1024ULL * 1024ULL;
 // space used up by all PDI's in loaded xclbin, and XRT/XDP
 static constexpr size_t INSTR_XRT_BO_RESERVE_SIZE = 4ULL * 1024ULL * 1024ULL;
-// fallback buffers - shared by all FusionRuntime objects on same context
-static constexpr size_t INSTR_XRT_BO_STACK_SIZE = 8ULL * 1024ULL * 1024ULL;
 // ping-pong to hide latency of copying over instruction during execution
 static constexpr size_t NUM_STATIC_INSTR_BUFFERS = 2;
-static constexpr size_t INSTR_BUFFER_SIZE =
-    INSTR_XRT_BO_STACK_SIZE / NUM_STATIC_INSTR_BUFFERS;
-// how much we can dynamically allocate
-static constexpr size_t INSTR_XRT_BO_HEAP_SIZE =
-    INSTR_XRT_BO_MAX_SIZE - INSTR_XRT_BO_RESERVE_SIZE - INSTR_XRT_BO_STACK_SIZE;
 // need to account for alignment to estimate size (ignores fragmentation)
 static constexpr size_t INSTR_XRT_BO_ALIGNMENT = 32ULL * 1024ULL;
+
+// fallback buffers - shared by all FusionRuntime objects on same context
+static const size_t INSTR_XRT_BO_STACK_SIZE =
+    std::stoull(Utils::get_env_var("DD_ENV_INSTR_STACK_SIZE_MB",
+                                   std::to_string(8ULL))) *
+    1024ULL * 1024ULL;
+static const size_t INSTR_BUFFER_SIZE =
+    INSTR_XRT_BO_STACK_SIZE / NUM_STATIC_INSTR_BUFFERS;
+// how much we can dynamically allocate
+static const size_t INSTR_XRT_BO_HEAP_SIZE =
+    INSTR_XRT_BO_MAX_SIZE - INSTR_XRT_BO_RESERVE_SIZE - INSTR_XRT_BO_STACK_SIZE;
 
 struct XRTBufferState {
   // how much memory is currently used by this context
@@ -75,6 +85,8 @@ struct XRTBufferState {
   std::vector<xrt::bo> static_instr_bos;
   // actual size of instruction contents
   std::vector<size_t> static_instr_sizes;
+  // How many FusionRT instances associated with this context
+  size_t num_fusionrt_instances = 0;
 };
 
 // NOTE: current access to this is NOT THREAD SAFE!!!
@@ -108,7 +120,6 @@ static std::string replace_characters(const std::string &name,
 static std::vector<std::string> filter_xrt_kernels(const xrt::xclbin &xclbin) {
 
   std::vector<std::string> kernel_names;
-
   for (const auto &kernel : xclbin.get_kernels()) {
     const auto kernel_name = kernel.get_name();
 
@@ -118,10 +129,26 @@ static std::vector<std::string> filter_xrt_kernels(const xrt::xclbin &xclbin) {
         (kernel_name.rfind("DPU_PDI", 0) != 0)) {
       RYZENAI_LOG_TRACE(OpsFusion::dd_format(
           "FusionRuntime : found kernel : {}", kernel_name));
+      size_t elf_idx = kernel_name.find("_ELF");
+      if (elf_idx != -1) {
+        auto non_elf_kernel = kernel_name.substr(0, elf_idx);
+        auto it =
+            std::find(kernel_names.begin(), kernel_names.end(), non_elf_kernel);
+        if (it != kernel_names.end()) {
+          kernel_names[it - kernel_names.begin()] = kernel_name;
+          continue;
+        }
+      } else {
+        auto it = std::find(kernel_names.begin(), kernel_names.end(),
+                            kernel_name + "_ELF");
+        if (it != kernel_names.end()) {
+          continue;
+        }
+      }
+
       kernel_names.push_back(kernel_name);
     }
   }
-
   // In case kernel names arent in order within xclbin
   std::sort(kernel_names.begin(), kernel_names.end());
 
@@ -132,7 +159,6 @@ static void create_kernel_name_to_pdi_map(
     const std::vector<std::string> &kernel_names,
     std::map<std::string, std::uint32_t> &kernel_name_to_pdi_idx) {
   std::uint32_t start_pdi_idx = 0;
-
   for (const auto &kernel_name : kernel_names) {
     RYZENAI_LOG_TRACE(OpsFusion::dd_format(
         "FusionRuntime : Creating kernel to pdi_id mappding : {} {}",
@@ -198,31 +224,83 @@ FusionRuntime::FusionRuntime(xrt::hw_context *ctx,
                              const std::string &kernel_name_prefix)
     : use_external_ctx_(true), ctx_(*ctx) {}
 
+xrt::bo FusionRuntime::allocate_xrt_buffer(const xrt::hw_context &ctx,
+                                           const size_t &sz,
+                                           xrt::bo::flags flag,
+                                           xrt::memory_group grp) {
+  if (elf_flow_) {
+    return xrt::ext::bo(ctx, sz);
+  }
+  return xrt::bo(ctx, sz, flag, grp);
+}
+
+bool FusionRuntime::is_elf_kernel(const std::string &kernel_name) {
+  return kernel_name.find("ELF") != -1;
+}
 void FusionRuntime::initialize_runtime() {
+
   if (!use_external_ctx_) {
     xrt_ctx_ = ryzenai::dynamic_dispatch::xrt_context::get_instance(
-        xclbin_filename_, 0, qos_, &xclbin_content_);
+        xclbin_filename_, 0, qos_, xclbin_content_);
     ctx_ = xrt_ctx_->get_context();
   }
 
   const auto kernel_names = filter_xrt_kernels(ctx_.get_xclbin());
-
+  elf_flow_ = std::any_of(kernel_names.begin(), kernel_names.end(),
+                          [](const std::string &kernel_name) {
+                            return FusionRuntime::is_elf_kernel(kernel_name);
+                          });
   create_kernel_name_to_pdi_map(kernel_names, kernel_name_to_pdi_idx_);
+}
 
-  for (const auto &kernel_name : kernel_names) {
+std::string
+FusionRuntime::get_canonicalize_kernel_name(const OpPDIMap &op_pdi_map,
+                                            int pdi_index) {
+  std::string kernel_name = op_pdi_map.pdi_id_to_kernel_map.at(pdi_index);
+  std::string postfix = "";
+  if (elf_flow_ && !FusionRuntime::is_elf_kernel(kernel_name)) {
+    postfix = "_ELF";
+  }
+  return kernel_name + postfix;
+}
+
+void FusionRuntime::initialize_kernels(
+    const Metadata &meta,
+    const std::map<std::string, std::uint32_t> &kernel_name_to_pdi_idx) {
+  auto part_size = meta.partitions.size();
+  kernels_.resize(part_size);
+  runs_.resize(part_size);
+  // transactions bins are aligned with partitions and subgraph kernels.
+  for (int i = 0; i < part_size; i++) {
+    auto idx = meta.partitions[i].pdi_id;
+    auto part_data =
+        use_xclbin_parse_data_ ? op_pdi_map_ : DEFAULT_OP_TO_PDI_MAP_;
+    std::string kernel_name = get_canonicalize_kernel_name(part_data, idx);
     RYZENAI_LOG_TRACE(OpsFusion::dd_format(
         "FusionRuntime : Creating kernel object : {}", kernel_name));
-    xrt::kernel k(ctx_, kernel_name);
-    kernels_.push_back(k);
-    runs_.emplace_back(k);
+    xrt::kernel k;
+    if (!FusionRuntime::is_elf_kernel(kernel_name)) {
+      k = xrt::kernel(ctx_, kernel_name);
+    } else {
+      if (i >= subgraph_elfs_mod_.size()) {
+        DD_THROW("Kernels and ELFs modules are not aligned.");
+      }
+      elf_flow_ = true;
+      k = xrt::ext::kernel(ctx_, subgraph_elfs_mod_[i], kernel_name);
+    }
+
+    // kernels and partitions are aligned with each other.
+    kernels_[i] = k;
+    runs_[i] = xrt::run(k);
   }
 
   xrt_core::hwctx_handle *handle = static_cast<xrt_core::hwctx_handle *>(ctx_);
 
   std::call_once(logger_flag_, []() {
-    std::string header = "Graph/PDI_Partition, xrt execute time(ns), "
-                         "in_copy_time(ns), in_sync_time(ns), "
-                         "out_copy_time(ns), out_sync_time(ns), json_path\n";
+    std::string header =
+        "Graph/PDI_Partition, xrt execute time(ns), "
+        "in_copy_time(ns), in_sync_time(ns), "
+        "out_copy_time(ns), out_sync_time(ns), json_path, oplist_str\n";
     RYZENAI_LOG_INFO(header);
   });
 
@@ -239,6 +317,7 @@ void FusionRuntime::initialize_runtime() {
     }
     xrt_instr_state.at(handle).num_instr_bos = NUM_STATIC_INSTR_BUFFERS;
   }
+  xrt_instr_state.at(handle).num_fusionrt_instances++;
 }
 
 FusionRuntime::~FusionRuntime() {
@@ -252,11 +331,19 @@ FusionRuntime::~FusionRuntime() {
   // heap_total_size is used to determine if we should
   // use static instruction BO or not
   std::lock_guard<std::mutex> guard(instr_state_mutex);
+  MAP_AT(xrt_instr_state, handle).num_fusionrt_instances--;
+
   for (auto &instr_bo : instr_bos_) {
     xrt_instr_state.at(handle).heap_total_size -=
         Utils::align_to_next(instr_bo.size(), INSTR_XRT_BO_ALIGNMENT);
   }
   xrt_instr_state.at(handle).num_instr_bos -= instr_bos_.size();
+
+  if (xrt_instr_state.at(handle).num_fusionrt_instances == 0) {
+    xrt_instr_state.erase(handle);
+  }
+
+  release_host_resources();
 }
 
 void FusionRuntime::execute(const std::vector<Tensor> &inputs,
@@ -269,55 +356,70 @@ void FusionRuntime::execute(const std::vector<Tensor> &inputs,
   //    run together
   std::lock_guard<std::mutex> guard(execute_mutex_);
   const auto &meta = meta_;
+  if (scratch_bo_allocate_) {
+    scratch_bo_ =
+        allocate_xrt_buffer(ctx_, scratch_bo_sz_, xrt::bo::flags::host_only,
+                            kernels_[0].group_id(HOST_BO_GROUP_ID));
+    patch_ctrl_pkt(meta);
+    if (!elf_flow_) {
+      setup_xrt_run(meta);
+    }
+    scratch_bo_allocate_ = false;
+  }
   merge_inputs(inputs, meta);
 
   if (enable_write_internal_bufs) {
     unpack_internal_buffers("tmp/dd_bufs_pre_exec");
   }
   xrt_exec_time_ = 0;
-
   xrt_core::hwctx_handle *handle = static_cast<xrt_core::hwctx_handle *>(ctx_);
   size_t cache_instr_idx = 0;
 
   const OpPDIMap &op_pdi_map =
       use_xclbin_parse_data_ ? op_pdi_map_ : DEFAULT_OP_TO_PDI_MAP_;
 
+  int pdi_id = 0;
+  int pdi_idx = 0;
+
   if (use_instr_sw_cache_) {
     // NOTE: this writes to BO and does sync
-    std::lock_guard<std::mutex> guard(instr_state_mutex);
-    write_to_bo(xrt_instr_state.at(handle).static_instr_bos[cache_instr_idx],
-                0, /*offset*/
-                fused_instr_vec_.at(0).data(), fused_instr_vec_.at(0).size());
-    xrt_instr_state.at(handle).static_instr_sizes[cache_instr_idx] =
-        fused_instr_vec_.at(0).size();
+    if (!elf_flow_) {
+      std::lock_guard<std::mutex> guard(instr_state_mutex);
+      write_to_bo(xrt_instr_state.at(handle).static_instr_bos[cache_instr_idx],
+                  0, /*offset*/
+                  fused_instr_vec_.at(0).data(), fused_instr_vec_.at(0).size());
+      xrt_instr_state.at(handle).static_instr_sizes[cache_instr_idx] =
+          fused_instr_vec_.at(0).size();
+    }
 
-    for (size_t i = 0; i < meta.partitions.size(); i++) {
-      auto pdi_id = meta.partitions[i].pdi_id;
-      auto pdi_idx = kernel_name_to_pdi_idx_.at(
-          op_pdi_map.pdi_id_to_kernel_map.at(pdi_id));
-
+    for (size_t partition_idx = 0; partition_idx < meta.partitions.size();
+         partition_idx++) {
       auto exec_start = GET_ELAPSED_TIME_NS();
       size_t instr_idx = cache_instr_idx;
       cache_instr_idx = (cache_instr_idx + 1) % NUM_STATIC_INSTR_BUFFERS;
-      bool prefetch_instr = (i != (meta.partitions.size() - 1));
+      bool prefetch_instr = (partition_idx != (meta.partitions.size() - 1));
+      auto pdi_id = meta.partitions[partition_idx].pdi_id;
+
       try {
-        runs_[pdi_idx].set_arg(
-            1, xrt_instr_state.at(handle).static_instr_bos[instr_idx]);
-        runs_[pdi_idx].set_arg(
-            2, xrt_instr_state.at(handle).static_instr_sizes[instr_idx] /
-                   sizeof(int));
-        runs_[pdi_idx].start();
+        if (!elf_flow_) {
+          runs_[partition_idx].set_arg(
+              1, xrt_instr_state.at(handle).static_instr_bos[instr_idx]);
+          runs_[partition_idx].set_arg(
+              2, xrt_instr_state.at(handle).static_instr_sizes[instr_idx] /
+                     sizeof(int));
+        }
+        runs_[partition_idx].start();
         // try to overlap instruction copying with AIE execution
-        if (prefetch_instr) {
+        if (prefetch_instr && !elf_flow_) {
           write_to_bo(
               xrt_instr_state.at(handle).static_instr_bos[cache_instr_idx],
               0, /*offset*/
-              fused_instr_vec_.at(i + 1).data(),
-              fused_instr_vec_.at(i + 1).size());
+              fused_instr_vec_.at(partition_idx + 1).data(),
+              fused_instr_vec_.at(partition_idx + 1).size());
           xrt_instr_state.at(handle).static_instr_sizes[cache_instr_idx] =
-              fused_instr_vec_.at(i + 1).size();
+              fused_instr_vec_.at(partition_idx + 1).size();
         }
-        runs_[pdi_idx].wait2();
+        runs_[partition_idx].wait2();
       } catch (const std::exception &e) {
         if (enable_write_internal_bufs) {
           unpack_internal_buffers("tmp/dd_buf_post_hang");
@@ -330,14 +432,16 @@ void FusionRuntime::execute(const std::vector<Tensor> &inputs,
         std::cin.get();
 #endif
 
-        std::cerr << "ERROR: Kernel partition: " << i
+        std::cerr << "ERROR: Kernel partition: " << partition_idx
                   << ", pdi_id: " << (std::uint32_t)pdi_id << " timed out!"
                   << std::endl;
         std::cerr << "Details: " << e.what() << std::endl;
         if (cfg_.eager_mode) {
-          std::cout << "  Op ID : " << i << "\n"
-                    << "  Op Name : " << meta.op_list.at(i).name << "\n"
-                    << "  Op Type : " << meta.op_list.at(i).type << std::endl;
+          std::cout << "  Op ID : " << partition_idx << "\n"
+                    << "  Op Name : " << meta.op_list.at(partition_idx).name
+                    << "\n"
+                    << "  Op Type : " << meta.op_list.at(partition_idx).type
+                    << std::endl;
         } else {
           std::cout << "  Enable eager-mode for more verbosity." << std::endl;
         }
@@ -347,40 +451,49 @@ void FusionRuntime::execute(const std::vector<Tensor> &inputs,
           std::string err_message =
               std::string("Error while executing pdi_id: ") +
               std::to_string((std::uint32_t)pdi_id) +
-              ", partition: " + std::to_string(i) +
+              ", partition: " + std::to_string(partition_idx) +
               ", info: " + err.to_string();
           std::cerr << err_message << std::endl;
           RYZENAI_LOG_TRACE(err_message);
         }
 
         DD_THROW(OpsFusion::dd_format(
-            "Kernel partition: {} pdi_id: {} timeout (Detail : {})", i,
-            (std::uint32_t)pdi_id, e.what()));
+            "Kernel partition: {} pdi_id: {} timeout (Detail : {})",
+            partition_idx, (std::uint32_t)pdi_id, e.what()));
       }
       auto exec_end = GET_ELAPSED_TIME_NS();
       int64_t partition_exec_time = static_cast<int64_t>(exec_end - exec_start);
       xrt_exec_time_ += partition_exec_time;
-      RYZENAI_LOG_INFO("PDI_Partition " + std::to_string(i) + " , " +
-                       std::to_string(partition_exec_time) + ", " +
+
+#ifdef RYZENAI_PERF
+      std::string oplist_str = "";
+      for (auto ind = meta.partitions[partition_idx].op_range.first;
+           ind < meta.partitions[partition_idx].op_range.second; ind++) {
+        oplist_str += meta.op_list[ind].name + std::string(",");
+      }
+#endif
+      RYZENAI_LOG_INFO("PDI_Partition " + std::to_string(partition_idx) +
+                       " , " + std::to_string(partition_exec_time) + ", " +
                        std::to_string(0) + ", " + std::to_string(0) + ", " +
                        std::to_string(0) + ", " + std::to_string(0) + ", " +
-                       meta.json_path + "\n");
+                       meta.json_path + ", " + oplist_str + "\n");
     }
   } else {
     auto &meta = get_meta();
-    for (size_t i = 0; i < meta.partitions.size(); i++) {
-      auto pdi_id = meta.partitions[i].pdi_id;
-      auto pdi_idx = kernel_name_to_pdi_idx_.at(
-          op_pdi_map.pdi_id_to_kernel_map.at(pdi_id));
-
+    for (size_t partition_idx = 0; partition_idx < meta.partitions.size();
+         partition_idx++) {
       auto exec_start = GET_ELAPSED_TIME_NS();
-      size_t instr_idx = i;
-      try {
-        runs_[pdi_idx].set_arg(1, instr_bos_[instr_idx]);
-        runs_[pdi_idx].set_arg(2, instr_bos_[instr_idx].size() / sizeof(int));
+      size_t instr_idx = partition_idx;
+      auto pdi_id = meta.partitions[partition_idx].pdi_id;
 
-        runs_[pdi_idx].start();
-        runs_[pdi_idx].wait2();
+      try {
+        if (!elf_flow_) {
+          runs_[partition_idx].set_arg(1, instr_bos_[instr_idx]);
+          runs_[partition_idx].set_arg(2, instr_bos_[instr_idx].size() /
+                                              sizeof(int));
+        }
+        runs_[partition_idx].start();
+        runs_[partition_idx].wait2();
       } catch (const std::exception &e) {
         if (enable_write_internal_bufs) {
           unpack_internal_buffers("tmp/dd_buf_post_hang");
@@ -393,14 +506,16 @@ void FusionRuntime::execute(const std::vector<Tensor> &inputs,
         std::cin.get();
 #endif
 
-        std::cerr << "ERROR: Kernel partition: " << i
+        std::cerr << "ERROR: Kernel partition: " << partition_idx
                   << ", pdi_id: " << (std::uint32_t)pdi_id << " timed out!"
                   << std::endl;
         std::cerr << "Details: " << e.what() << std::endl;
         if (cfg_.eager_mode) {
-          std::cout << "  Op ID : " << i << "\n"
-                    << "  Op Name : " << meta.op_list.at(i).name << "\n"
-                    << "  Op Type : " << meta.op_list.at(i).type << std::endl;
+          std::cout << "  Op ID : " << partition_idx << "\n"
+                    << "  Op Name : " << meta.op_list.at(partition_idx).name
+                    << "\n"
+                    << "  Op Type : " << meta.op_list.at(partition_idx).type
+                    << std::endl;
         } else {
           std::cout << "  Enable eager-mode for more verbosity." << std::endl;
         }
@@ -410,31 +525,38 @@ void FusionRuntime::execute(const std::vector<Tensor> &inputs,
           std::string err_message =
               std::string("Error while executing pdi_id: ") +
               std::to_string((std::uint32_t)pdi_id) +
-              ", partition: " + std::to_string(i) +
+              ", partition: " + std::to_string(partition_idx) +
               ", info: " + err.to_string();
           std::cerr << err_message << std::endl;
           RYZENAI_LOG_TRACE(err_message);
         }
 
         DD_THROW(OpsFusion::dd_format(
-            "Kernel partition: {} pdi_id: {} timeout (Detail : {})", i,
-            (std::uint32_t)pdi_id, e.what()));
+            "Kernel partition: {} pdi_id: {} timeout (Detail : {})",
+            partition_idx, (std::uint32_t)pdi_id, e.what()));
       }
       auto exec_end = GET_ELAPSED_TIME_NS();
       int64_t partition_exec_time = static_cast<int64_t>(exec_end - exec_start);
       xrt_exec_time_ += partition_exec_time;
-      RYZENAI_LOG_INFO("PDI_Partition " + std::to_string(i) + " , " +
-                       std::to_string(partition_exec_time) + ", " +
+
+#ifdef RYZENAI_PERF
+      std::string oplist_str = "";
+      for (auto ind = meta.partitions[partition_idx].op_range.first;
+           ind < meta.partitions[partition_idx].op_range.second; ind++) {
+        oplist_str += meta.op_list[ind].name + std::string(",");
+      }
+#endif
+      RYZENAI_LOG_INFO("PDI_Partition " + std::to_string(partition_idx) +
+                       " , " + std::to_string(partition_exec_time) + ", " +
                        std::to_string(0) + ", " + std::to_string(0) + ", " +
                        std::to_string(0) + ", " + std::to_string(0) + ", " +
-                       meta.json_path + "\n");
+                       meta.json_path + ", " + oplist_str + "\n");
     }
   }
 
   if (enable_write_internal_bufs) {
     unpack_internal_buffers("tmp/dd_bufs_post_exec");
   }
-
   split_outputs(outputs, meta);
 
   RYZENAI_LOG_INFO("Graph, " + std::to_string(xrt_exec_time_) + ", " +
@@ -478,7 +600,7 @@ void FusionRuntime::save_buffer_objects() {
    * operators.
    */
   save_bo(input_bo_, input_bo_fname);
-  save_bo(const_bo_, const_bo_fname);
+  save_bo(*const_bo_, const_bo_fname);
   save_bo(super_instr_bo_, super_instr_bo_fname);
 }
 
@@ -486,6 +608,7 @@ void FusionRuntime::compile(const Metadata &meta, const std::string &base_dir,
                             const DDConfig &cfg,
                             std::map<std::string, SimpleSpan> const_map) {
   // TODO : Need a way to compare if metadata is same as old, and if so skip.
+
   RYZENAI_LOG_TRACE("FusionRuntime : Init ...");
   meta_ = meta;
   cfg_ = cfg;
@@ -549,6 +672,31 @@ void FusionRuntime::compile(const Metadata &meta, const std::string &base_dir,
   }
 
   generate_pdi_partitions_pass(meta_, cfg_.eager_mode);
+
+  elf_flow_ = std::any_of(
+      kernel_name_to_pdi_idx_.begin(), kernel_name_to_pdi_idx_.end(),
+      [](auto it) { return FusionRuntime::is_elf_kernel(it.first); });
+  meta_.aux_info["elf_flow"] = elf_flow_;
+
+  // TODO : This is temporary flag, By default we will not insert any preemption
+  // point Once preemption related issues are resolved , we will enable
+  // inserting preemption by default'
+  bool enable_preemption = Utils::get_env_var("ENABLE_PREEMPTION") == "1";
+
+  if (elf_flow_) {
+    if (enable_preemption) {
+      size_t op_count = meta_.op_list.size();
+      meta_ = insert_preemption_nodes(meta_);
+      generate_pdi_partitions_pass(meta_, cfg_.eager_mode);
+    } else {
+      std::cout
+          << "[WARNING] Inserting fine grained preemption is disabled. To "
+             "insert fine grained preemption please set environment variable"
+             " ENABLE_PREEMPTION to '1'"
+          << std::endl;
+    }
+  }
+
   if (cfg_.profile) {
     meta_ = insert_record_timer_nodes(meta_, cfg_.profile);
     generate_pdi_partitions_pass(meta_, cfg_.eager_mode);
@@ -567,10 +715,29 @@ void FusionRuntime::compile(const Metadata &meta, const std::string &base_dir,
   fill_ctrl_pkts(meta_);
   prepare_formatting_ops();
 
-  relocate_ctrl_pkt_patch_info(meta_);
-  fetch_op_txn_bins(meta_, const_map);
+  relocate_ctrl_pkt_patch_info(meta_, elf_flow_);
+  fetch_op_txn_bins(meta_, const_map, elf_flow_);
+}
 
-  // save_state();
+/**
+ * @brief utility function to release all host file handlers after use.
+ */
+void FusionRuntime::release_host_resources() {
+  if (input_vec_file_ptr_) {
+    fclose(input_vec_file_ptr_);
+  }
+
+  if (const_vec_file_ptr_) {
+    fclose(const_vec_file_ptr_);
+  }
+
+  if (super_instr_vec_file_ptr_) {
+    fclose(super_instr_vec_file_ptr_);
+  }
+
+  if (ctrl_pkt_vec_file_ptr_) {
+    fclose(ctrl_pkt_vec_file_ptr_);
+  }
 }
 
 /**
@@ -604,6 +771,28 @@ void FusionRuntime::save_state(const std::string &state_name,
           .update_dd_config(cfg_);
 
   metastate.save_bin(state_file.string());
+  release_host_resources();
+}
+
+static std::unique_ptr<std::unique_lock<std::mutex>>
+acquire_lock_for_const_bo() {
+  static std::mutex mtx;
+  return std::make_unique<std::unique_lock<std::mutex>>(mtx);
+}
+static std::string calculate_md5sum(FILE *fp) {
+  auto original_pos = ftell64(fp);
+  auto error_code = fseek64(fp, 0, SEEK_SET);
+  DD_ASSERT(error_code == 0,
+            OpsFusion::dd_format("fseek64 error: {}", error_code));
+  auto buffer = std::vector<char>(1024 * 4);
+  MD5 md5 = MD5();
+  for (auto read_size = fread(buffer.data(), 1, buffer.size(), fp);
+       read_size != 0; read_size = fread(buffer.data(), 1, buffer.size(), fp)) {
+    md5.add(buffer.data(), read_size);
+    // std::cout << "abc: " << read_size << std::endl;
+  }
+  error_code = fseek64(fp, original_pos, SEEK_SET);
+  return md5.getHash();
 }
 /**
  * @brief Loads fusion state.
@@ -623,10 +812,121 @@ void FusionRuntime::load_state(const std::string &state_path,
   MetaStateAPI metastate(state_path, load_func);
   meta_ = metastate.extract_meta();
   const_vec_file_ptr_ = metastate.extract_const_bo(cache_dir);
+  const_vec_file_md5_ = calculate_md5sum(const_vec_file_ptr_);
   super_instr_vec_file_ptr_ = metastate.extract_superinstr_bo(cache_dir);
   input_vec_file_ptr_ = metastate.extract_input_bo(cache_dir);
   ctrl_pkt_vec_file_ptr_ = metastate.extract_ctrl_pkt_bo(cache_dir);
   cfg_ = metastate.extract_dd_config();
+}
+
+const std::vector<xrt::module> &FusionRuntime::convert_to_elf(
+    const std::vector<std::vector<uint8_t>> &fused_bins, const Metadata &meta,
+    FILE *ctrl_pkt_vec_file_ptr) {
+
+  if (!elf_flow_) {
+    return subgraph_elfs_mod_;
+  }
+  subgraph_elfs_mod_.clear();
+  auto asm_path =
+      std::filesystem::path(Utils::get_env_var("AIEBU_ASM")).string();
+  if (asm_path.size() == 0) {
+    std::string error = "ERROR: Please set environment variable AIEBU_ASM, "
+                        "Which should points to aiebu directory\n";
+    throw std::runtime_error(error);
+  }
+
+  auto asm_exe =
+      std::filesystem::path(asm_path + "\\bin\\aiebu-asm.exe").string();
+  auto asm_lib = std::filesystem::path(asm_path + "\\lib\\aie2").string();
+
+  std::string tempDir =
+      std::filesystem::path(fs::temp_directory_path().string() + "tmpdir\\")
+          .string();
+  if (!fs::exists(tempDir)) {
+    fs::create_directory(tempDir);
+  }
+  auto ctrl_pkt_json = meta_to_ctrl_pkt_json(meta);
+  std::string ctr_pkt_cmd = "";
+  if (ctrl_pkt_json.size() != 0) {
+    auto time_stamp = Utils::generateCurrTimeStamp();
+    std::string ctrl_pkt_bin_path =
+        tempDir + "fused_ctrpkt_bin" + time_stamp + ".ctrlpkt";
+    std::string ctr_pkt_json_path =
+        tempDir + "fused_ctrpkt" + time_stamp + ".json";
+    Utils::save_tmpfile_on_disk(ctrl_pkt_bin_path, ctrl_pkt_vec_file_ptr);
+    std::ofstream jsonf(ctr_pkt_json_path);
+    jsonf << std::setw(4) << ctrl_pkt_json << std::endl;
+    jsonf.flush();
+    jsonf.close();
+    ctr_pkt_cmd = " -p " + ctrl_pkt_bin_path + " -j " + ctr_pkt_json_path;
+  }
+#ifdef _WIN32
+  for (const auto &txn : fused_bins) {
+    try {
+      auto time_stamp = Utils::generateCurrTimeStamp();
+      // ToDO move to DD's tmpFile utility.
+      std::string txn_bin_path =
+          tempDir + "input_" + std::to_string(txn.size()) + time_stamp + ".bin";
+      std::string elf_path = tempDir + "output_" + std::to_string(txn.size()) +
+                             time_stamp + ".elf";
+      std::ofstream outFile(txn_bin_path, std::ios::out | std::ios::binary);
+      outFile.write(reinterpret_cast<const char *>(txn.data()), txn.size());
+      outFile.flush();
+      outFile.close();
+      std::string command = asm_exe + " -t aie2txn -c " +
+                            std::filesystem::path(txn_bin_path).string() +
+                            ctr_pkt_cmd + " -o " +
+                            std::filesystem::path(elf_path).string() +
+                            " -l preempt -L " + asm_lib;
+
+      RYZENAI_LOG_TRACE("Executing ... " + command + "\n");
+      {
+
+        STARTUPINFOA si = {sizeof(STARTUPINFOA)}; // Initialize STARTUPINFO
+        PROCESS_INFORMATION pi = {};
+        BOOL success = CreateProcessA(
+            NULL, // Application name (NULL if in command line)
+            const_cast<char *>(
+                command.c_str()), // Command line with executable and arguments
+            nullptr,              // Process handle not inheritable
+            nullptr,              // Thread handle not inheritable
+            false,                // Handle inheritance option
+            0,                    // Creation flags (e.g., CREATE_NEW_CONSOLE)
+            nullptr,              // Use parent's environment block
+            nullptr,              // Use parent's starting directory
+            &si,                  // Pointer to STARTUPINFO structure
+            &pi                   // Pointer to PROCESS_INFORMATION structure
+        );
+
+        if (!success) {
+          DD_THROW(OpsFusion::dd_format(
+              "Failed to create process. Error code: {}", GetLastError()));
+        } else {
+          RYZENAI_LOG_TRACE("Process created successfully! ");
+        }
+        DWORD waitResult = WaitForSingleObject(pi.hProcess, INFINITE);
+        if (waitResult == WAIT_OBJECT_0) {
+          RYZENAI_LOG_TRACE("Child process completed successfully");
+        } else {
+          DD_THROW(OpsFusion::dd_format(
+              "WaitForSingleObject failed with error code: {}",
+              GetLastError()));
+        }
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+      }
+      xrt::elf elf{elf_path};
+      subgraph_elfs_mod_.emplace_back(xrt::module({elf}));
+    } catch (std::exception e) {
+      DD_THROW(OpsFusion::dd_format("convert_to_elf failed with error: {}",
+                                    e.what()));
+      return subgraph_elfs_mod_;
+    }
+  }
+#else
+  DD_THROW("Preemption currently supported on WINDOW OS");
+#endif
+  return subgraph_elfs_mod_;
 }
 
 void FusionRuntime::init(const Metadata &meta, const std::string &base_dir,
@@ -638,15 +938,21 @@ void FusionRuntime::init(const Metadata &meta, const std::string &base_dir,
   OpInterface::set_dd_base_dir(base_dir);
 
   // load_state();
+
   initialize_runtime();
   use_xclbin_parse_data_ = parse_xclbin_metadata(op_pdi_map_, cfg_.model_name);
-  reallocate_xrt_bos(meta_);
-  host_to_dev_memcpy();
-  patch_ctrl_pkt(meta_);
+  // Fused transaction vectors are in partition order.
+  fused_instr_vec_ = generate_fused_txns(meta_);
+  convert_to_elf(txns_, meta_, ctrl_pkt_vec_file_ptr_);
+  initialize_kernels(meta_, kernel_name_to_pdi_idx_);
+  reallocate_xrt_bos(meta_, cfg.use_lazy_scratch_bo);
+  host_to_dev_memcpy(cfg.use_lazy_scratch_bo);
+  if (!elf_flow_ && !cfg.use_lazy_scratch_bo) {
+    patch_ctrl_pkt(meta_);
+  }
   prepare_formatting_ops();
 
-  // complete. Map of tensorname -> buffer
-  fused_instr_vec_ = generate_fused_txns(meta_);
+  // MA TODO: one transaction binary can have multiple kernels (elf + non elf)
   {
     // this block determines if we should either use "heap" or "stack" for
     // instruction BO since this a global state, add lock guard e.g. trying to
@@ -673,13 +979,23 @@ void FusionRuntime::init(const Metadata &meta, const std::string &base_dir,
         repartition_instr =
             check_partition_instr_size(fused_instr_vec_, INSTR_BUFFER_SIZE);
       }
-
       need_realloc = allocate_instr_bos(fused_instr_vec_);
     } while (need_realloc);
   }
-  // this is no-op if using static instr BO - hence no guard
-  populate_instr_bos(fused_instr_vec_);
-  setup_xrt_run(meta_);
+
+  if (use_instr_sw_cache_) {
+    convert_to_elf(txns_, meta_, ctrl_pkt_vec_file_ptr_);
+    initialize_kernels(meta_, kernel_name_to_pdi_idx_);
+  }
+  if (!elf_flow_) {
+    populate_instr_bos(fused_instr_vec_);
+    if (!cfg.use_lazy_scratch_bo) {
+      setup_xrt_run(meta_);
+    }
+  } else {
+    setup_xrt_run_elf(meta_);
+  }
+  release_host_resources();
   RYZENAI_LOG_TRACE("FusionRuntime : Init ... DONE");
 }
 
@@ -726,6 +1042,7 @@ void FusionRuntime::load_const(const Metadata &meta,
                                   op_info, io, const_tensors, op_info.attr);
   }
   fseek64(const_vec_file_ptr_, 0, SEEK_SET);
+  const_vec_file_md5_ = calculate_md5sum(const_vec_file_ptr_);
   RYZENAI_LOG_TRACE("FusionRuntime : Load const ... DONE");
 }
 
@@ -779,54 +1096,106 @@ void FusionRuntime::fill_ctrl_pkts(const Metadata &meta) {
   RYZENAI_LOG_TRACE("FusionRuntime : Fill Control Packets ... DONE");
 }
 
-void FusionRuntime::host_to_dev_memcpy() {
-  {
-    auto tmp = Utils::binary_io<uint8_t>::slurp_binary(const_vec_file_ptr_);
-    const_bo_.write(tmp.data(), tmp.size(), 0);
+static size_t read_file_to_bo(xrt::bo &bo, FILE *file, size_t seek) {
+  constexpr size_t buffer_size = 4096;
+  char buffer[buffer_size];
+  size_t read = 0;
+  while ((read = fread(buffer, 1, buffer_size, file)) > 0) {
+    bo.write(buffer, read, seek);
+    seek += read;
   }
-  {
-    auto tmp = Utils::binary_io<uint8_t>::slurp_binary(input_vec_file_ptr_);
-    input_bo_.write(tmp.data(), tmp.size(), 0);
-  }
-  size_t super_instr_vec_size = 0;
-  {
-    auto tmp =
-        Utils::binary_io<uint8_t>::slurp_binary(super_instr_vec_file_ptr_);
-    super_instr_vec_size = tmp.size();
-    super_instr_bo_.write(tmp.data(), super_instr_vec_size, 0);
-  }
+  return seek;
+}
 
-  if (ctrl_pkt_vec_file_ptr_) {
-    auto tmp = Utils::binary_io<uint8_t>::slurp_binary(ctrl_pkt_vec_file_ptr_);
-    super_instr_bo_.write(tmp.data(), tmp.size(), super_instr_vec_size);
+void FusionRuntime::host_to_dev_memcpy(bool use_lazy_scratch_bo) {
+  {
+    RYZENAI_LOG_TRACE(OpsFusion::dd_format(
+        "FusionRuntime : try to initialize const bo, "
+        "curr_size:{}, md5: {}, use_count:{}",
+        const_bo_sz_, const_vec_file_md5_, const_bo_.use_count()));
+    auto lock_for_const_bo = acquire_lock_for_const_bo();
+    const char *data =
+        static_cast<const char *>(const_bo_->map()); // Explicit cast
+    bool is_uninitialized =
+        std::all_of(data, data + const_bo_->size(),
+                    [](char c) { return c == XRT_BO_INIT_VALUE; });
+    if (is_uninitialized) {
+      RYZENAI_LOG_TRACE(OpsFusion::dd_format(
+          "FusionRuntime : do initializing const bo, "
+          "curr_size:{}, md5: {}, use_count:{}",
+          const_bo_sz_, const_vec_file_md5_, const_bo_.use_count()));
+      std::ignore = read_file_to_bo(*const_bo_, const_vec_file_ptr_, 0);
+    } else {
+      RYZENAI_LOG_TRACE(OpsFusion::dd_format(
+          "FusionRuntime : cancel initializing const bo, it was initalized by "
+          "other "
+          "curr_size:{}, md5: {}, use_count:{}",
+          const_bo_sz_, const_vec_file_md5_, const_bo_.use_count()));
+    }
+  }
+  std::ignore = read_file_to_bo(input_bo_, input_vec_file_ptr_, 0);
+  size_t super_instr_vec_size =
+      read_file_to_bo(super_instr_bo_, super_instr_vec_file_ptr_, 0);
+  if (ctrl_pkt_vec_file_ptr_ && !elf_flow_) {
+    std::ignore = read_file_to_bo(super_instr_bo_, ctrl_pkt_vec_file_ptr_,
+                                  super_instr_vec_size);
   }
   output_bo_.write(output_vec_.data(), output_vec_.size(), 0);
-  scratch_bo_.write(scratch_vec_.data(), scratch_vec_.size(), 0);
 
-  const_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+  const_bo_->sync(XCL_BO_SYNC_BO_TO_DEVICE);
   input_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
   output_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  scratch_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
   super_instr_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
-  // printf("%s, %d\n", __func__, __LINE__);
+
+  if (!use_lazy_scratch_bo) {
+    scratch_bo_.write(scratch_vec_.data(), scratch_vec_.size(), 0);
+    scratch_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+  }
 }
 
 void FusionRuntime::setup_xrt_run(const Metadata &meta) {
   // IMPORTANT: this should only be called after instruction
   //            and data BO's have been allocated
   RYZENAI_LOG_TRACE("FusionRuntime : Setup XRT Run objects ...");
+  for (int partition_idx = 0; partition_idx < meta.partitions.size();
+       partition_idx++) {
+    if (!cfg_.txn_opt) {
+      runs_[partition_idx].set_arg(0, std::uint64_t{2});
+    } else {
+      runs_[partition_idx].set_arg(0, std::uint64_t{3});
+    }
 
-  for (auto &run : runs_) {
-    run.set_arg(0, OPCODE);
     // instruction BO and instruction size will be updated on the fly
     // since same PDI could be running different potions of transaction binary
-    // TODO: should we have 1 run object per partition? current scheme is to
-    //       reduce memory footprint for large graphs
-    run.set_arg(3, input_bo_.address() + DDR_AIE_ADDR_OFFSET);
-    run.set_arg(4, output_bo_.address() + DDR_AIE_ADDR_OFFSET);
-    run.set_arg(5, scratch_bo_.address() + DDR_AIE_ADDR_OFFSET);
-    run.set_arg(6, const_bo_.address() + DDR_AIE_ADDR_OFFSET);
-    run.set_arg(7, super_instr_bo_.address() + DDR_AIE_ADDR_OFFSET);
+
+    runs_[partition_idx].set_arg(3, input_bo_.address() + DDR_AIE_ADDR_OFFSET);
+    runs_[partition_idx].set_arg(4, output_bo_.address() + DDR_AIE_ADDR_OFFSET);
+    runs_[partition_idx].set_arg(5,
+                                 scratch_bo_.address() + DDR_AIE_ADDR_OFFSET);
+    runs_[partition_idx].set_arg(6, const_bo_->address() + DDR_AIE_ADDR_OFFSET);
+    runs_[partition_idx].set_arg(7, super_instr_bo_.address() +
+                                        DDR_AIE_ADDR_OFFSET);
+  }
+
+  RYZENAI_LOG_TRACE("FusionRuntime : Setup XRT Run objects ... DONE");
+}
+
+void FusionRuntime::setup_xrt_run_elf(const Metadata &meta) {
+  // IMPORTANT: this should only be called after instruction
+  //            and data BO's have been allocated
+  RYZENAI_LOG_TRACE("FusionRuntime : Setup XRT_ELF Run objects ...");
+  for (int i = 0; i < meta.partitions.size(); i++) {
+
+    auto &run = runs_[i];
+    run.set_arg(0, ELF_OPCODE);
+    run.set_arg(1, 0);
+    run.set_arg(2, 0);
+    run.set_arg(3, input_bo_);
+    run.set_arg(4, output_bo_);
+    run.set_arg(5, scratch_bo_);
+    run.set_arg(6, *const_bo_);
+    run.set_arg(7, super_instr_bo_);
+    // run.set_arg(8, 0);
   }
 
   RYZENAI_LOG_TRACE("FusionRuntime : Setup XRT Run objects ... DONE");
@@ -842,7 +1211,6 @@ FusionRuntime::generate_fused_txns(const Metadata &meta) {
   txns_.reserve(meta.partitions.size());
 
   size_t partition_index = 0;
-
   for (const auto &partition : meta.partitions) {
     // get fused transactions
     std::vector<txn_vec_t> txn_vecs;
@@ -857,8 +1225,13 @@ FusionRuntime::generate_fused_txns(const Metadata &meta) {
       txn_vecs.push_back(txn_bin);
     }
     auto fused_txn = utils::txn_util::fuse_txns(txn_vecs);
-
-    txns_.push_back((fused_txn));
+    if (cfg_.txn_opt) {
+      utils::txn_util txn_util_instance;
+      auto new_fused_txn = txn_util_instance.convert_to_opt_txn(fused_txn);
+      txns_.push_back(new_fused_txn);
+    } else {
+      txns_.push_back(fused_txn);
+    }
     utils::txn_util txn = utils::txn_util(txns_.back());
     auto ibuf_op = transaction_op(txn.txn);
     RYZENAI_LOG_TRACE(
@@ -1012,14 +1385,21 @@ void FusionRuntime::allocate_host_bos(const Metadata &meta) {
 }
 
 // TODO : Calling .size() on empty xrt::bo crashes.
-void FusionRuntime::reallocate_xrt_bos(const Metadata &meta) {
+void FusionRuntime::reallocate_xrt_bos(const Metadata &meta,
+                                       bool use_lazy_scratch_bo) {
   RYZENAI_LOG_TRACE("Reallocating Data BOs ...");
   size_t new_size =
       std::max(MAP_AT(meta.fused_tensors, "super_instr").size, XRT_BO_MIN_SIZE);
   if ((meta.major_version >= 1) && (meta.minor_version >= 1)) {
-    new_size = std::max(MAP_AT(meta.fused_tensors, "super_instr").size +
-                            MAP_AT(meta.fused_tensors, "ctrl_pkt").size,
-                        XRT_BO_MIN_SIZE);
+    if (!elf_flow_) {
+      new_size = std::max(MAP_AT(meta.fused_tensors, "super_instr").size +
+                              MAP_AT(meta.fused_tensors, "ctrl_pkt").size,
+                          XRT_BO_MIN_SIZE);
+    } else {
+      new_size = std::max(MAP_AT(meta.fused_tensors, "super_instr").size,
+                          XRT_BO_MIN_SIZE);
+    }
+
     RYZENAI_LOG_TRACE(
         OpsFusion::dd_format("Updated super_instr_bo_size_ : {}", new_size));
   }
@@ -1028,8 +1408,9 @@ void FusionRuntime::reallocate_xrt_bos(const Metadata &meta) {
     RYZENAI_LOG_TRACE(OpsFusion::dd_format(
         "FusionRuntime : Reallocating input bo, curr_size:{}, new_size:{}",
         super_instr_bo_sz_, new_size));
-    super_instr_bo_ = xrt::bo(ctx_, new_size, xrt::bo::flags::host_only,
-                              kernels_[0].group_id(HOST_BO_GROUP_ID));
+    super_instr_bo_ =
+        allocate_xrt_buffer(ctx_, new_size, xrt::bo::flags::host_only,
+                            kernels_[0].group_id(HOST_BO_GROUP_ID));
     memset(super_instr_bo_.map(), XRT_BO_INIT_VALUE, super_instr_bo_.size());
     super_instr_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
   }
@@ -1038,13 +1419,28 @@ void FusionRuntime::reallocate_xrt_bos(const Metadata &meta) {
   new_size =
       std::max(MAP_AT(meta.fused_tensors, "const").size, XRT_BO_MIN_SIZE);
   if (const_bo_sz_ < new_size) {
-    RYZENAI_LOG_TRACE(OpsFusion::dd_format(
-        "FusionRuntime : Reallocating const bo, curr_size:{}, new_size:{}",
-        const_bo_sz_, new_size));
-    const_bo_ = xrt::bo(ctx_, new_size, xrt::bo::flags::host_only,
-                        kernels_[0].group_id(HOST_BO_GROUP_ID));
-    memset(const_bo_.map(), XRT_BO_INIT_VALUE, const_bo_.size());
-    const_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+    {
+      auto lock = acquire_lock_for_const_bo();
+      DD_ASSERT(!const_vec_file_md5_.empty(),
+                "const file md5 checksum must not be empty");
+
+      if (elf_flow_) {
+        const_bo_ = vitis::ai::WeakStore<std::string, xrt::ext::bo>::create(
+            const_vec_file_md5_, ctx_, new_size);
+      } else {
+        const_bo_ = vitis::ai::WeakStore<std::string, xrt::bo>::create(
+            const_vec_file_md5_, ctx_, new_size, xrt::bo::flags::host_only,
+            kernels_[0].group_id(HOST_BO_GROUP_ID));
+      }
+      RYZENAI_LOG_TRACE(OpsFusion::dd_format(
+          "FusionRuntime : Reallocating const bo, "
+          "curr_size:{}, new_size:{} md5:{} use_count:{}",
+          const_bo_sz_, new_size, const_vec_file_md5_, const_bo_.use_count()));
+      if (const_bo_.use_count() == 1) {
+        memset(const_bo_->map(), XRT_BO_INIT_VALUE, const_bo_->size());
+        const_bo_->sync(XCL_BO_SYNC_BO_TO_DEVICE);
+      }
+    }
   }
   const_bo_sz_ = new_size;
 
@@ -1053,8 +1449,8 @@ void FusionRuntime::reallocate_xrt_bos(const Metadata &meta) {
     RYZENAI_LOG_TRACE(OpsFusion::dd_format(
         "FusionRuntime : Reallocating input bo, curr_size:{}, new_size:{}",
         input_bo_sz_, new_size));
-    input_bo_ = xrt::bo(ctx_, new_size, xrt::bo::flags::host_only,
-                        kernels_[0].group_id(HOST_BO_GROUP_ID));
+    input_bo_ = allocate_xrt_buffer(ctx_, new_size, xrt::bo::flags::host_only,
+                                    kernels_[0].group_id(HOST_BO_GROUP_ID));
     memset(input_bo_.map(), XRT_BO_INIT_VALUE, input_bo_.size());
     input_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
   }
@@ -1065,8 +1461,8 @@ void FusionRuntime::reallocate_xrt_bos(const Metadata &meta) {
     RYZENAI_LOG_TRACE(OpsFusion::dd_format(
         "FusionRuntime : Reallocating output bo, curr_size:{}, new_size:{}",
         output_bo_sz_, new_size));
-    output_bo_ = xrt::bo(ctx_, new_size, xrt::bo::flags::host_only,
-                         kernels_[0].group_id(HOST_BO_GROUP_ID));
+    output_bo_ = allocate_xrt_buffer(ctx_, new_size, xrt::bo::flags::host_only,
+                                     kernels_[0].group_id(HOST_BO_GROUP_ID));
     memset(output_bo_.map(), XRT_BO_INIT_VALUE, output_bo_.size());
     output_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
   }
@@ -1079,10 +1475,15 @@ void FusionRuntime::reallocate_xrt_bos(const Metadata &meta) {
     RYZENAI_LOG_TRACE(OpsFusion::dd_format(
         "FusionRuntime : Reallocating scratch bo, curr_size:{}, new_size:{}",
         scratch_bo_sz_, new_size));
-    scratch_bo_ = xrt::bo(ctx_, new_size, xrt::bo::flags::host_only,
-                          kernels_[0].group_id(HOST_BO_GROUP_ID));
-    memset(scratch_bo_.map(), XRT_BO_INIT_VALUE, scratch_bo_.size());
-    scratch_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+    if (!use_lazy_scratch_bo) {
+      scratch_bo_ =
+          allocate_xrt_buffer(ctx_, new_size, xrt::bo::flags::host_only,
+                              kernels_[0].group_id(HOST_BO_GROUP_ID));
+      memset(scratch_bo_.map(), XRT_BO_INIT_VALUE, scratch_bo_.size());
+      scratch_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+    } else {
+      scratch_bo_allocate_ = true;
+    }
   }
   scratch_bo_sz_ = new_size;
 
@@ -1090,8 +1491,8 @@ void FusionRuntime::reallocate_xrt_bos(const Metadata &meta) {
   RYZENAI_LOG_TRACE(OpsFusion::dd_format(
       "\ninput bo size : {}\noutput bo size : {}\nconst bo size : "
       "{}\nscratch bo size : {}\nsuper_instr_bo size : {}",
-      input_bo_.size(), output_bo_.size(), const_bo_.size(), scratch_bo_.size(),
-      super_instr_bo_.size()));
+      input_bo_sz_, output_bo_sz_, const_bo_sz_, scratch_bo_sz_,
+      super_instr_bo_sz_));
 }
 
 std::vector<std::vector<uint8_t>> FusionRuntime::get_txns() { return txns_; }
@@ -1204,17 +1605,24 @@ void FusionRuntime::split_outputs(const std::vector<Tensor> &outputs,
     // copy_data(hwout_tensors[i], outputs[i]);
     size_t tensor_bo_sz = tensor_info.size_in_bytes;
     auto &[op_info, op] = producer_ops_[i];
-    DD_INVOKE_OPMETHOD(format_output, op.get(), op_info, outputs[i],
-                       hwout_tensors[i].data, tensor_bo_sz, /* index */ 0,
-                       op_info.attr);
-    // std::ofstream ofs("mat128_" + std::to_string(i) + ".bin");
-    // ofs.write((char *)hwout_tensors[i].data,
-    //           std::accumulate(hwout_tensors[i].shape.begin(),
-    //                           hwout_tensors[i].shape.end(), size_t{1},
-    //                           std::multiplies{}) *
-    //               Utils::get_size_of_type(hwout_tensors[i].dtype));
-    // ofs.close();
-    // output_bo_.read(outputs[i].data, sz, tensor_info.offset);
+
+    // format output is not handled for more than one output
+    // log a warning and skip format_output_api for now.
+    // TODO: Can we call this for multiple outputs in a loop?
+    if (op_info.out_args.size() == 1) {
+      DD_INVOKE_OPMETHOD(format_output, op.get(), op_info, outputs[i],
+                         hwout_tensors[i].data, tensor_bo_sz, /* index */ 0,
+                         op_info.attr);
+    } else {
+      RYZENAI_LOG_TRACE(
+          "WARNING: format_output_api not handled for more than one output");
+
+      auto out_tensor_sz =
+          std::accumulate(outputs[i].shape.begin(), outputs[i].shape.end(),
+                          size_t{1}, std::multiplies{}) *
+          Utils::get_size_of_type(outputs[i].dtype);
+      memcpy(outputs[i].data, hwout_tensors[i].data, tensor_bo_sz);
+    }
   }
   auto t3 = GET_ELAPSED_TIME_NS();
 
@@ -1278,7 +1686,7 @@ FusionRuntime::unpack_internal_buffers(const std::string &dir) {
   };
 
   input_bo_.sync(XCL_BO_SYNC_BO_FROM_DEVICE);
-  const_bo_.sync(XCL_BO_SYNC_BO_FROM_DEVICE);
+  const_bo_->sync(XCL_BO_SYNC_BO_FROM_DEVICE);
   output_bo_.sync(XCL_BO_SYNC_BO_FROM_DEVICE);
   scratch_bo_.sync(XCL_BO_SYNC_BO_FROM_DEVICE);
   super_instr_bo_.sync(XCL_BO_SYNC_BO_FROM_DEVICE);
@@ -1335,7 +1743,7 @@ FusionRuntime::unpack_internal_buffers(const std::string &dir) {
     hash_fs << "------------------------------------" << std::endl;
     hash_fs << std::endl;
 
-    auto *const_bo_ptr = const_bo_.map<int8_t *>();
+    auto *const_bo_ptr = const_bo_->map<int8_t *>();
     for (const auto &op : meta_.op_list) {
       if (meta_.const_map.find(op.name) == meta_.const_map.end()) {
         continue;
@@ -1367,7 +1775,7 @@ FusionRuntime::unpack_internal_buffers(const std::string &dir) {
             << compute_hash(output_bo_.map(), output_bo_.size()) << std::endl;
     hash_fs << "scratch_bo, "
             << compute_hash(scratch_bo_.map(), scratch_bo_.size()) << std::endl;
-    hash_fs << "const_bo, " << compute_hash(const_bo_.map(), const_bo_.size())
+    hash_fs << "const_bo, " << compute_hash(const_bo_->map(), const_bo_->size())
             << std::endl;
     hash_fs << "super_kernel_bo, "
             << compute_hash(super_instr_bo_.map(), super_instr_bo_.size())
@@ -1414,7 +1822,6 @@ bool FusionRuntime::parse_xclbin_metadata(OpPDIMap &op_pdi_map,
   try {
     auto vend_meta = ::xclbin::get_axlf_section(
         xclbin.get_axlf(), axlf_section_kind::VENDER_METADATA);
-
     if (nullptr == vend_meta) {
       // std::cout << "No section found!"<< std::endl;
       return false;
@@ -1434,9 +1841,6 @@ bool FusionRuntime::parse_xclbin_metadata(OpPDIMap &op_pdi_map,
     const struct vender_metadata *vder = (const struct vender_metadata *)p;
     const char *vender_metadata_p = p + vder->m_image_offset;
     size_t vender_metadata_size = vder->m_image_size;
-
-    // std::cout << "vender_metadata_size: " << vender_metadata_size <<
-    // std::endl;
     RYZENAI_LOG_TRACE(
         OpsFusion::dd_format("parse_xclbin_metadata::vender_metadata_size {}",
                              vender_metadata_size));
@@ -1464,6 +1868,11 @@ bool FusionRuntime::parse_xclbin_metadata(OpPDIMap &op_pdi_map,
       }
       std::string pdi_name = pdi.template get<std::string>();
       // in this case, pdi_id == pdi_idx
+      if (kernel_name_to_pdi_idx_.find(pdi_name) ==
+          kernel_name_to_pdi_idx_.end()) {
+        // We may found elf version of the pdi_name.
+        continue;
+      }
       auto pdi_id = kernel_name_to_pdi_idx_.at(pdi_name);
       op_pdi_map.op_to_pdi_id_map[op_type] = pdi_id;
       op_pdi_map.pdi_id_to_kernel_map[pdi_id] = pdi_name;
@@ -1521,6 +1930,7 @@ FusionSubgraphRuntime::FusionSubgraphRuntime(
         xrt_instr_state.at(handle).static_instr_sizes.push_back(0);
       }
       xrt_instr_state.at(handle).num_instr_bos = 2;
+      xrt_instr_state.at(handle).num_fusionrt_instances++;
     }
   }
 }
@@ -1558,6 +1968,7 @@ FusionSubgraphRuntime::FusionSubgraphRuntime(std::vector<xrt::hw_context> &ctxs,
         xrt_instr_state.at(handle).static_instr_sizes.push_back(0);
       }
       xrt_instr_state.at(handle).num_instr_bos = 2;
+      xrt_instr_state.at(handle).num_fusionrt_instances++;
     }
   }
 }
@@ -1577,6 +1988,11 @@ FusionSubgraphRuntime::~FusionSubgraphRuntime() {
         instr_bos_.at(context_id).size(), INSTR_XRT_BO_ALIGNMENT);
     // for now only 1 instr BO in subgraph, could need splitting later
     xrt_instr_state.at(handle).num_instr_bos -= 1;
+    xrt_instr_state.at(handle).num_fusionrt_instances--;
+
+    if (xrt_instr_state.at(handle).num_fusionrt_instances == 0) {
+      xrt_instr_state.erase(handle);
+    }
   }
 }
 
@@ -1996,7 +2412,7 @@ void FusionRuntime::patch_ctrl_pkt(const Metadata &meta) {
   uint64_t input_bo_addr = input_bo_.address() + DDR_AIE_ADDR_OFFSET;
   uint64_t output_bo_addr = output_bo_.address() + DDR_AIE_ADDR_OFFSET;
   uint64_t scratch_bo_addr = scratch_bo_.address() + DDR_AIE_ADDR_OFFSET;
-  uint64_t const_bo_addr = const_bo_.address() + DDR_AIE_ADDR_OFFSET;
+  uint64_t const_bo_addr = const_bo_->address() + DDR_AIE_ADDR_OFFSET;
   uint64_t super_instr_bo_addr =
       super_instr_bo_.address() + DDR_AIE_ADDR_OFFSET;
 

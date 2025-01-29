@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Licensed under the MIT License.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -208,7 +209,9 @@ struct FCLayerDims {
   int ifm_sv_depth;
 };
 
-inline std::map<std::string, FCLayerDims> fc_layer_dims = {
+inline std::map<std::string, FCLayerDims> fc_tiling_params = {
+    {"80", FCLayerDims{1, 40, 256, 1, 16, 128}},
+    {"160", FCLayerDims{1, 40, 256, 1, 16, 128}},
     {"320", FCLayerDims{1, 80, 256, 1, 24, 128}},
     {"640", FCLayerDims{1, 160, 256, 1, 40, 128}},
     {"1280", FCLayerDims{1, 320, 256, 1, 40, 128}},
@@ -218,10 +221,10 @@ inline std::map<std::string, FCLayerDims> fc_layer_dims = {
 };
 
 inline std::map<std::string, std::vector<int>> mswbjvw_srs_shifts = {
-    {"320", {7, 23, 0, 0, 0, 0, 7}},  {"640", {7, 23, 0, 0, 0, 0, 7}},
-    {"1280", {7, 23, 0, 0, 0, 0, 7}}, {"2560", {7, 23, 0, 0, 0, 0, 7}},
-    {"5120", {8, 22, 0, 0, 0, 0, 8}}, {"8000", {8, 22, 0, 0, 0, 0, 8}},
-};
+    {"80", {8, 22, 0, 0, 0, 0, 8}},   {"160", {8, 22, 0, 0, 0, 0, 8}},
+    {"320", {8, 22, 0, 0, 0, 0, 8}},  {"640", {8, 22, 0, 0, 0, 0, 8}},
+    {"1280", {8, 22, 0, 0, 0, 0, 8}}, {"2560", {8, 22, 0, 0, 0, 0, 8}},
+    {"5120", {8, 22, 0, 0, 0, 0, 8}}, {"8000", {8, 22, 0, 0, 0, 0, 8}}};
 
 std::string to_hex_string(const std::vector<uint8_t> &data);
 
