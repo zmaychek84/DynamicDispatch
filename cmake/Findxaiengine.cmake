@@ -23,7 +23,7 @@ if(NOT xaiengine_FOUND)
   message(STATUS "Using xaiengine from FetchContent")
   FetchContent_Declare(
     AIERT
-    GIT_REPOSITORY "https://gitenterprise.xilinx.com/ai-engine/aie-rt.git"
+    GIT_REPOSITORY "https://github.com/Xilinx/aie-rt.git"
     GIT_TAG "release/main_aig"
     SOURCE_SUBDIR driver/src
   )
