@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -122,6 +121,7 @@ public:
     return outputs;
   };
   void set_kernel_shape(std::vector<size_t> shape);
+  std::vector<std::tuple<int, int>> get_supported_shapes();
 
   const std::vector<uint8_t> get_transaction_bin(
       std::vector<Tensor> &input, std::vector<Tensor> &output,

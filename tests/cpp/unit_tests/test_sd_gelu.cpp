@@ -1,6 +1,22 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cfenv>
 #include <fstream>
@@ -106,7 +122,8 @@ inline float py3_round(float x) {
   }
 }
 
-inline void initialize_random_float(std::vector<float> &vec, int max, int min) {
+inline void initialize_random_float(std::vector<float> &vec, float max,
+                                    float min) {
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_real_distribution<float> dis(min, max);
@@ -165,7 +182,7 @@ int test_gelu(int B, int M, int N, bool debug = false,
               const std::string &model_name = "SD_VAE_DEC",
               float pixel_L2_norm_tolerance = 0.01,
               bool test_with_golden = false) {
-  float error_tolerance = 0.01;
+  float error_tolerance = 0.01f;
   int err_count = 0;
   size_t Bs = static_cast<size_t>(B);
   size_t Ms = static_cast<size_t>(M);
@@ -183,11 +200,14 @@ int test_gelu(int B, int M, int N, bool debug = false,
   std::vector<WgT> dummy_wts(64, 0); // 128 bytes 0
   std::vector<Tensor> const_Tensor;
   const_Tensor.push_back({dummy_wts.data(), {64}, "bfloat16"});
+  std::string xclbin = sd_get_xclbin(model_name);
+  std::string pdi_name = xclbin.empty() ? "DPU" : sd_get_pdi(xclbin, "SDGelu");
+  std::cerr << "xclbin: " << xclbin << " pdi_name: " << pdi_name << std::endl;
   if (test_with_golden) {
     ryzenai::sd::gelu sd_gelu = ryzenai::sd::gelu<InT, WgT, OutT>(
         a_dtype, b_dtype, c_dtype, false, attr);
     sd_gelu.debug(debug);
-    sd_gelu.set_params();
+    sd_gelu.set_params(xclbin, pdi_name);
     sd_gelu.initialize_const_params(const_Tensor);
 
     std::string test_golden_root_dir =
@@ -225,7 +245,7 @@ int test_gelu(int B, int M, int N, bool debug = false,
     ryzenai::sd::gelu sd_gelu = ryzenai::sd::gelu<InT, WgT, OutT>(
         a_dtype, b_dtype, c_dtype, false, attr);
     sd_gelu.debug(debug);
-    sd_gelu.set_params();
+    sd_gelu.set_params(xclbin, pdi_name);
     sd_gelu.initialize_const_params(const_Tensor);
     std::vector<float> raw_ifms(B * M * N, 0);
     initialize_random_float(raw_ifms, 2, -2);
@@ -277,45 +297,66 @@ int test_gelu(int B, int M, int N, bool debug = false,
 // Random test
 // Unet
 // sd1.5
-TEST(SD_GELU_Test, Random_KernelUnetlayer1) {
+TEST(SD_GELU_Test, Random_SD15_UNET_4) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
-      2, 64, 5120, false, "bfloat16", "bfloat16", "bfloat16");
+      2, 64, 5120, false, "bfloat16", "bfloat16", "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GELU_Test, Random_KernelUnetlayer2) {
+TEST(SD_GELU_Test, Random_SD15_UNET_2) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
-      2, 1024, 2560, false, "bfloat16", "bfloat16", "bfloat16");
+      2, 1024, 2560, false, "bfloat16", "bfloat16", "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GELU_Test, Random_KernelUnetlayer3) {
+TEST(SD_GELU_Test, Random_SD15_UNET_3) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
-      2, 256, 5120, false, "bfloat16", "bfloat16", "bfloat16");
+      2, 256, 5120, false, "bfloat16", "bfloat16", "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GELU_Test, Random_KernelUnetlayer4) {
+TEST(SD_GELU_Test, Random_SD15_UNET_1) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
-      2, 4096, 1280, false, "bfloat16", "bfloat16", "bfloat16");
+      2, 4096, 1280, false, "bfloat16", "bfloat16", "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
+
 // sd3.0
-TEST(SD_GELU_Test, Random_SD3KernelUnetlayer1) {
+// 512
+TEST(SD_GELU_Test, Random_SD3_DIT512_1) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
-      2, 154, 6144, false, "bfloat16", "bfloat16", "bfloat16");
+      2, 1024, 6144, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GELU_Test, Random_SD3KernelUnetlayer2) {
+TEST(SD_GELU_Test, Random_SD3_DIT512_2) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
-      2, 1024, 6144, false, "bfloat16", "bfloat16", "bfloat16");
+      2, 154, 6144, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GELU_Test, Random_SD3KernelUnetlayer3) {
+TEST(SD_GELU_Test, Random_SD3_DIT512_3) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
-      2, 4096, 6144, false, "bfloat16", "bfloat16", "bfloat16");
+      2, 160, 6144, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// 1024
+TEST(SD_GELU_Test, Random_SD3_DIT1024_Layer1) {
+  int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
+      2, 154, 6144, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT1024");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GELU_Test, Random_SD3_DIT1024_Layer2) {
+  int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
+      2, 4096, 6144, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT1024");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GELU_Test, Random_SD3_DIT1024_Layer3) {
+  int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
+      2, 160, 6144, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -350,9 +391,9 @@ TEST(SD_GELU_Test, Golden_KernelUnetlayer4) {
 }
 
 // sd3.0
-TEST(SD_GELU_Test, Golden_SD3KernelUnetlayer1) {
+TEST(SD_GELU_Test, Golden_SD3_DIT1024_Layer1) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
-      2, 154, 6144, false, "bfloat16", "bfloat16", "bfloat16", "SD_MMDIT",
+      2, 154, 6144, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT1024",
       0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
@@ -364,9 +405,9 @@ TEST(SD_GELU_Test, Golden_SD3KernelUnetlayer2) {
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GELU_Test, Golden_SD3KernelUnetlayer3) {
+TEST(SD_GELU_Test, Golden_SD3_DIT1024_Layer2) {
   int err_count = test_gelu<uint16_t, uint16_t, uint16_t>(
-      2, 4096, 6144, false, "bfloat16", "bfloat16", "bfloat16", "SD_MMDIT",
+      2, 4096, 6144, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT1024",
       0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

@@ -1,6 +1,22 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 #include <any>
 #include <iostream>
 #include <map>
@@ -161,6 +177,8 @@ batch_matmul<InT, WtT, OutT>::batch_matmul(
     const std::string &c_dtype, bool load_xrt,
     const std::map<std::string, std::any> &attr) {
 
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
+
   txnbin_a_header = {{"int8", "a8"}, {"uint8", "a8"}, {"uint16", "a16"}};
 
   txnbin_b_header = {{"int8", "w8"}, {"uint8", "w8"}};
@@ -318,6 +336,39 @@ void batch_matmul<InT, WtT, OutT>::set_params(const std::string &model_name,
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }
 
+std::pair<std::vector<int64_t>, std::vector<int32_t>>
+bmm_calculate_qdq_coeffs(const std::vector<Tensor> &const_params) {
+
+  float a_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(1))[0];
+  uint16_t a_zp = OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(2))[0];
+
+  float w_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(3))[0];
+  uint16_t w_zp = OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(4))[0];
+
+  float q_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(5))[0];
+  uint16_t q_zp = OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(6))[0];
+
+  auto qdq_params =
+      OpsFusion::coeffs::calculate_matmul_3d_qdq_params_uint16_uint8(
+          OpsFusion::fold3D<uint8_t>(const_params[0]), a_sc, a_zp, w_sc, w_zp,
+          q_sc, q_zp);
+
+  size_t c0_rows = qdq_params.c0_coeffs.size();
+  size_t c0_cols = qdq_params.c0_coeffs[0].size();
+
+  std::vector<int64_t> c0_coeffs_vec(c0_rows * c0_cols);
+
+  for (auto m = 0; m < c0_rows; m++) {
+    for (auto n = 0; n < c0_cols; n++) {
+      c0_coeffs_vec[m * c0_cols + n] = qdq_params.c0_coeffs[m][n];
+    }
+  }
+
+  std::vector<int32_t> qdq_coeffs = qdq_params.qdq_params;
+
+  return {c0_coeffs_vec, qdq_coeffs};
+}
+
 /*
  * copy weight matrix into XRT BOs with padding and tiling
  *
@@ -339,11 +390,14 @@ void batch_matmul<InT, WtT, OutT>::initialize_const_params(
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("batch_matmul initialize_const_params(ptr) ...");
 
+  size_t expected_const_param_size = (is_generic_fusion ? 7 : 3);
+
   DD_THROW_IF(
-      (const_params.size() != 3) || (const_params.at(0).shape.size() != 3),
+      (const_params.size() != expected_const_param_size) ||
+          (const_params.at(0).shape.size() != 3),
       OpsFusion::dd_format("Unsupported const spec for batch_matmul\n") +
           OpsFusion::dd_format(
-              "(Details : #const params == 1 ({}), Const param dim == 2 ({})",
+              "(Details : #const params  ({}), Const param dim ({})",
               const_params.size(), const_params.at(0).shape.size()));
 
   w_shape_[0] = const_params.at(0).shape.at(0);
@@ -354,8 +408,24 @@ void batch_matmul<InT, WtT, OutT>::initialize_const_params(
   // auto N_raw = w_shape_[1];
 
   auto weights = (WtT *)const_params.at(0).data;
-  auto qdq = (int64_t *)const_params.at(1).data;
-  auto qdq_params = (int32_t *)const_params.at(2).data;
+
+  int64_t *qdq = nullptr;
+  int32_t *qdq_params = nullptr;
+
+  std::vector<int64_t> qdq_vec;
+  std::vector<int32_t> qdq_params_vec;
+
+  if (is_generic_fusion) {
+    if ("uint16" != a_dtype_) {
+      throw std::runtime_error("[ERROR] : Unknown data type.");
+    }
+    std::tie(qdq_vec, qdq_params_vec) = bmm_calculate_qdq_coeffs(const_params);
+    qdq = qdq_vec.data();
+    qdq_params = qdq_params_vec.data();
+  } else {
+    qdq = (int64_t *)const_params.at(1).data;
+    qdq_params = (int32_t *)const_params.at(2).data;
+  }
 
   auto Ksubv = matmul_matrix::Ksubv_PSW_BMM;
   auto Msubv = matmul_matrix::Msubv_PSW_BMM;
@@ -768,10 +838,12 @@ std::vector<OpArgMap> batch_matmul<InT, WtT, OutT>::get_buffer_reqs(
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
   size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
 
+  size_t out_idx = is_generic_fusion ? 8 : 4;
+
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 4, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, out_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};

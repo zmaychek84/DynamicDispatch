@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -92,6 +91,8 @@ private:
   std::string txn_fname_prefix_;
   std::string param_fname_prefix_;
 
+  bool is_generic_pass_in_onnx = false;
+
   /*
    * Utility function that setups the instruction registry with transaction
    * binaries.
@@ -103,7 +104,8 @@ private:
 
 public:
   mhagrpb(const std::string &a_dtype, const std::string &b_dtype,
-          const std::string &c_dtype, bool load_xrt = true);
+          const std::string &c_dtype, bool load_xrt = true,
+          const std::map<std::string, std::any> attr = {});
   void debug(bool enable);
   void set_params(const std::string &model_name,
                   std::vector<size_t> input_shape);

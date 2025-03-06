@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +22,8 @@
 
 #include <ops/op_interface.hpp>
 #include <ops/ops_common.hpp>
+#include <ops/ops_common/coeffs.hpp>
+#include <ops/ops_common/op_util.hpp>
 
 namespace ryzenai {
 
@@ -97,6 +99,9 @@ private:
   std::string txn_fname_prefix_;
   std::string param_fname_prefix_;
   bool is_ctrl_pkt_;
+  bool is_generic_fusion = false;
+  mutable int64_t q_shape_back;
+  mutable int64_t k_shape_back;
 
   /*
    * Utility function that setups the instruction registry with transaction

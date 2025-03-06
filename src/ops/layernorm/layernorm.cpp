@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <fstream>
@@ -113,6 +128,7 @@ const std::vector<uint8_t> layernorm<InT, WtT, OutT>::get_transaction_bin(
   auto [M, K] = extract_MK(input);
   auto [Mo, Ko] = map_padded_shape(M, K);
   std::string txn_key = get_instr_key(txn_fname_prefix_, Mo, Ko);
+
   Transaction &txn = Transaction::getInstance();
   std::vector<uint8_t> data = txn.get_txn_bvec(txn_key);
 
@@ -121,6 +137,7 @@ const std::vector<uint8_t> layernorm<InT, WtT, OutT>::get_transaction_bin(
   uint32_t zp = uint16_t(qdq_param[lrn_qdq_ifm_zp_idx]);
   uint32_t pad_val = zp | (zp << 16);
   std::vector<uint8_t> txn_w_pad;
+
   if (design_param_.find("4x4") != std::string::npos) { // mzdk5 4x4 design
     txn_w_pad = prepend_mtile_const_pad_txn(data, pad_val, 6, 4);
   } else {
@@ -137,7 +154,6 @@ const std::vector<uint8_t> layernorm<InT, WtT, OutT>::get_super_kernel_params(
   auto [Mo, Ko] = map_padded_shape(M, K);
   // TODO: Add check to validate tensor shapes
   std::string param_key = get_instr_key(param_fname_prefix_, Mo, Ko) + "_param";
-  // std::cout << "Super kernel params name : " << fname << std::endl;
   Transaction &txn = Transaction::getInstance();
   return txn.get_txn_bvec(param_key);
 }
@@ -150,7 +166,6 @@ std::vector<uint8_t> layernorm<InT, WtT, OutT>::get_ctrl_pkts(
   auto [Mo, Ko] = map_padded_shape(M, K);
   // TODO: Add check to validate tensor shapes
   std::string ctrl_key = get_instr_key(param_fname_prefix_, Mo, Ko) + "_ctrl";
-  // std::cout << "Super kernel params name : " << fname << std::endl;
   try {
     Transaction &txn = Transaction::getInstance();
     return txn.get_txn_bvec(ctrl_key);
@@ -196,12 +211,15 @@ std::vector<OpArgMap> layernorm<InT, WtT, OutT>::get_buffer_reqs(
   size_t input_bo_size = (Mo * No * sizeof(InT));
   size_t output_bo_size = (Mo * No * sizeof(OutT));
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
+
   size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
+
+  size_t output_idx = is_generic_fusion ? 11 : 4;
 
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 4, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};
@@ -229,6 +247,60 @@ void layernorm<InT, WtT, OutT>::setup_instr_registry() {
 
   xrt_ctx_->get_registry().add_instructions(instructions);
   xrt_ctx_->get_registry().add_layer_params(layer_params);
+}
+
+template <typename InT, typename WtT, typename OutT>
+void layernorm<InT, WtT, OutT>::qdq_calc(
+    std::vector<uint16_t> &gamma, std::vector<uint16_t> &beta,
+    std::vector<int32_t> &qdq_params, const std::vector<Tensor> &const_params,
+    const std::map<std::string, std::any> &attr, std::vector<size_t> shape) {
+
+  // qdq1
+  auto alpha_data = const_params.at(0).data;
+  std::vector<uint8_t> alpha_data_vec(static_cast<uint8_t *>(alpha_data),
+                                      static_cast<uint8_t *>(alpha_data) +
+                                          shape[0]);
+
+  auto alpha_sc = static_cast<float *>(const_params.at(4).data);
+  auto alpha_zp = static_cast<uint8_t *>(const_params.at(5).data);
+
+  gamma = OpsFusion::coeffs::dq_vec_to_bf16<uint8_t>(alpha_data_vec, *alpha_sc,
+                                                     *alpha_zp);
+
+  // qdq2
+  // params extraction
+  auto beta_data = const_params.at(1).data;
+  std::vector<int32_t> beta_data_vec(static_cast<int32_t *>(beta_data),
+                                     static_cast<int32_t *>(beta_data) +
+                                         shape[0]);
+
+  auto beta_sc = static_cast<float *>(const_params.at(6).data);
+  auto beta_zp = static_cast<int32_t *>(const_params.at(7).data);
+
+  beta = OpsFusion::coeffs::dq_vec_to_bf16<int32_t>(beta_data_vec, *beta_sc,
+                                                    *beta_zp);
+
+  // qdq_3
+  auto act_sc = static_cast<float *>(const_params.at(2).data);
+  auto act_zp = static_cast<int32_t *>(const_params.at(3).data);
+  auto y_sc = static_cast<float *>(const_params.at(8).data);
+  auto y_zp = static_cast<uint16_t *>(const_params.at(9).data);
+
+  const auto &in_dtype =
+      std::any_cast<const std::vector<std::string> &>(attr.at("in_dtypes"));
+
+  bool lrn_is_uint16 = (in_dtype[0] == "uint16") ? true : false;
+  bool act_dtype = (in_dtype[0] == "uint8") ? true : false;
+
+  //  std::vector<int32_t> qdq3(16, 0);
+  qdq_params[0] = OpsFusion::coeffs::float_to_bfloat16(1 / *y_sc);
+  qdq_params[1] = *y_zp;
+  qdq_params[2] = act_dtype ? 0 : 1;
+  qdq_params[3] = OpsFusion::coeffs::float_to_bfloat16(*act_sc);
+  qdq_params[4] = lrn_is_uint16 ? *act_zp : 0; // *act_zp;
+
+  qdq_params[5] = lrn_is_uint16;
+  //  qdq_params = (int32_t*)qdq3.data();
 }
 
 template <typename InT, typename WtT, typename OutT>
@@ -321,6 +393,8 @@ layernorm<InT, WtT, OutT>::layernorm(
   b_dtype_size_ = sizeof(WtT);
   c_dtype_size_ = sizeof(OutT);
 
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
+
   layernorm_id_ = layernorm_count++;
   /*select xclbin based on the input/output types*/
   std::string XCLBIN_FNAME =
@@ -352,7 +426,6 @@ layernorm<InT, WtT, OutT>::layernorm(
 
   txn_fname_prefix_ = "lrn_4x2_" + txnbin_a_header.at(a_dtype_) +
                       txnbin_acc_header.at(c_dtype_);
-
   param_fname_prefix_ = "lrn_4x2_" + txnbin_a_header.at(a_dtype_) +
                         txnbin_acc_header.at(c_dtype_);
 
@@ -479,7 +552,7 @@ void layernorm<InT, WtT, OutT>::initialize_const_params(
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("Layernorm initialize_const_params(ptr) ...");
 
-  DD_THROW_IF((const_params.size() != 3) ||
+  DD_THROW_IF(((!is_generic_fusion) && (const_params.size() != 3)) ||
                   (const_params.at(0).shape.size() != 1) ||
                   (const_params.at(1).shape.size() != 1),
               OpsFusion::dd_format("Unsupported const spec for Layernorm\n") +
@@ -489,12 +562,29 @@ void layernorm<InT, WtT, OutT>::initialize_const_params(
                       const_params.size(), const_params.at(0).shape.size(),
                       const_params.at(1).shape.size()));
 
+  std::vector<size_t> shape;
   const int gamma_idx = 0, beta_idx = 1, qdq_params_idx = 2;
-  // The first data is Gamma
-  auto gamma = (WtT *)const_params.at(gamma_idx).data;
-  std::vector<size_t> shape = const_params.at(gamma_idx).shape;
-  auto beta = (WtT *)const_params.at(beta_idx).data;
-  auto qdq_params = (int32_t *)const_params.at(qdq_params_idx).data;
+
+  if (is_generic_fusion) {
+    shape = const_params.at(0).shape;
+  } else {
+    shape = const_params.at(gamma_idx).shape;
+  }
+
+  std::vector<uint16_t> gamma(shape[0], 0);
+  std::vector<uint16_t> beta(shape[0], 0);
+  std::vector<int32_t> qdq_params(16, 0);
+
+  if (!is_generic_fusion) {
+    std::memcpy(gamma.data(), (void *)const_params.at(gamma_idx).data,
+                shape[0] * sizeof(WtT));
+    std::memcpy(beta.data(), (void *)const_params.at(beta_idx).data,
+                shape[0] * sizeof(WtT));
+    std::memcpy(qdq_params.data(), (void *)const_params.at(qdq_params_idx).data,
+                16 * sizeof(int32_t));
+  } else {
+    qdq_calc(gamma, beta, qdq_params, const_params, attr, shape);
+  }
 
   // SW convert scale to 1/scale and bfloat16 for Q
   size_t offset;
@@ -511,33 +601,30 @@ void layernorm<InT, WtT, OutT>::initialize_const_params(
       bias.gamma((int)k) = gamma[k];
       bias.beta((int)k) = beta[k];
     }
-  } else {
-    if (shape[0] == 768) {
-      int count = (int)(shape[0] * lrn_matrix::Mwgt);
-      offset = lrn_matrix::BiasVector<WtT, 1>::size(count);
-      auto buffer = io.get_buffer(0, offset);
-      lrn_matrix::BiasVector<WtT, 1> bias(count, buffer->ptr());
-      for (int k = 0; k < shape[0] / 8; ++k) { // 8x8 block
-        for (int j = 0; j < 8; ++j) {          // col
-          for (int i = 0; i < 8; ++i) {        // row
-            bias.gamma(k * 64 + j + i * 8) = gamma[k * 8 + j];
-            bias.beta(k * 64 + j + i * 8) = beta[k * 8 + j];
-          }
+  } else if (shape[0] == 768) {
+    int count = (int)(shape[0] * lrn_matrix::Mwgt);
+    offset = lrn_matrix::BiasVector<WtT, 1>::size(count);
+    auto buffer = io.get_buffer(0, offset);
+    lrn_matrix::BiasVector<WtT, 1> bias(count, buffer->ptr());
+    for (int k = 0; k < shape[0] / 8; ++k) { // 8x8 block
+      for (int j = 0; j < 8; ++j) {          // col
+        for (int i = 0; i < 8; ++i) {        // row
+          bias.gamma(k * 64 + j + i * 8) = gamma[k * 8 + j];
+          bias.beta(k * 64 + j + i * 8) = beta[k * 8 + j];
         }
       }
-    } else { // m3uec
-      int count = (int)shape[0];
-      offset = lrn_matrix::BiasVector<WtT, 1>::size(count);
-      auto buffer = io.get_buffer(0, offset);
-      lrn_matrix::BiasVector<WtT, 1> bias(count, buffer->ptr());
-      for (size_t k = 0; k < shape[0]; ++k) {
-        bias.gamma((int)k) = gamma[k];
-        bias.beta((int)k) = beta[k];
-      }
+    }
+  } else { // m3uec
+    int count = (int)shape[0];
+    offset = lrn_matrix::BiasVector<WtT, 1>::size(count);
+    auto buffer = io.get_buffer(0, offset);
+    lrn_matrix::BiasVector<WtT, 1> bias(count, buffer->ptr());
+    for (size_t k = 0; k < shape[0]; ++k) {
+      bias.gamma((int)k) = gamma[k];
+      bias.beta((int)k) = beta[k];
     }
   }
-
-  io.write(offset, (void *)qdq_params, qdq_params_size);
+  io.write(offset, static_cast<void *>(qdq_params.data()), qdq_params_size);
   const_pad_ = uint16_t(qdq_params[lrn_qdq_ifm_zp_idx]);
   RYZENAI_LOG_TRACE("Layernorm initialize_const_params(ptr) ... DONE");
 }
@@ -600,7 +687,6 @@ void layernorm<InT, WtT, OutT>::initialize_const_params(
     }
 
     if (is_ctrl_pkt_) {
-      std::cout << "ctrlpkt patching" << std::endl;
       RYZENAI_LOG_TRACE("layernorm patch ctrlpkt ... START");
       // get param_bo address
       auto param_bo_key = get_instr_key(param_fname_prefix_, Mo, Ko) + "_param";

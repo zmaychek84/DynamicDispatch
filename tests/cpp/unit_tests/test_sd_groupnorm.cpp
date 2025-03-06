@@ -1,6 +1,22 @@
-/*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cfenv>
 #include <cmath>
@@ -77,7 +93,7 @@ static std::vector<uint32_t> read_file(const std::string &filePath) {
 
 template <typename T>
 int sd_groupnorm_check_result(std::vector<T> cpu_Y, std::vector<T> aie_Y,
-                              float error_tolerance = 0.01,
+                              float error_tolerance = 0.01f,
                               float pixel_L2_norm_tolerance = 0.01) {
   int fail = 0;
   float max_diff = 0;
@@ -170,7 +186,7 @@ int test_groupnorm(int B, int H, int W, int C, bool debug = false,
                    const std::string &a_dtype = "bfloat16",
                    const std::string &b_dtype = "bfloat16",
                    const std::string &c_dtype = "bfloat16",
-                   float pixel_L2_norm_tolerance = 0.01,
+                   float pixel_L2_norm_tolerance = 0.01f,
                    bool test_with_golden = false,
                    const std::string &model_name = "SD1.5") {
   std::map<std::string, std::string> txnbin_a_header = {{"bfloat16", "a16bf"}};
@@ -202,14 +218,17 @@ int test_groupnorm(int B, int H, int W, int C, bool debug = false,
   attr["input_shape"] = std::vector<int>{B, H, W, C};
   attr["output_shape"] = std::vector<int>{B, H, W, C};
   attr["wts_shape"] = std::vector<int>{C * 2};
-
+  std::string xclbin = sd_get_xclbin(model_name);
+  std::string pdi_name =
+      xclbin.empty() ? "DPU" : sd_get_pdi(xclbin, "SDGroupNorm");
+  std::cerr << "xclbin: " << xclbin << " pdi_name: " << pdi_name << std::endl;
   if (test_with_golden) {
     ryzenai::sd::groupnorm sd_groupnorm =
         ryzenai::sd::groupnorm<std::uint16_t, std::uint16_t, std::uint16_t>(
             a_dtype, b_dtype, c_dtype, false, attr);
     sd_groupnorm.debug(debug);
     std::vector<size_t> shapes = {Bs, Hs, Ws, Cs};
-    sd_groupnorm.set_params();
+    sd_groupnorm.set_params(xclbin, pdi_name);
     std::string test_golden_root_dir =
         "tests/cpp/unit_tests/testDataMladf/sd_groupnorm/";
     std::string shape_key = txnbin_a_header.at(a_dtype) +
@@ -258,7 +277,7 @@ int test_groupnorm(int B, int H, int W, int C, bool debug = false,
             a_dtype, b_dtype, c_dtype, false, attr);
     sd_groupnorm.debug(debug);
     std::vector<size_t> shapes = {Bs, Hs, Ws, Cs};
-    sd_groupnorm.set_params();
+    sd_groupnorm.set_params(xclbin, pdi_name);
     // gen rand
     std::vector<float> raw_gamma(Cs, 0);
     initialize_random_float(raw_gamma, 1, -1);
@@ -350,284 +369,388 @@ int test_groupnorm(int B, int H, int W, int C, bool debug = false,
 
 // sd1.5
 // golden test
-TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer1) {
+TEST(SD_GROUPNORM_Test, Golden_SD3_VAE1024_Layer3) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 128, 128, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      1, 128, 128, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true,
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer2) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 256, 256, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      1, 256, 256, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer3) {
+TEST(SD_GROUPNORM_Test, Golden_SD3_VAE1024_Layer4) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 256, 256, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      1, 256, 256, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true,
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer4) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 512, 512, 128, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      1, 512, 512, 128, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer5) {
+TEST(SD_GROUPNORM_Test, Golden_SD3_VAE1024_Layer5) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 512, 512, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      1, 512, 512, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true,
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer6) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 64, 64, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      1, 64, 64, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer7) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 16, 16, 1280, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 16, 16, 1280, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer8) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 16, 16, 1920, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 16, 16, 1920, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer9) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 16, 16, 2560, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 16, 16, 2560, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer10) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 16, 16, 640, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 16, 16, 640, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer11) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 32, 32, 1280, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 32, 32, 1280, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer12) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 32, 32, 1920, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 32, 32, 1920, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer13) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 32, 32, 320, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 32, 32, 320, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer14) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 32, 32, 640, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 32, 32, 640, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer15) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 32, 32, 960, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 32, 32, 960, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer16) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 64, 64, 320, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 64, 64, 320, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer17) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 64, 64, 640, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 64, 64, 640, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer18) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 64, 64, 960, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 64, 64, 960, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer19) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 8, 8, 1280, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 8, 8, 1280, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_GROUPNORM_Test, Golden_KernelUnetlayer20) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 8, 8, 2560, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      2, 8, 8, 2560, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // sd3.0
-TEST(SD_GROUPNORM_Test, Golden_KernelSD3Unetlayer1) {
+TEST(SD_GROUPNORM_Test, Golden_SD3_VAE1024_Layer6) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 512, 512, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01, true);
+      1, 512, 512, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, true,
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Golden_KernelSD3Unetlayer2) {
+TEST(SD_GROUPNORM_Test, Golden_SD3_VAE1024_Layer1) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 1024, 1024, 128, false, "bfloat16", "bfloat16", "bfloat16", 0.01,
-      true);
+      1, 1024, 1024, 128, false, "bfloat16", "bfloat16", "bfloat16", 0.01f,
+      true, "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Golden_KernelSD3Unetlayer3) {
+TEST(SD_GROUPNORM_Test, Golden_SD3_VAE1024_Layer2) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 1024, 1024, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01,
-      true);
+      1, 1024, 1024, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01f,
+      true, "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // sd1.5
 // Random test
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer1) {
+TEST(SD_GROUPNORM_Test, Random_SD3_VAE1024_Layer3) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 128, 128, 512, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 128, 128, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer2) {
+TEST(SD_GROUPNORM_Test, Random_SD3_VAE512_2) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 256, 256, 256, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 128, 128, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer3) {
+TEST(SD_GROUPNORM_Test, Random_SD15_VAE_2) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 256, 256, 512, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 128, 128, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_VAE");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer4) {
+TEST(SD_GROUPNORM_Test, Random_SD3_VAE512_4) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 512, 512, 128, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 256, 256, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer5) {
+TEST(SD_GROUPNORM_Test, Random_SD15_VAE_4) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 512, 512, 256, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 256, 256, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_VAE");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer6) {
+TEST(SD_GROUPNORM_Test, Random_SD3_VAE1024_Layer4) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 64, 64, 512, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 256, 256, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer7) {
+TEST(SD_GROUPNORM_Test, Random_SD3_VAE512_3) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 16, 16, 1280, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 256, 256, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer8) {
+TEST(SD_GROUPNORM_Test, Random_SD15_VAE_3) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 16, 16, 1920, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 256, 256, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_VAE");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer9) {
+TEST(SD_GROUPNORM_Test, Random_SD3_VAE512_6) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 16, 16, 2560, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 512, 512, 128, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer10) {
+TEST(SD_GROUPNORM_Test, Random_SD15_VAE_6) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 16, 16, 640, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 512, 512, 128, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_VAE");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer11) {
+TEST(SD_GROUPNORM_Test, Random_SD3_VAE1024_Layer5) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 32, 32, 1280, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 512, 512, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer12) {
+TEST(SD_GROUPNORM_Test, Random_SD3_VAE512_5) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 32, 32, 1920, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 512, 512, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer13) {
+TEST(SD_GROUPNORM_Test, Random_SD15_VAE_5) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 32, 32, 320, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 512, 512, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_VAE");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer14) {
+TEST(SD_GROUPNORM_Test, Random_SD3_VAE512_1) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 32, 32, 640, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 64, 64, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer15) {
+TEST(SD_GROUPNORM_Test, Random_SD15_VAE_1) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 32, 32, 960, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 64, 64, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_VAE");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer16) {
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_5) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 64, 64, 320, false, "bfloat16", "bfloat16", "bfloat16");
+      2, 16, 16, 1280, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer17) {
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_9) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 64, 64, 640, false, "bfloat16", "bfloat16", "bfloat16");
+      2, 16, 16, 1920, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer18) {
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_8) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 64, 64, 960, false, "bfloat16", "bfloat16", "bfloat16");
+      2, 16, 16, 2560, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer19) {
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_4) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 8, 8, 1280, false, "bfloat16", "bfloat16", "bfloat16");
+      2, 16, 16, 640, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelUnetlayer20) {
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_11) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      2, 8, 8, 2560, false, "bfloat16", "bfloat16", "bfloat16");
+      2, 32, 32, 1280, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_10) {
+  int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
+      2, 32, 32, 1920, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_2) {
+  int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
+      2, 32, 32, 320, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_3) {
+  int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
+      2, 32, 32, 640, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_12) {
+  int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
+      2, 32, 32, 960, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_1) {
+  int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
+      2, 64, 64, 320, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_14) {
+  int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
+      2, 64, 64, 640, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_13) {
+  int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
+      2, 64, 64, 960, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_6) {
+  int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
+      2, 8, 8, 1280, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GROUPNORM_Test, Random_SD15_UNET_7) {
+  int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
+      2, 8, 8, 2560, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // sd3.0
-TEST(SD_GROUPNORM_Test, Random_KernelSD3Unetlayer1) {
+TEST(SD_GROUPNORM_Test, Random_SD3_VAE1024_Layer6) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 512, 512, 512, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 512, 512, 512, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelSD3Unetlayer2) {
+TEST(SD_GROUPNORM_Test, Random_SD3_VAE1024_Layer1) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 1024, 1024, 128, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 1024, 1024, 128, false, "bfloat16", "bfloat16", "bfloat16", 0.01f,
+      false, "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GROUPNORM_Test, Random_KernelSD3Unetlayer3) {
+TEST(SD_GROUPNORM_Test, Random_SD3_VAE1024_Layer2) {
   int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
-      1, 1024, 1024, 256, false, "bfloat16", "bfloat16", "bfloat16");
+      1, 1024, 1024, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01f,
+      false, "SD3_VAE1024");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GROUPNORM_Test, Random_SD3_VAEENC512_1) {
+  int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
+      1, 128, 128, 256, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GROUPNORM_Test, Random_SD3_VAEENC512_2) {
+  int err_count = test_groupnorm<uint16_t, uint16_t, uint16_t>(
+      1, 256, 256, 128, false, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

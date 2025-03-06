@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 #include <any>
 #include <iostream>
 #include <map>
@@ -25,8 +40,9 @@
 
 #include <ops/nni_resize/nni_resize.hpp>
 #include <ops/op_interface.hpp>
+#include <ops/ops_common/coeffs.hpp>
 #include <ops/ops_common/ctrlpkt.hpp>
-
+#include <ops/ops_common/op_util.hpp>
 #include <utils/logging.hpp>
 #include <utils/utils.hpp>
 
@@ -138,7 +154,7 @@ nni_resize<InT, OutT>::nni_resize(const std::string &a_dtype,
 
   txnbin_a_header = {{"uint16", "a16"}};
   txnbin_c_header = {{"uint16", "acc16"}};
-
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
   default_shapes_["nni_resize_4x4_a16acc16"] =
       std::vector<std::tuple<int, int, int>>();
   default_shapes_["nni_resize_4x4_a16acc16"].push_back(
@@ -489,12 +505,12 @@ std::vector<OpArgMap> nni_resize<InT, OutT>::get_buffer_reqs(
   size_t output_bo_size = (out_shape * sizeof(OutT));
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
   size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
-
+  size_t output_idx = is_generic_fusion ? 5 : 2;
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0,
        const_params_bo_size}, // Dummy allocation
-      {OpArgMap::OpArgType::OUTPUT, 0, 2, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0,

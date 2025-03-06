@@ -1,7 +1,23 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 #include <any>
 #include <iostream>
 #include <map>
@@ -25,7 +41,9 @@
 
 #include <ops/elwadd/elwadd.hpp>
 #include <ops/op_interface.hpp>
+#include <ops/ops_common/coeffs.hpp>
 #include <ops/ops_common/ctrlpkt.hpp>
+#include <ops/ops_common/op_util.hpp>
 #include <txn_container.hpp>
 #include <utils/instruction_registry.hpp>
 #include <utils/logging.hpp>
@@ -170,6 +188,15 @@ elw_add<InT, WtT, OutT>::elw_add(const std::string &a_dtype,
       std::vector<std::tuple<int, int>>();
   default_shapes_["elwadd_4x4_a16a16acc16"] =
       std::vector<std::tuple<int, int>>();
+  default_shapes_["elwadd_8x4_a16a16accbf16"] =
+      std::vector<std::tuple<int, int>>();
+  default_shapes_["elwadd_8x4_abf16a16accbf16"] =
+      std::vector<std::tuple<int, int>>();
+
+  default_shapes_["elwadd_8x4_a16a16accbf16"] =
+      std::vector<std::tuple<int, int>>();
+  default_shapes_["elwadd_8x4_abf16a16accbf16"] =
+      std::vector<std::tuple<int, int>>();
 
   default_shapes_["elwadd_4x2_a8a8accbf16"].push_back(
       std::make_tuple(512, 768));
@@ -258,9 +285,32 @@ elw_add<InT, WtT, OutT>::elw_add(const std::string &a_dtype,
   default_shapes_["elwadd_4x4_a16a16acc16"].push_back(
       std::make_tuple(12, 4096));
   default_shapes_["elwadd_4x4_a16a16acc16"].push_back(std::make_tuple(64, 768));
-  default_shapes_["elwadd_4x4_a16a16acc16"].push_back(std::make_tuple(1, 3072));
-  default_shapes_["elwadd_4x4_a16a16acc16"].push_back(
+  default_shapes_["elwadd_4x4_a16a16accbf16"].push_back(
+      std::make_tuple(1, 3072));
+  default_shapes_["elwadd_4x4_a16a16accbf16"].push_back(
       std::make_tuple(64 * 3072, 1));
+  default_shapes_["elwadd_4x4_abf16a16accbf16"].push_back(
+      std::make_tuple(1, 3072));
+  default_shapes_["elwadd_4x4_abf16a16accbf16"].push_back(
+      std::make_tuple(64 * 3072, 1));
+
+  default_shapes_["elwadd_8x4_a16a16accbf16"].push_back(
+      std::make_tuple(1, 3072));
+  default_shapes_["elwadd_8x4_a16a16accbf16"].push_back(
+      std::make_tuple(64 * 3072, 1));
+  default_shapes_["elwadd_8x4_abf16a16accbf16"].push_back(
+      std::make_tuple(1, 3072));
+  default_shapes_["elwadd_8x4_abf16a16accbf16"].push_back(
+      std::make_tuple(64 * 3072, 1));
+
+  default_shapes_["elwadd_8x4_a16a16accbf16"].push_back(
+      std::make_tuple(1, 2048)); // 1536 padded to 2048
+  default_shapes_["elwadd_8x4_a16a16accbf16"].push_back(
+      std::make_tuple(64 * 1536, 1));
+  default_shapes_["elwadd_8x4_abf16a16accbf16"].push_back(
+      std::make_tuple(1, 2048)); // 1536 padded to 2048
+  default_shapes_["elwadd_8x4_abf16a16accbf16"].push_back(
+      std::make_tuple(64 * 1536, 1));
 
   // raw shape is the actual shape from ONNX
   raw_shapes_["elwadd_4x2_a8a8accbf16"] = std::vector<std::tuple<int, int>>();
@@ -274,6 +324,13 @@ elw_add<InT, WtT, OutT>::elw_add(const std::string &a_dtype,
   raw_shapes_["elwadd_4x4_a16a16accbf16"] = std::vector<std::tuple<int, int>>();
   raw_shapes_["elwadd_4x4_abf16a16acc16"] = std::vector<std::tuple<int, int>>();
   raw_shapes_["elwadd_4x4_a16a16acc16"] = std::vector<std::tuple<int, int>>();
+  raw_shapes_["elwadd_8x4_a16a16accbf16"] = std::vector<std::tuple<int, int>>();
+  raw_shapes_["elwadd_8x4_abf16a16accbf16"] =
+      std::vector<std::tuple<int, int>>();
+
+  raw_shapes_["elwadd_8x4_a16a16accbf16"] = std::vector<std::tuple<int, int>>();
+  raw_shapes_["elwadd_8x4_abf16a16accbf16"] =
+      std::vector<std::tuple<int, int>>();
 
   raw_shapes_["elwadd_4x2_a8a8accbf16"].push_back(std::make_tuple(512, 768));
   raw_shapes_["elwadd_4x2_a8a8accbf16"].push_back(std::make_tuple(256, 768));
@@ -332,9 +389,26 @@ elw_add<InT, WtT, OutT>::elw_add(const std::string &a_dtype,
   raw_shapes_["elwadd_4x4_a16a16acc16"].push_back(std::make_tuple(4096, 320));
   raw_shapes_["elwadd_4x4_a16a16acc16"].push_back(std::make_tuple(12, 4096));
   raw_shapes_["elwadd_4x4_a16a16acc16"].push_back(std::make_tuple(64, 768));
-  raw_shapes_["elwadd_4x4_a16a16acc16"].push_back(std::make_tuple(1, 3072));
-  raw_shapes_["elwadd_4x4_a16a16acc16"].push_back(
+  raw_shapes_["elwadd_4x4_a16a16accbf16"].push_back(std::make_tuple(1, 3072));
+  raw_shapes_["elwadd_4x4_a16a16accbf16"].push_back(
       std::make_tuple(64 * 3072, 1));
+  raw_shapes_["elwadd_4x4_abf16a16accbf16"].push_back(std::make_tuple(1, 3072));
+  raw_shapes_["elwadd_4x4_abf16a16accbf16"].push_back(
+      std::make_tuple(64 * 3072, 1));
+
+  raw_shapes_["elwadd_8x4_a16a16accbf16"].push_back(std::make_tuple(1, 3072));
+  raw_shapes_["elwadd_8x4_a16a16accbf16"].push_back(
+      std::make_tuple(64 * 3072, 1));
+  raw_shapes_["elwadd_8x4_abf16a16accbf16"].push_back(std::make_tuple(1, 3072));
+  raw_shapes_["elwadd_8x4_abf16a16accbf16"].push_back(
+      std::make_tuple(64 * 3072, 1));
+
+  raw_shapes_["elwadd_8x4_a16a16accbf16"].push_back(std::make_tuple(1, 1536));
+  raw_shapes_["elwadd_8x4_a16a16accbf16"].push_back(
+      std::make_tuple(64 * 1536, 1));
+  raw_shapes_["elwadd_8x4_abf16a16accbf16"].push_back(std::make_tuple(1, 1536));
+  raw_shapes_["elwadd_8x4_abf16a16accbf16"].push_back(
+      std::make_tuple(64 * 1536, 1));
 
   a_dtype_ = a_dtype;
   b_dtype_ = b_dtype;
@@ -344,7 +418,7 @@ elw_add<InT, WtT, OutT>::elw_add(const std::string &a_dtype,
   b_dtype_size_ = sizeof(WtT);
   c_dtype_size_ = sizeof(OutT);
   elw_add_id_ = elw_add_count++;
-
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
   /*select xclbin based on the input/output types*/
   std::string XCLBIN_FNAME =
       OpInterface::get_dd_base_dir() + ryzenai::mdsqr_A8W8_QDQ_XCLBIN_PATH;
@@ -387,6 +461,14 @@ elw_add<InT, WtT, OutT>::elw_add(const std::string &a_dtype,
                         txnbin_c_header.at(c_dtype_);
 
     param_fname_prefix_ = "elwadd_4x4_" + txnbin_a_header.at(a_dtype_) +
+                          txnbin_b_header.at(b_dtype_) +
+                          txnbin_c_header.at(c_dtype_);
+  } else if (design_param_.find("8x4") != std::string::npos) { // 8x4 design
+    txn_fname_prefix_ = "elwadd_8x4_" + txnbin_a_header.at(a_dtype_) +
+                        txnbin_b_header.at(b_dtype_) +
+                        txnbin_c_header.at(c_dtype_);
+
+    param_fname_prefix_ = "elwadd_8x4_" + txnbin_a_header.at(a_dtype_) +
                           txnbin_b_header.at(b_dtype_) +
                           txnbin_c_header.at(c_dtype_);
   }
@@ -464,6 +546,14 @@ void elw_add<InT, WtT, OutT>::set_params(const std::string &model_name,
     is_ctrl_pkt_ = 1;
     XCLBIN_FNAME =
         OpInterface::get_dd_base_dir() + ryzenai::PSU_4x4_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "8x4PSU") {
+    is_ctrl_pkt_ = 1;
+    XCLBIN_FNAME =
+        OpInterface::get_dd_base_dir() + ryzenai::PSU_8x4_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "8x4HFDS") {
+    is_ctrl_pkt_ = 1;
+    XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
+                   ryzenai::HFDS_8x4_A16W8_QDQ_XCLBIN_PATH;
   } else {
     throw std::invalid_argument("model_name is not supported");
   }
@@ -483,20 +573,65 @@ void elw_add<InT, WtT, OutT>::initialize_const_params(
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("Elwadd initialize_const_params(ptr) ...");
 
-  DD_THROW_IF((const_params.size() != 1),
+  DD_THROW_IF(!is_generic_fusion && (const_params.size() != 1),
               OpsFusion::dd_format("Unsupported const spec for Elwadd\n") +
                   OpsFusion::dd_format("(Details : #const params == 1 ({})",
                                        const_params.size()));
+  int32_t *qdq_params;
+  std::vector<int32_t> qdq_params_vals(16, 0);
+  if (is_generic_fusion) {
+    float a_sc = *(float *)const_params.at(0).data;
+    float b_sc = *(float *)const_params.at(2).data;
+    float out_sc = *(float *)const_params.at(4).data;
 
-  if (design_param_ == "4x4PSW1.0" || design_param_ == "4x4PSU") {
-    std::vector<int32_t> qdq_data(QDQparam_size,
-                                  0); // temp buffer to create qdq params
-                                      // required by kernel
-    auto qdq_params = (int32_t *)const_params.at(0).data;
+    int32_t a_zp, b_zp, out_zp;
+    if (const_params.at(1).dtype == "uint16") {
+      a_zp = *(uint16_t *)const_params.at(1).data;
+    } else if (const_params.at(1).dtype == "uint8") {
+      a_zp = *(uint8_t *)const_params.at(1).data;
+    }
+
+    if (const_params.at(3).dtype == "uint16") {
+      b_zp = *(uint16_t *)const_params.at(3).data;
+    } else if (const_params.at(3).dtype == "uint8") {
+      b_zp = *(uint8_t *)const_params.at(3).data;
+    }
+
+    if (const_params.at(5).dtype == "uint16") {
+      out_zp = *(uint16_t *)const_params.at(5).data;
+    } else if (const_params.at(5).dtype == "uint8") {
+      out_zp = *(uint8_t *)const_params.at(5).data;
+    }
+
+    qdq_params_vals[0] = a_zp;
+    qdq_params_vals[1] = float_to_bfloat16(a_sc);
+    qdq_params_vals[2] = b_zp;
+    qdq_params_vals[3] = float_to_bfloat16(b_sc);
+    qdq_params_vals[4] = out_zp;
+    qdq_params_vals[5] = float_to_bfloat16(1.0f / out_sc);
+
+    std::vector<std::string> in_dtypes =
+        std::any_cast<const std::vector<std::string> &>(attr.at("in_dtypes"));
+    std::vector<std::string> out_dtypes =
+        std::any_cast<const std::vector<std::string> &>(attr.at("out_dtypes"));
+
+    qdq_params_vals[6] = in_dtypes[0] == "bfloat16" ? 0 : 1;
+    qdq_params_vals[7] = out_dtypes[0] == "bfloat16" ? 0 : 1;
+
+    qdq_params = qdq_params_vals.data();
+    auto qdq_params_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
+    io.write(0, (void *)qdq_params, qdq_params_size);
+
+  } else if (design_param_ == "4x4PSW1.0" || design_param_ == "4x4PSU" ||
+             design_param_ == "8x4HFDS" || design_param_ == "8x4PSU") {
+    qdq_params_vals = std::vector<int32_t>(QDQparam_size, 0);
+    qdq_params =
+        (int32_t *)const_params.at(0)
+            .data; // temp buffer to create qdq params required by kernel
     elwddd_QdqParams *p_qdq_struct =
         (elwddd_QdqParams *)
-            qdq_data.data(); // casting the temp memory created to
-                             // struct so as to fill the elments
+            qdq_params_vals.data(); // casting the temp memory created to
+                                    // struct so as to fill the elments
 
     p_qdq_struct->matA_zero_point = (uint16_t)qdq_params[1];
     p_qdq_struct->matA_scale = (uint16_t)qdq_params[0];
@@ -510,9 +645,9 @@ void elw_add<InT, WtT, OutT>::initialize_const_params(
         1; // sw as of now doesn't have this flag and dQ B
            // is by default enable for all win24 models
     auto qdq_params_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
-    io.write(0, (void *)qdq_data.data(), qdq_params_size);
+    io.write(0, (void *)qdq_params_vals.data(), qdq_params_size);
   } else {
-    auto qdq_params = (int32_t *)const_params.at(0).data;
+    qdq_params = (int32_t *)const_params.at(0).data;
     auto temp = qdq_params[0];
     qdq_params[0] = qdq_params[1];
     qdq_params[1] = temp;
@@ -523,6 +658,7 @@ void elw_add<InT, WtT, OutT>::initialize_const_params(
     qdq_params[4] = qdq_params[5];
     qdq_params[5] = temp;
     auto qdq_params_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
+
     io.write(0, (void *)qdq_params, qdq_params_size);
   }
 
@@ -590,8 +726,10 @@ void elw_add<InT, WtT, OutT>::initialize_const_params(
   b_sync_time_ = static_cast<int64_t>(b_sync_stop - b_sync_start);
 
   if (is_ctrl_pkt_) {
-    // Based on the mapped_shape to get the meta json file
-    auto [M, K] = map_padded_shape(w_shape_[0], w_shape_[1]);
+    // M and K should be padded shapes, w_shape_ is already padded shape, and it
+    // is set in set_params
+    auto M = w_shape_[0];
+    auto K = w_shape_[1];
     std::vector<uint8_t> json_data;
     try {
       auto json_key = get_instr_key(param_fname_prefix_, M, K) + "_ctrl_meta";
@@ -806,6 +944,7 @@ std::vector<OpArgMap> elw_add<InT, WtT, OutT>::get_buffer_reqs(
 
   auto [Mo, No] = map_padded_shape(M, N);
 
+  size_t output_idx = is_generic_fusion ? 8 : 3;
   size_t const_params_bo_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
   size_t input_1_bo_size = (Mo * No * sizeof(InT));
   size_t input_2_bo_size = (Mo * No * sizeof(WtT));
@@ -817,7 +956,7 @@ std::vector<OpArgMap> elw_add<InT, WtT, OutT>::get_buffer_reqs(
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_1_bo_size},
       {OpArgMap::OpArgType::INPUT, 1, 1, input_1_bo_size, input_2_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 2, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 3, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};

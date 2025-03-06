@@ -1,6 +1,22 @@
-/*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cfenv>
 #include <cmath>
@@ -322,7 +338,7 @@ int test_sd_gemm(std::vector<size_t> a_shape, std::vector<size_t> b_shape,
                  bool test_with_golden = false) {
   int quantize_err_count = 0;
   int unquantize_err_count = 0;
-  float error_tolerance = 0.01;
+  float error_tolerance = 0.01f;
   int K = b_shape[0];
   int N = b_shape[1];
   int B, M;
@@ -363,7 +379,9 @@ int test_sd_gemm(std::vector<size_t> a_shape, std::vector<size_t> b_shape,
   attr["output_shape"] = std::vector<int>(c_shape.begin(), c_shape.end());
   attr["weight_shape"] = std::vector<int>(b_shape.begin(), b_shape.end());
   attr["bias_enable"] = true;
-
+  std::string xclbin = sd_get_xclbin(model_name);
+  std::string pdi_name = xclbin.empty() ? "DPU" : sd_get_pdi(xclbin, "SDGemm");
+  std::cerr << "xclbin: " << xclbin << " pdi_name: " << pdi_name << std::endl;
   if (test_with_golden) {
     const std::string bias_type = "bfloat16";
     ryzenai::sd::gemm sd_gemm = ryzenai::sd::gemm<std::uint16_t, std::uint8_t,
@@ -371,7 +389,7 @@ int test_sd_gemm(std::vector<size_t> a_shape, std::vector<size_t> b_shape,
         ifm_type, wgt_type, bias_type, out_type, false, attr);
     sd_gemm.debug(debug);
 
-    sd_gemm.set_params();
+    sd_gemm.set_params(xclbin, pdi_name);
     std::string test_golden_root_dir =
         "tests/cpp/unit_tests/testDataMladf/sd_gemm/";
     std::vector<size_t> txn_shape = a_shape;
@@ -426,7 +444,7 @@ int test_sd_gemm(std::vector<size_t> a_shape, std::vector<size_t> b_shape,
         ryzenai::sd::gemm<std::uint16_t, float, float, std::uint16_t>(
             ifm_type, "float32", "float32", out_type, false, attr);
     sd_gemm.debug(debug);
-    sd_gemm.set_params();
+    sd_gemm.set_params(xclbin, pdi_name);
     std::vector<float> raw_bias(N, 0);
     initialize_random_float(raw_bias, 2, -2);
     auto bf16_bias = raw_bias;
@@ -497,7 +515,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel1) {
   std::vector<size_t> b_shape = {1536, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -506,7 +524,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel2) {
   std::vector<size_t> b_shape = {2048, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -515,7 +533,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel3) {
   std::vector<size_t> b_shape = {256, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -524,7 +542,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel4) {
   std::vector<size_t> b_shape = {1536, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -533,7 +551,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel5) {
   std::vector<size_t> b_shape = {1536, 6144};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -542,7 +560,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel6) {
   std::vector<size_t> b_shape = {4096, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -551,7 +569,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel7) {
   std::vector<size_t> b_shape = {6144, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -560,7 +578,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel8) {
   std::vector<size_t> b_shape = {1536, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -569,7 +587,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel9) {
   std::vector<size_t> b_shape = {1536, 6144};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -578,7 +596,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel10) {
   std::vector<size_t> b_shape = {1536, 64};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -587,7 +605,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel11) {
   std::vector<size_t> b_shape = {6144, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -596,7 +614,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel12) {
   std::vector<size_t> b_shape = {1536, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -605,7 +623,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel13) {
   std::vector<size_t> b_shape = {1536, 6144};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -614,7 +632,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel14) {
   std::vector<size_t> b_shape = {1536, 64};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -623,7 +641,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel15) {
   std::vector<size_t> b_shape = {6144, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -632,7 +650,7 @@ TEST(SD_GEMM_Test, Golden_SD3_Kernel16) {
   std::vector<size_t> b_shape = {512, 512};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -641,7 +659,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel1) {
   std::vector<size_t> b_shape = {1280, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -650,7 +668,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel2) {
   std::vector<size_t> b_shape = {1280, 320};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -659,7 +677,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel3) {
   std::vector<size_t> b_shape = {1280, 640};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -668,7 +686,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel4) {
   std::vector<size_t> b_shape = {320, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -677,7 +695,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel5) {
   std::vector<size_t> b_shape = {1280, 10240};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -686,7 +704,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel6) {
   std::vector<size_t> b_shape = {1280, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -695,7 +713,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel7) {
   std::vector<size_t> b_shape = {1280, 5120};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -704,7 +722,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel8) {
   std::vector<size_t> b_shape = {5120, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -713,7 +731,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel9) {
   std::vector<size_t> b_shape = {768, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -722,7 +740,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel10) {
   std::vector<size_t> b_shape = {768, 320};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -731,7 +749,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel11) {
   std::vector<size_t> b_shape = {768, 640};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -740,7 +758,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel12) {
   std::vector<size_t> b_shape = {1280, 10240};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -749,7 +767,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel13) {
   std::vector<size_t> b_shape = {1280, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -758,7 +776,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel14) {
   std::vector<size_t> b_shape = {1280, 5120};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -767,7 +785,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel15) {
   std::vector<size_t> b_shape = {5120, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -776,7 +794,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel16) {
   std::vector<size_t> b_shape = {2560, 640};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -785,7 +803,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel17) {
   std::vector<size_t> b_shape = {640, 2560};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -794,7 +812,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel18) {
   std::vector<size_t> b_shape = {640, 5120};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -803,7 +821,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel19) {
   std::vector<size_t> b_shape = {640, 640};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -812,7 +830,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel20) {
   std::vector<size_t> b_shape = {1280, 320};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -821,7 +839,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel21) {
   std::vector<size_t> b_shape = {320, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -830,7 +848,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel22) {
   std::vector<size_t> b_shape = {320, 2560};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -839,7 +857,7 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel23) {
   std::vector<size_t> b_shape = {320, 320};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -848,366 +866,475 @@ TEST(SD_GEMM_Test, Golden_SD1p5_Kernel24) {
   std::vector<size_t> b_shape = {512, 512};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
+
 // Random unittest start
-TEST(SD_GEMM_Test, Random_SD3_Kernel1) {
+TEST(SD_GEMM_Test, Random_SD3_DIT1024_1) {
   std::vector<size_t> a_shape = {2, 1, 1536};
   std::vector<size_t> b_shape = {1536, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT1024", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel2) {
+TEST(SD_GEMM_Test, Random_SD3_DIT512_3) {
+  std::vector<size_t> a_shape = {2, 1, 1536};
+  std::vector<size_t> b_shape = {1536, 1536};
+  int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
+      "SD3_DIT512", 0.02f);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GEMM_Test, Random_SD3_DIT1024_2) {
   std::vector<size_t> a_shape = {2, 1, 2048};
   std::vector<size_t> b_shape = {2048, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT1024", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel3) {
+TEST(SD_GEMM_Test, Random_SD3_DIT512_2) {
+  std::vector<size_t> a_shape = {2, 1, 2048};
+  std::vector<size_t> b_shape = {2048, 1536};
+  int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
+      "SD3_DIT512", 0.02f);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GEMM_Test, Random_SD3_DIT1024_3) {
   std::vector<size_t> a_shape = {2, 1, 256};
   std::vector<size_t> b_shape = {256, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT1024", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel4) {
+TEST(SD_GEMM_Test, Random_SD3_DIT512_4) {
+  std::vector<size_t> a_shape = {2, 1, 256};
+  std::vector<size_t> b_shape = {256, 1536};
+  int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
+      "SD3_DIT512", 0.02f);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GEMM_Test, Random_SD3_DIT1024_4) {
   std::vector<size_t> a_shape = {2, 154, 1536};
   std::vector<size_t> b_shape = {1536, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT1024", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel5) {
+TEST(SD_GEMM_Test, Random_SD3_DIT512_5) {
+  std::vector<size_t> a_shape = {2, 154, 1536};
+  std::vector<size_t> b_shape = {1536, 1536};
+  int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
+      "SD3_DIT512", 0.02f);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GEMM_Test, Random_SD3_DIT1024_5) {
   std::vector<size_t> a_shape = {2, 154, 1536};
   std::vector<size_t> b_shape = {1536, 6144};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT1024", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel6) {
+TEST(SD_GEMM_Test, Random_SD3_DIT512_8) {
+  std::vector<size_t> a_shape = {2, 154, 1536};
+  std::vector<size_t> b_shape = {1536, 6144};
+  int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
+      "SD3_DIT512", 0.02f);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GEMM_Test, Random_SD3_DIT1024_6) {
   std::vector<size_t> a_shape = {2, 154, 4096};
   std::vector<size_t> b_shape = {4096, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT1024", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel7) {
+TEST(SD_GEMM_Test, Random_SD3_DIT512_1) {
+  std::vector<size_t> a_shape = {2, 154, 4096};
+  std::vector<size_t> b_shape = {4096, 1536};
+  int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
+      "SD3_DIT512", 0.02f);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GEMM_Test, Random_SD3_DIT1024_7) {
   std::vector<size_t> a_shape = {2, 154, 6144};
   std::vector<size_t> b_shape = {6144, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT1024", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel8) {
+TEST(SD_GEMM_Test, Random_SD3_DIT512_10) {
+  std::vector<size_t> a_shape = {2, 154, 6144};
+  std::vector<size_t> b_shape = {6144, 1536};
+  int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
+      "SD3_DIT512", 0.02f);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GEMM_Test, Random_SD3_DIT512_6) {
   std::vector<size_t> a_shape = {2, 1024, 1536};
   std::vector<size_t> b_shape = {1536, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT512", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel9) {
+TEST(SD_GEMM_Test, Random_SD3_DIT512_7) {
   std::vector<size_t> a_shape = {2, 1024, 1536};
   std::vector<size_t> b_shape = {1536, 6144};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT512", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel10) {
+TEST(SD_GEMM_Test, Random_SD3_DIT512_11) {
   std::vector<size_t> a_shape = {2, 1024, 1536};
   std::vector<size_t> b_shape = {1536, 64};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT512", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel11) {
+TEST(SD_GEMM_Test, Random_SD3_DIT512_9) {
   std::vector<size_t> a_shape = {2, 1024, 6144};
   std::vector<size_t> b_shape = {6144, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT512", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel12) {
+TEST(SD_GEMM_Test, Random_SD3_DIT1024_8) {
   std::vector<size_t> a_shape = {2, 4096, 1536};
   std::vector<size_t> b_shape = {1536, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT1024", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel13) {
+TEST(SD_GEMM_Test, Random_SD3_DIT1024_9) {
   std::vector<size_t> a_shape = {2, 4096, 1536};
   std::vector<size_t> b_shape = {1536, 6144};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT1024", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel14) {
+TEST(SD_GEMM_Test, Random_SD3_DIT1024_10) {
   std::vector<size_t> a_shape = {2, 4096, 1536};
   std::vector<size_t> b_shape = {1536, 64};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT1024", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel15) {
+TEST(SD_GEMM_Test, Random_SD3_DIT1024_11) {
   std::vector<size_t> a_shape = {2, 4096, 6144};
   std::vector<size_t> b_shape = {6144, 1536};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_DIT1024", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD3_Kernel16) {
+TEST(SD_GEMM_Test, Random_SD3_VAE1024_1) {
   std::vector<size_t> a_shape = {1, 16384, 512};
   std::vector<size_t> b_shape = {512, 512};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_VAE1024", 0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel1) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_5) {
   std::vector<size_t> a_shape = {2, 1, 1280};
   std::vector<size_t> b_shape = {1280, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel2) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_6) {
   std::vector<size_t> a_shape = {2, 1, 1280};
   std::vector<size_t> b_shape = {1280, 320};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel3) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_7) {
   std::vector<size_t> a_shape = {2, 1, 1280};
   std::vector<size_t> b_shape = {1280, 640};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel4) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_4) {
   std::vector<size_t> a_shape = {2, 1, 320};
   std::vector<size_t> b_shape = {320, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel5) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_23) {
   std::vector<size_t> a_shape = {2, 64, 1280};
   std::vector<size_t> b_shape = {1280, 10240};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel6) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_17) {
   std::vector<size_t> a_shape = {2, 64, 1280};
   std::vector<size_t> b_shape = {1280, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel7) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_18) {
   std::vector<size_t> a_shape = {2, 64, 1280};
   std::vector<size_t> b_shape = {1280, 5120};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel8) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_19) {
   std::vector<size_t> a_shape = {2, 64, 5120};
   std::vector<size_t> b_shape = {5120, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel9) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_2) {
   std::vector<size_t> a_shape = {2, 77, 768};
   std::vector<size_t> b_shape = {768, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel10) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_3) {
   std::vector<size_t> a_shape = {2, 77, 768};
   std::vector<size_t> b_shape = {768, 320};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel11) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_1) {
   std::vector<size_t> a_shape = {2, 77, 768};
   std::vector<size_t> b_shape = {768, 640};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel12) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_21) {
   std::vector<size_t> a_shape = {2, 256, 1280};
   std::vector<size_t> b_shape = {1280, 10240};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel13) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_14) {
   std::vector<size_t> a_shape = {2, 256, 1280};
   std::vector<size_t> b_shape = {1280, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel14) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_15) {
   std::vector<size_t> a_shape = {2, 256, 1280};
   std::vector<size_t> b_shape = {1280, 5120};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel15) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_16) {
   std::vector<size_t> a_shape = {2, 256, 5120};
   std::vector<size_t> b_shape = {5120, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel16) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_13) {
   std::vector<size_t> a_shape = {2, 1024, 2560};
   std::vector<size_t> b_shape = {2560, 640};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel17) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_12) {
   std::vector<size_t> a_shape = {2, 1024, 640};
   std::vector<size_t> b_shape = {640, 2560};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel18) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_20) {
   std::vector<size_t> a_shape = {2, 1024, 640};
   std::vector<size_t> b_shape = {640, 5120};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel19) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_11) {
   std::vector<size_t> a_shape = {2, 1024, 640};
   std::vector<size_t> b_shape = {640, 640};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel20) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_10) {
   std::vector<size_t> a_shape = {2, 4096, 1280};
   std::vector<size_t> b_shape = {1280, 320};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel21) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_9) {
   std::vector<size_t> a_shape = {2, 4096, 320};
   std::vector<size_t> b_shape = {320, 1280};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel22) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_22) {
   std::vector<size_t> a_shape = {2, 4096, 320};
   std::vector<size_t> b_shape = {320, 2560};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel23) {
+TEST(SD_GEMM_Test, Random_SD15_UNET_8) {
   std::vector<size_t> a_shape = {2, 4096, 320};
   std::vector<size_t> b_shape = {320, 320};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
-      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_UNET",
+      0.02f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_GEMM_Test, Random_SD1p5_Kernel24) {
+TEST(SD_GEMM_Test, Random_SD3_VAE512_1) {
   std::vector<size_t> a_shape = {1, 4096, 512};
   std::vector<size_t> b_shape = {512, 512};
   int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
       a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
-      "SD_VAE_DEC", 0.02);
+      "SD3_VAE512", 0.02f);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GEMM_Test, Random_SD15_VAE_1) {
+  std::vector<size_t> a_shape = {1, 4096, 512};
+  std::vector<size_t> b_shape = {512, 512};
+  int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16", "SD15_VAE",
+      0.02f);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GEMM_Test, Random_SD3_DIT512_160_1) {
+  std::vector<size_t> a_shape = {2, 160, 1536};
+  std::vector<size_t> b_shape = {1536, 1536};
+  int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
+      "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GEMM_Test, Random_SD3_DIT512_160_2) {
+  std::vector<size_t> a_shape = {2, 160, 1536};
+  std::vector<size_t> b_shape = {1536, 6144};
+  int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
+      "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GEMM_Test, Random_SD3_DIT512_160_3) {
+  std::vector<size_t> a_shape = {2, 160, 4096};
+  std::vector<size_t> b_shape = {4096, 1536};
+  int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
+      "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_GEMM_Test, Random_SD3_DIT512_160_4) {
+  std::vector<size_t> a_shape = {2, 160, 6144};
+  std::vector<size_t> b_shape = {6144, 1536};
+  int err_count = test_sd_gemm<uint16_t, uint8_t, uint16_t>(
+      a_shape, b_shape, false, "bfloat16", "bfp16ebs8", "bfloat16",
+      "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

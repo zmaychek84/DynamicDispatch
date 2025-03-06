@@ -1,6 +1,22 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 #include <cfenv>
 #include <cmath>
 #include <fstream>
@@ -170,12 +186,16 @@ int test_lrn(int B, int M, int K, bool debug = false,
   std::map<std::string, std::any> attr;
   attr["input_shape"] = std::vector<int>{B, M, K};
   attr["output_shape"] = std::vector<int>{B, M, K};
+  std::string xclbin = sd_get_xclbin(model_name);
+  std::string pdi_name =
+      xclbin.empty() ? "DPU" : sd_get_pdi(xclbin, "SDLayerNorm");
+  std::cerr << "xclbin: " << xclbin << " pdi_name: " << pdi_name << std::endl;
   if (test_with_golden) {
 
     ryzenai::sd::layernorm layernorm_ = ryzenai::sd::layernorm<InT, WgT, OutT>(
         a_dtype, b_dtype, c_dtype, false, attr);
     layernorm_.debug(debug);
-    layernorm_.set_params();
+    layernorm_.set_params(xclbin, pdi_name);
     std::vector<Tensor> const_Tensor;
 
     std::map<std::string, std::string> txnbin_a_header = {
@@ -234,7 +254,7 @@ int test_lrn(int B, int M, int K, bool debug = false,
         a_dtype, b_dtype, c_dtype, false, attr);
 
     layernorm_.debug(debug);
-    layernorm_.set_params();
+    layernorm_.set_params(xclbin, pdi_name);
 
     std::vector<Tensor> const_Tensor;
     std::vector<float> raw_gamma(K, 0);
@@ -320,104 +340,117 @@ int test_lrn(int B, int M, int K, bool debug = false,
 //  golden test
 TEST(SD_LAYERNORM_Test, Golden_KernelUnetlayer1) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 4096, 320, false, "bfloat16", "bfloat16", "bfloat16", "SD_UNet", 0.01,
-      0.01, true);
+      2, 4096, 320, false, "bfloat16", "bfloat16", "bfloat16", "SD_UNet", 0.01f,
+      0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_LAYERNORM_Test, Golden_KernelUnetlayer2) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 1024, 640, false, "bfloat16", "bfloat16", "bfloat16", "SD_UNet", 0.01,
-      0.01, true);
+      2, 1024, 640, false, "bfloat16", "bfloat16", "bfloat16", "SD_UNet", 0.01f,
+      0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // e2e test passed, so can change the threshold to 0.02 to pass the UT
 TEST(SD_LAYERNORM_Test, Golden_KernelUnetlayer3) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 256, 1280, false, "bfloat16", "bfloat16", "bfloat16", "SD_UNet", 0.01,
-      0.02, true);
+      2, 256, 1280, false, "bfloat16", "bfloat16", "bfloat16", "SD_UNet", 0.01f,
+      0.02f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // e2e test passed, so can change the threshold to 0.03 to pass the UT
 TEST(SD_LAYERNORM_Test, Golden_KernelUnetlayer4) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 64, 1280, false, "bfloat16", "bfloat16", "bfloat16", "SD_UNet", 0.01,
-      0.03, true);
+      2, 64, 1280, false, "bfloat16", "bfloat16", "bfloat16", "SD_UNet", 0.01f,
+      0.03f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // sd3.0
-TEST(SD_LAYERNORM_Test, Golden_SD3KernelMMDITlayer1) {
+TEST(SD_LAYERNORM_Test, Golden_SD3_DIT1024_Layer1) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 154, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD_MMDIT", 0.01,
-      0.02, true);
+      2, 154, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT1024",
+      0.01f, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_LAYERNORM_Test, Golden_SD3KernelMMDITlayer2) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
       2, 1024, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD_MMDIT",
-      0.01, 0.01, true);
+      0.01f, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_LAYERNORM_Test, Golden_SD3KernelMMDITlayer3) {
+TEST(SD_LAYERNORM_Test, Golden_SD3_DIT1024_Layer2) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 4096, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD_MMDIT",
-      0.01, 0.01, true);
+      2, 4096, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT1024",
+      0.01f, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // sd1.5
 //  random test
-TEST(SD_LAYERNORM_Test, Random_KernelUnetlayer1) {
+TEST(SD_LAYERNORM_Test, Random_SD15_UNET_1) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 4096, 320, false, "bfloat16", "bfloat16", "bfloat16", "SD_UNet", 0.01,
-      0.01);
+      2, 4096, 320, false, "bfloat16", "bfloat16", "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_LAYERNORM_Test, Random_KernelUnetlayer2) {
+TEST(SD_LAYERNORM_Test, Random_SD15_UNET_2) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 1024, 640, false, "bfloat16", "bfloat16", "bfloat16", "SD_UNet", 0.01,
-      0.01);
+      2, 1024, 640, false, "bfloat16", "bfloat16", "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_LAYERNORM_Test, Random_KernelUnetlayer3) {
+TEST(SD_LAYERNORM_Test, Random_SD15_UNET_3) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 256, 1280, false, "bfloat16", "bfloat16", "bfloat16", "SD_UNet", 0.01,
-      0.01);
+      2, 256, 1280, false, "bfloat16", "bfloat16", "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_LAYERNORM_Test, Random_KernelUnetlayer4) {
+TEST(SD_LAYERNORM_Test, Random_SD15_UNET_4) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 64, 1280, false, "bfloat16", "bfloat16", "bfloat16", "SD_UNet", 0.01,
-      0.01);
+      2, 64, 1280, false, "bfloat16", "bfloat16", "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // sd3.0
-TEST(SD_LAYERNORM_Test, Random_SD3KernelMMDITlayer1) {
+// 512
+TEST(SD_LAYERNORM_Test, Random_SD3_DIT512_1) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 154, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD_MMDIT", 0.01,
-      0.01);
+      2, 154, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_LAYERNORM_Test, Random_SD3KernelMMDITlayer2) {
+TEST(SD_LAYERNORM_Test, Random_SD3_DIT512_2) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 1024, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD_MMDIT",
-      0.01, 0.01);
+      2, 1024, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_LAYERNORM_Test, Random_SD3KernelMMDITlayer3) {
+TEST(SD_LAYERNORM_Test, Random_SD3_DIT512_3) {
   int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
-      2, 4096, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD_MMDIT",
-      0.01, 0.01);
+      2, 160, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// 1024
+TEST(SD_LAYERNORM_Test, Random_SD3_DIT1024_Layer1) {
+  int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
+      2, 154, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT1024");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_LAYERNORM_Test, Random_SD3_DIT1024_Layer2) {
+  int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
+      2, 4096, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT1024");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_LAYERNORM_Test, Random_SD3_DIT1024_Layer3) {
+  int err_count = test_lrn<uint16_t, uint16_t, uint16_t>(
+      2, 160, 1536, false, "bfloat16", "bfloat16", "bfloat16", "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

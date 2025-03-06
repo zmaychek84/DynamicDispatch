@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +22,7 @@
 
 #include <ops/op_interface.hpp>
 #include <ops/ops_common.hpp>
+#include <ops/ops_common/coeffs.hpp>
 
 namespace ryzenai {
 
@@ -107,6 +107,10 @@ private:
   std::string c_dtype_;
   std::string txn_fname_prefix_;
   std::string param_fname_prefix_;
+  //   std::string out_dtype;
+  bool is_generic_pass_in_onnx = false;
+  OpsFusion::coeffs::MatmulQDQParams _qdq_params;
+  std::vector<int32_t> gelu_coeffs;
   bool is_ctrl_pkt_;
 
   /* Utility function to set the kernel shape based on the weights dimensions

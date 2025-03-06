@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <fstream>
@@ -117,7 +132,43 @@ const std::vector<uint8_t> groupnorm<InT, WtT, OutT>::get_transaction_bin(
   std::vector<uint8_t> data = txn.get_txn_bvec(txn_key);
 
   // assume input.at(3) is qdq_params
-  auto qdq_param = (int32_t *)input.at(3).data;
+  int32_t *qdq_param;
+  if (is_generic_fusion) {
+    float *out_scale = (float *)input.at(7).data;
+    uint16_t *out_zero_point = (uint16_t *)input.at(8).data;
+    float input_scale =
+        (std::any_cast<std::vector<float>>(attr.at("input_scale")))[0];
+    uint16_t input_zp = static_cast<uint16_t>(
+        (std::any_cast<std::vector<float>>(attr.at("input_zp")))[0]);
+    std::tie(qdq_tensor[0], qdq_tensor[1]) =
+        OpsFusion::coeffs::calc_lrn_coeff((1 / (*out_scale)), *out_zero_point);
+    std::tie(qdq_tensor[3], qdq_tensor[4]) =
+        OpsFusion::coeffs::calc_lrn_coeff(input_scale, input_zp);
+    qdq_tensor[2] = 1;
+    qdq_tensor[5] = 1;
+
+    // this logic was present in vaip mzdk5 pass
+    std::vector<std::string> in_dtypes =
+        std::any_cast<std::vector<std::string>>(attr.at("in_dtypes"));
+    std::vector<std::string> out_dtypes =
+        std::any_cast<std::vector<std::string>>(attr.at("out_dtypes"));
+    if (in_dtypes[0] == "bfloat16") {
+      qdq_tensor[5] = 0;
+      qdq_tensor[4] = 0;
+    } else {
+      qdq_tensor[5] = 1;
+    }
+
+    if (out_dtypes[0] == "bfloat16") {
+      qdq_tensor[2] = 0;
+    } else {
+      qdq_tensor[2] = 1;
+    }
+
+    qdq_param = qdq_tensor;
+  } else {
+    qdq_param = (int32_t *)input.at(3).data;
+  }
   uint32_t zp = uint16_t(qdq_param[lrn_qdq_ifm_zp_idx]);
   uint32_t pad_val = zp | (zp << 16);
   std::vector<uint8_t> txn_w_pad;
@@ -153,8 +204,14 @@ std::vector<OpArgMap> groupnorm<InT, WtT, OutT>::get_buffer_reqs(
   auto [M, N, G] = extract_MK(input);
   auto [Mo, No] = map_padded_shape(M, N);
 
-  auto gamma_dim = input.at(1).shape.at(0);
-  auto beta_dim = input.at(2).shape.at(0);
+  int64_t gamma_dim, beta_dim;
+  if (is_generic_fusion) {
+    gamma_dim = input.at(1).shape.at(0);
+    beta_dim = input.at(4).shape.at(0);
+  } else {
+    gamma_dim = input.at(1).shape.at(0);
+    beta_dim = input.at(2).shape.at(0);
+  }
 
   int repeat_factor;
   if (design_param_.find("4x4") != std::string::npos) {     // mzdk5 4x4 design
@@ -170,10 +227,12 @@ std::vector<OpArgMap> groupnorm<InT, WtT, OutT>::get_buffer_reqs(
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
   size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
 
+  size_t output_idx = is_generic_fusion ? 9 : 4;
+
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 4, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};
@@ -328,6 +387,8 @@ groupnorm<InT, WtT, OutT>::groupnorm(
   raw_shapes_["gpn_4x4_a16accbf16"].push_back(std::make_tuple(1024, 320, 320));
   raw_shapes_["gpn_4x4_a16accbf16"].push_back(std::make_tuple(256, 640, 640));
 
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
+
   a_dtype_ = a_dtype;
   b_dtype_ = b_dtype;
   c_dtype_ = c_dtype;
@@ -458,13 +519,73 @@ void groupnorm<InT, WtT, OutT>::initialize_const_params(
   //                      const_params.size(), const_params.at(0).shape.size(),
   //                      const_params.at(1).shape.size()));
 
-  const int gamma_idx = 0, beta_idx = 1, qdq_params_idx = 2;
-  // The first data is Gamma
-  auto gamma = (WtT *)const_params.at(gamma_idx).data;
-  std::vector<size_t> shape = const_params.at(gamma_idx).shape;
-  auto beta = (WtT *)const_params.at(beta_idx).data;
-  auto qdq_params = (int32_t *)const_params.at(qdq_params_idx).data;
+  int32_t *qdq_params;
+  WtT *gamma;
+  WtT *beta;
+  std::vector<uint16_t> gamma_bf16, beta_bf16;
+  std::vector<size_t> shape;
 
+  if (is_generic_fusion) {
+
+    std::vector<uint16_t> mul_const_vec =
+        OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(0));
+    float *mul_const_scale = (float *)const_params.at(1).data;
+    uint16_t *mul_const_zp = (uint16_t *)const_params.at(2).data;
+    gamma_bf16 = OpsFusion::coeffs::dq_vec_to_bf16(
+        mul_const_vec, *mul_const_scale, *mul_const_zp);
+    gamma = reinterpret_cast<WtT *>(gamma_bf16.data());
+    shape = const_params.at(0).shape;
+
+    std::vector<uint16_t> add_const_vec =
+        OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(3));
+    float *add_const_scale = (float *)const_params.at(4).data;
+    uint16_t *add_const_zp = (uint16_t *)const_params.at(5).data;
+    beta_bf16 = OpsFusion::coeffs::dq_vec_to_bf16(
+        add_const_vec, *add_const_scale, *add_const_zp);
+    beta = reinterpret_cast<WtT *>(beta_bf16.data());
+
+    float *out_scale = (float *)const_params.at(6).data;
+    uint16_t *out_zero_point = (uint16_t *)const_params.at(7).data;
+    float input_scale =
+        (std::any_cast<std::vector<float>>(attr.at("input_scale")))[0];
+    uint16_t input_zp = static_cast<uint16_t>(
+        (std::any_cast<std::vector<float>>(attr.at("input_zp")))[0]);
+    std::tie(qdq_tensor[0], qdq_tensor[1]) =
+        OpsFusion::coeffs::calc_lrn_coeff((1 / (*out_scale)), *out_zero_point);
+    std::tie(qdq_tensor[3], qdq_tensor[4]) =
+        OpsFusion::coeffs::calc_lrn_coeff(input_scale, input_zp);
+    qdq_tensor[2] = 1;
+    qdq_tensor[5] = 1;
+
+    // this logic was present in vaip mzdk5 pass
+    std::vector<std::string> in_dtypes =
+        std::any_cast<std::vector<std::string>>(attr.at("in_dtypes"));
+    std::vector<std::string> out_dtypes =
+        std::any_cast<std::vector<std::string>>(attr.at("out_dtypes"));
+    if (in_dtypes[0] == "bfloat16") {
+      qdq_tensor[5] = 0;
+      qdq_tensor[4] = 0;
+    } else {
+      qdq_tensor[5] = 1;
+    }
+
+    if (out_dtypes[0] == "bfloat16") {
+      qdq_tensor[2] = 0;
+    } else {
+      qdq_tensor[2] = 1;
+    }
+
+    qdq_params = qdq_tensor;
+
+  } else {
+
+    const int gamma_idx = 0, beta_idx = 1, qdq_params_idx = 2;
+    // The first data is Gamma
+    gamma = (WtT *)const_params.at(gamma_idx).data;
+    shape = const_params.at(gamma_idx).shape;
+    beta = (WtT *)const_params.at(beta_idx).data;
+    qdq_params = (int32_t *)const_params.at(qdq_params_idx).data;
+  }
   // Group Norm kernel requires Gamma and Beta to be repeated few times
   int repeat_factor;
   if (design_param_.find("4x4") != std::string::npos) { // mzdk5 4x4 design
@@ -495,13 +616,17 @@ void groupnorm<InT, WtT, OutT>::initialize_const_params(
     const std::vector<Tensor> &const_params,
     const std::map<std::string, std::any> &attr) {
   // Check the number of inputs
-  if (const_params.size() != 3) {
+  if (!is_generic_fusion && const_params.size() != 3) {
     throw std::runtime_error("GPN IPU Wrapper expect to have three constants.");
   }
 
-  const int gamma_idx = 0, beta_idx = 1;
-
-  std::vector<size_t> shape = const_params.at(gamma_idx).shape;
+  std::vector<size_t> shape;
+  if (is_generic_fusion) {
+    shape = const_params.at(0).shape;
+  } else {
+    const int gamma_idx = 0, beta_idx = 1;
+    shape = const_params.at(gamma_idx).shape;
+  }
 
   // Init the BO size
   int repeat_factor;

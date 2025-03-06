@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 #include <any>
 #include <iostream>
 #include <map>
@@ -38,6 +53,8 @@
 #include "xaiengine.h"
 
 #include "ops/ops_common/matmul_matrix.hpp"
+#include <ops/ops_common/coeffs.hpp>
+#include <ops/ops_common/op_util.hpp>
 
 using namespace matmul_matrix;
 
@@ -207,6 +224,35 @@ conv2matmul<InT, WtT, OutT>::conv2matmul(
   default_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(1, 8192, 3072);
   default_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(64, 8192, 3072);
 
+  default_shapes_["conv2gemm_8x4_a16w8acc16"] = std::vector<matrix_shapes>{};
+
+  default_shapes_["conv2gemm_8x4_a16w8acc16"].emplace_back(64, 3072, 3072);
+  default_shapes_["conv2gemm_8x4_a16w8acc16"].emplace_back(1, 3072, 3072);
+  default_shapes_["conv2gemm_8x4_a16w8acc16"].emplace_back(1, 8192, 3072);
+  default_shapes_["conv2gemm_8x4_a16w8acc16"].emplace_back(64, 8192, 3072);
+
+  default_shapes_["conv2gemm_8x4_a16w8acc16"].emplace_back(1, 8960, 1536);
+  default_shapes_["conv2gemm_8x4_a16w8acc16"].emplace_back(64, 8960, 1536);
+
+  default_shapes_["conv2gemm_8x4_a16w4acc16"] = std::vector<matrix_shapes>{};
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 3072, 9216);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 3072, 9216);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 3072, 8192);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 3072, 8192);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 3072, 3072);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 3072, 3072);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 8192, 3072);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 8192, 3072);
+
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 1536, 256);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 1536, 256);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 1536, 8960);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 1536, 8960);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 1536, 1536);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 1536, 1536);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 8960, 1536);
+  default_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 8960, 1536);
+
   // raw shape is the actual shape from ONNX
   raw_shapes_["conv2gemm_4x4_a16w8acc16"] = std::vector<matrix_shapes>{};
   raw_shapes_["conv2gemm_4x4_a16w8acc16"].emplace_back(1, 768, 8); // PSW
@@ -243,6 +289,34 @@ conv2matmul<InT, WtT, OutT>::conv2matmul(
   raw_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(1, 8192, 3072);
   raw_shapes_["conv2gemm_4x4_a16w4acc16"].emplace_back(64, 8192, 3072);
 
+  raw_shapes_["conv2gemm_8x4_a16w8acc16"] = std::vector<matrix_shapes>{};
+  raw_shapes_["conv2gemm_8x4_a16w8acc16"].emplace_back(64, 3072, 3072);
+  raw_shapes_["conv2gemm_8x4_a16w8acc16"].emplace_back(1, 3072, 3072);
+  raw_shapes_["conv2gemm_8x4_a16w8acc16"].emplace_back(1, 8192, 3072);
+  raw_shapes_["conv2gemm_8x4_a16w8acc16"].emplace_back(64, 8192, 3072);
+
+  raw_shapes_["conv2gemm_8x4_a16w8acc16"].emplace_back(1, 8960, 1536);
+  raw_shapes_["conv2gemm_8x4_a16w8acc16"].emplace_back(64, 8960, 1536);
+
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"] = std::vector<matrix_shapes>{};
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 3072, 9216);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 3072, 9216);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 3072, 8192);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 3072, 8192);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 3072, 3072);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 3072, 3072);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 8192, 3072);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 8192, 3072);
+
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 1536, 256);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 1536, 256);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 1536, 8960);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 1536, 8960);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 1536, 1536);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 1536, 1536);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(1, 8960, 1536);
+  raw_shapes_["conv2gemm_8x4_a16w4acc16"].emplace_back(64, 8960, 1536);
+
   a_dtype_ = a_dtype;
   b_dtype_ = b_dtype;
   c_dtype_ = c_dtype;
@@ -255,6 +329,7 @@ conv2matmul<InT, WtT, OutT>::conv2matmul(
   c_dtype_size_ = sizeof(OutT);
 
   conv2matmul_id_ = conv2matmul_count++;
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
 
   /*select xclbin based on the input/output types*/
   std::string XCLBIN_FNAME =
@@ -295,7 +370,16 @@ conv2matmul<InT, WtT, OutT>::conv2matmul(
     param_fname_prefix_ = "conv2gemm_4x4_" + txnbin_a_header.at(a_dtype_) +
                           txnbin_b_header.at(b_dtype_) +
                           txnbin_acc_header.at(c_dtype_);
-
+  } else if (design_param_.find("8x4") != std::string::npos) { // 8x4 design
+    txn_fname_prefix_ = "conv2gemm_8x4_" + txnbin_a_header.at(a_dtype_) +
+                        txnbin_b_header.at(b_dtype_) +
+                        txnbin_acc_header.at(c_dtype_);
+    param_fname_prefix_ = "conv2gemm_8x4_" + txnbin_a_header.at(a_dtype_) +
+                          txnbin_b_header.at(b_dtype_) +
+                          txnbin_acc_header.at(c_dtype_);
+  }
+  if (design_param_.find("4x4") != std::string::npos ||
+      design_param_.find("8x4") != std::string::npos) {
     if (attr.count("input_shape") &&
         attr.at("input_shape").type() == typeid(std::vector<int>)) {
       const auto &input_shape_vector =
@@ -306,6 +390,14 @@ conv2matmul<InT, WtT, OutT>::conv2matmul(
         inputShape_[1] = input_shape_vector[1];
         inputShape_[2] = input_shape_vector[2];
         inputShape_[3] = input_shape_vector[3];
+      } else if (input_shape_vector.size() == 3) {
+        // out projection conv2matmul in PSU has 3 dim as input (after ort
+        // optimizations, Reshape above is pulled into the Conv2matmul op)
+        // Making 4th dim as 0
+        inputShape_[0] = input_shape_vector[0];
+        inputShape_[1] = input_shape_vector[1];
+        inputShape_[2] = input_shape_vector[2];
+        inputShape_[3] = 0;
       } else {
         std::cout
             << "Input Shape attribute does not have the expected number of "
@@ -400,10 +492,18 @@ void conv2matmul<InT, WtT, OutT>::set_params(const std::string &model_name,
     is_ctrl_pkt_ = 1;
     XCLBIN_FNAME =
         OpInterface::get_dd_base_dir() + ryzenai::PSU_4x4_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "8x4PSU") {
+    is_ctrl_pkt_ = 1;
+    XCLBIN_FNAME =
+        OpInterface::get_dd_base_dir() + ryzenai::PSU_8x4_A16W8_QDQ_XCLBIN_PATH;
   } else if (model_name == "4x4PSW1.0") {
     is_ctrl_pkt_ = 1;
     XCLBIN_FNAME =
         OpInterface::get_dd_base_dir() + ryzenai::PSW1_0_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "8x4HFDS") {
+    is_ctrl_pkt_ = 1;
+    XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
+                   ryzenai::HFDS_8x4_A16W8_QDQ_XCLBIN_PATH;
   } else {
     throw std::invalid_argument("model_name is not supported");
   }
@@ -414,6 +514,104 @@ void conv2matmul<InT, WtT, OutT>::set_params(const std::string &model_name,
 
   xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME);
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
+}
+
+void calculate_qdq_(ConstBufferIO &io, const std::vector<Tensor> &const_params,
+                    const std::map<std::string, std::any> &attr,
+                    std::vector<int64_t> &input_c0_arg,
+                    std::vector<int32_t> &input_qdq_arg) {
+  auto weightss = static_cast<uint8_t *>(const_params.at(0).data);
+  auto weights_scale = *(static_cast<float *>(const_params.at(1).data));
+  auto weights_zero_point = *(static_cast<uint8_t *>(const_params.at(2).data));
+
+  auto in_scale = *(static_cast<float *>(const_params.at(3).data));
+  auto in_zero_point = *(static_cast<uint16_t *>(const_params.at(4).data));
+  auto out_scale = *(static_cast<float *>(const_params.at(5).data));
+  auto out_zero_point = *(static_cast<uint16_t *>(const_params.at(6).data));
+
+  float bias_scale = 0;
+  int32_t bias_zero_point = 0;
+  std::vector<int32_t> bias;
+
+  if (attr.count("is_bias")) {
+    auto biass = static_cast<int32_t *>(const_params.at(7).data);
+    std::vector<size_t> bias_shape = const_params.at(7).shape;
+    bias.assign(biass, biass + bias_shape[0]);
+    bias_scale = *(static_cast<float *>(const_params.at(8).data));
+    bias_zero_point = *(static_cast<int32_t *>(const_params.at(9).data));
+  }
+  std::vector<size_t> kernel_shape = const_params.at(0).shape;
+  std::vector<int64_t> ks(kernel_shape.begin(), kernel_shape.end());
+  int total_shape = (int)kernel_shape[0] * (int)kernel_shape[1] *
+                    (int)kernel_shape[2] * (int)kernel_shape[3];
+
+  if (attr.count("from_conv2matmul")) {
+    std::vector<uint8_t> w(weightss, weightss + total_shape);
+    auto [C0, C1, C2, conv_shift, shft_c2] =
+        OpsFusion::coeffs::dq_uint16A_uint8W_conv_q_param_gen(
+            in_scale, in_zero_point, w, weights_scale, weights_zero_point, ks,
+            bias, bias_scale, bias_zero_point, out_scale, out_zero_point);
+    input_qdq_arg[2] = static_cast<int32_t>(C1);
+    input_qdq_arg[3] = static_cast<int32_t>(C2);
+    input_qdq_arg[8] = static_cast<int32_t>(shft_c2);
+    input_qdq_arg[9] = static_cast<int32_t>(conv_shift);
+    input_qdq_arg[10] = 1;
+    input_c0_arg.assign(C0.begin(), C0.end());
+  }
+
+  else if (attr.count("from_iconv")) {
+    std::vector<uint8_t> w(weightss, weightss + total_shape);
+
+    auto [C0, C1, C2, conv_shift, shft_c2] =
+        OpsFusion::coeffs::dq_uint16A_uint8W_conv_q_param_gen(
+            in_scale, (uint16_t)in_zero_point, w, weights_scale,
+            (uint8_t)weights_zero_point, ks, bias, bias_scale,
+            (uint32_t)bias_zero_point, out_scale, (uint16_t)out_zero_point);
+
+    input_c0_arg.assign(C0.begin(), C0.end());
+    input_qdq_arg[2] = static_cast<int32_t>(C1);
+    input_qdq_arg[3] = static_cast<int32_t>(C2);
+    input_qdq_arg[8] = static_cast<int32_t>(shft_c2);
+    input_qdq_arg[9] = static_cast<int32_t>(conv_shift);
+    input_qdq_arg[10] = (int32_t)weights_zero_point;
+    input_qdq_arg[11] = (int32_t)in_zero_point;
+
+  } else if ("from_gemv") {
+
+    std::vector<uint16_t> bias_u16(bias.begin(), bias.end());
+    auto weight_tensor_untransposed =
+        OpsFusion::fold2D<uint8_t>(const_params.at(0));
+    decltype(weight_tensor_untransposed) weight_tensor;
+    int transpose_size_0 =
+        static_cast<int>(weight_tensor_untransposed[0].size());
+    int transpose_size_1 = static_cast<int>(weight_tensor_untransposed.size());
+    weight_tensor.resize(transpose_size_0);
+    for (int i = 0; i < transpose_size_1; ++i) {
+      for (int j = 0; j < transpose_size_0; ++j) {
+        weight_tensor[j].push_back(weight_tensor_untransposed[i][j]);
+      }
+    }
+    std::vector<int64_t> c0_tensor_value;
+    int32_t c1 = 0;
+    int64_t c2 = 0;
+    int64_t shift_qb = 0;
+    int64_t shift_out = 0;
+    int64_t matmul_shift = 0;
+    std::tie(c0_tensor_value, c1, c2, shift_qb, shift_out, matmul_shift) =
+        OpsFusion::coeffs::dq_uint16A_uint8W_bias_matmul_q_param_gen(
+            in_scale, in_zero_point, weight_tensor, weights_scale,
+            weights_zero_point, bias_u16, bias_scale, bias_zero_point,
+            out_scale, (uint16_t)out_zero_point);
+    input_c0_arg.assign(c0_tensor_value.begin(), c0_tensor_value.end());
+    input_qdq_arg[2] = c1;
+    input_qdq_arg[3] = static_cast<int32_t>(c2);
+    input_qdq_arg[5] = 64;
+    input_qdq_arg[6] = 64;
+    input_qdq_arg[7] = static_cast<int32_t>(shift_qb);
+    input_qdq_arg[8] = static_cast<int32_t>(shift_out);
+    input_qdq_arg[9] = static_cast<int32_t>(matmul_shift);
+    input_qdq_arg[10] = 1;
+  }
 }
 
 template <typename InT, typename WtT, typename OutT>
@@ -433,11 +631,25 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
   w_shape_[0] = const_params.at(0).shape.at(1); // K
   w_shape_[1] = const_params.at(0).shape.at(0); //
 
-  auto weights = (WtT *)const_params.at(0).data;
-
-  auto qdq = (int64_t *)const_params.at(1).data;
-  auto qdq_params = (int32_t *)const_params.at(2).data;
-
+  input_c0_arg = std::vector<int64_t>(const_params.at(0).shape.at(0), 0);
+  input_qdq_arg = std::vector<int32_t>(16, 0);
+  int64_t *qdq;
+  int32_t *qdq_params;
+  WtT *weights;
+  weights = (WtT *)const_params.at(0).data;
+  if (is_generic_fusion) {
+    DD_THROW_IF(!((const_params.size() == 10) || (const_params.size() == 7)),
+                OpsFusion::dd_format(
+                    "Unsupported const spec for iconv for generic flow\n") +
+                    OpsFusion::dd_format("(Details : #const params == 10 ({})",
+                                         const_params.size()));
+    calculate_qdq_(io, const_params, attr, input_c0_arg, input_qdq_arg);
+    qdq = input_c0_arg.data();
+    qdq_params = input_qdq_arg.data();
+  } else {
+    qdq = (int64_t *)const_params.at(1).data;
+    qdq_params = (int32_t *)const_params.at(2).data;
+  }
   int32_t *c1_vec, *c2_vec;
   if (const_params.size() == 5) {
     c1_vec = (int32_t *)const_params.at(3).data;
@@ -447,7 +659,8 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
   auto Ksubv = matmul_matrix::Ksubv_mzdk5;
   auto Msubv = matmul_matrix::Msubv_mzdk5;
   auto Nsubv = matmul_matrix::Nsubv_mzdk5;
-  if (design_param_.find("4x4") != std::string::npos) { // mzdk5 4x4 design
+  if (design_param_.find("4x4") != std::string::npos ||
+      design_param_.find("8x4") != std::string::npos) { // mzdk5 4x4 design
     set_kernel_shapes();
   } else {
     if (w_shape_[0] == 1024 && w_shape_[1] == 64) { // mzdk5 padding K case
@@ -456,16 +669,25 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
     set_kernel_shapes();
   }
   std::vector<WtT> buf(w_shape_[0] * w_shape_[1]);
-  if (design_param_.find("4x4") != std::string::npos) { // mzdk5 4x4 design
+  if (design_param_.find("4x4") != std::string::npos ||
+      design_param_.find("8x4") != std::string::npos) { // mzdk5 4x4 design
     size_t M;
-    if (design_param_ == "4x4PSU" && input_format_ == "NHWC") {
-      M = inputShape_[1] * inputShape_[2];
+    if ((design_param_ == "4x4PSU" && input_format_ == "NHWC") ||
+        (design_param_ == "8x4PSU" && input_format_ == "NHWC") ||
+        (design_param_ == "8x4HFDS" && input_format_ == "NHWC")) {
+      // if inputShape is 3 dim only then 4th dim will be 0, so M will be in the
+      // 1st dim
+      if (inputShape_[3] != 0) {
+        M = inputShape_[1] * inputShape_[2];
+      } else {
+        M = inputShape_[1];
+      }
     } else { // NCHW
       M = inputShape_[2] * inputShape_[3];
     }
 
     SUBV_T key = {(int)M, (int)w_shape_[0], (int)w_shape_[1]};
-    auto subv_mode = search_subv_mode(key, b_shift_value_);
+    auto subv_mode = search_subv_mode(key, b_shift_value_, design_param_);
     if (subv_mode < 0) {
       throw std::runtime_error("Conv2Matmul : Invalid subv mode");
     }
@@ -573,12 +795,13 @@ void conv2matmul<InT, WtT, OutT>::initialize_const_params(
   w_shape_[1] = const_params.at(0).shape.at(0); // N
   int Ksubv;
   size_t M;
-  if (design_param_.find("4x4") != std::string::npos) { // mzdk5 4x4 design
+  if (design_param_.find("4x4") != std::string::npos ||
+      design_param_.find("8x4") != std::string::npos) { // mzdk5 4x4 design
     set_kernel_shapes();
     M = inputShape_[2] * inputShape_[3];
 
     SUBV_T key = {(int)M, (int)w_shape_[0], (int)w_shape_[1]};
-    auto subv_mode = search_subv_mode(key, b_shift_value_);
+    auto subv_mode = search_subv_mode(key, b_shift_value_, design_param_);
     if (subv_mode < 0) {
       throw std::runtime_error("Conv2Matmul : Invalid subv mode");
     }
@@ -886,10 +1109,11 @@ std::vector<OpArgMap> conv2matmul<InT, WtT, OutT>::get_buffer_reqs(
   auto [Mo, Ko, No] = map_padded_shape(M, K, N);
 
   int Ksubv;
-  if (design_param_.find("4x4") != std::string::npos) { // mzdk5 4x4 design
+  if (design_param_.find("4x4") != std::string::npos ||
+      design_param_.find("8x4") != std::string::npos) { // mzdk5 4x4 design
     // use raw shape to find subv
     SUBV_T key = {(int)M, (int)K, (int)N};
-    auto subv_mode = search_subv_mode(key, b_shift_value_);
+    auto subv_mode = search_subv_mode(key, b_shift_value_, design_param_);
     if (subv_mode < 0) {
       throw std::runtime_error("Conv2Matmul : Invalid subv mode");
     }
@@ -902,9 +1126,9 @@ std::vector<OpArgMap> conv2matmul<InT, WtT, OutT>::get_buffer_reqs(
   // qdqc
   size_t size_interleaved_qdq;
   size_t out_idx = 4;
-  if (input.size() == 5) {
+  if (input.size() == 5 || input.size() == 12 || input.size() == 9) {
     size_interleaved_qdq = Ko * No / Ksubv * sizeof(int64_t);
-    out_idx = 4;
+    out_idx = input.size() - 1;
   } else { // channelwise qdq
     // C0, C1 and C2 are all vectors
     size_interleaved_qdq =

@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +22,7 @@
 
 #include <ops/op_interface.hpp>
 #include <ops/ops_common.hpp>
+#include <ops/ops_common/coeffs.hpp>
 
 namespace ryzenai {
 
@@ -98,7 +99,10 @@ private:
   static std::once_flag logger_flag_;
   uint64_t matmul_v_geluadd_id_;
   static uint64_t matmul_v_geluadd_count;
-
+  bool is_generic_pass = false;
+  int64_t transB = 0;
+  std::vector<int32_t> gelu_coeffs;
+  OpsFusion::coeffs::MatmulQDQParams _qdq_params;
   /* debug flag */
   bool debug_ = false;
   /*xclbin and mc_code selection variables*/

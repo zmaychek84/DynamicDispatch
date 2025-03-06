@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +29,7 @@ struct overlay_pm_meta {
     uint8_t pkt_id;
     uint8_t col;
     uint8_t dma_ch_num;
+    uint8_t num_cores;
   };
   uint8_t num_cols;
   std::vector<pkt_switch_meta> pkt_sw_meta_;
@@ -42,20 +42,33 @@ struct op_xclbin_meta {
 
 class pm_load : public OpInterface {
 private:
-  static const std::map<std::string, overlay_pm_meta> overlay_meta_;
-  static const std::map<std::string, op_xclbin_meta> op_xclbin_meta_;
+  static OpsFusion::OverlayPMMeta overlay_meta_;
+  static OpsFusion::OpPMMap op_pm_map_;
+
   const std::vector<uint8_t>
   get_pm_bin(const std::map<std::string, std::any> &attr) const;
+  std::string PM_PREFIX;
 
 public:
   pm_load(bool load_xrt = false);
+  void update_meta(const OpsFusion::OpPMMap &op_pm_map,
+                   const OpsFusion::OverlayPMMeta &overlay_meta);
   void execute(std::string op_name, std::string dtype);
   const std::vector<uint8_t> get_transaction_bin(
       std::vector<Tensor> &input, std::vector<Tensor> &output,
       const std::map<std::string, std::any> &attr) const override;
-  const overlay_pm_meta &get_overlay_meta(const std::string &xclbin_name) const;
-  const op_xclbin_meta &get_op_xclbin_meta(const std::string &op_name,
-                                           const std::string &dtype) const;
+  const OpsFusion::OpPMMap::PMBinMetaInfo
+  get_pmbin_meta(const std::string &pm_bin_name) const;
+  const std::string get_op_pmbin_name(const std::string &op_name,
+                                      const std::string &dtype) const;
+  const std::uint32_t get_pm_core_size(const std::string pm_name,
+                                       const std::uint8_t c,
+                                       const std::uint8_t r,
+                                       const std::uint8_t num_cores) const;
+  const std::uint32_t get_pm_core_offset(const std::string pm_name,
+                                         const std::uint8_t c,
+                                         const std::uint8_t r,
+                                         const std::uint8_t num_cores) const;
   std::vector<OpArgMap>
   get_buffer_reqs(std::vector<Tensor> &input, std::vector<Tensor> &output,
                   const std::map<std::string, std::any> &attr) const override;

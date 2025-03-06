@@ -226,6 +226,8 @@ MetaStateAPI &MetaStateAPI::update_meta(const Metadata &meta) {
     proto_part->set_start_idx(tpartition.op_range.first);
     proto_part->set_end_idx(tpartition.op_range.second);
     proto_part->set_pdi_id(tpartition.pdi_id);
+    proto_part->set_is_cpu(tpartition.is_cpu);
+    proto_part->set_next_npu_idx(tpartition.next_npu_idx);
   }
 
   return *this;
@@ -466,6 +468,8 @@ Metadata MetaStateAPI::extract_meta() const {
     tpartition.op_range =
         std::make_pair(proto_part.start_idx(), proto_part.end_idx());
     tpartition.pdi_id = proto_part.pdi_id();
+    tpartition.is_cpu = proto_part.is_cpu();
+    tpartition.next_npu_idx = proto_part.next_npu_idx();
     meta.partitions.push_back(std::move(tpartition));
   }
 

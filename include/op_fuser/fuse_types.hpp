@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,6 +26,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <utils/utils.hpp>
 #include <vector>
@@ -41,6 +42,7 @@ struct CtrlPktPatchInfo {
 
 namespace OpsFusion {
 
+using CPUOpList = std::unordered_set<std::string>;
 struct OpPDIMap {
   using op_type_t = std::string;
   using pdi_id_t = std::uint32_t;
@@ -57,6 +59,36 @@ struct Partition {
   // describes [start, end) interval
   std::pair<size_t, size_t> op_range;
   uint8_t pdi_id;
+  bool is_cpu;
+  size_t next_npu_idx = SIZE_MAX;
+};
+
+struct OpPMMap {
+  using op_type_t = std::string;
+  using pm_fname_t = std::string;
+
+  using OpPMInfoMap = std::map<op_type_t, pm_fname_t>;
+
+  struct PMBinMetaInfo {
+    bool broadcast;
+    std::vector<uint32_t> pm_bin_core_size;
+    std::vector<uint32_t> pm_bin_core_offset;
+  };
+  using PMBinMetaInfoMap = std::map<pm_fname_t, PMBinMetaInfo>;
+
+  OpPMInfoMap op_to_pm_bin_map;
+  PMBinMetaInfoMap pm_bin_to_meta_map;
+};
+
+struct OverlayPMMeta {
+  struct pkt_switch_meta {
+    uint8_t pkt_id;
+    uint8_t col;
+    uint8_t dma_ch_num;
+    uint8_t num_cores;
+  };
+  uint8_t num_cols;
+  std::vector<pkt_switch_meta> pkt_sw_meta;
 };
 
 struct Metadata {
@@ -122,6 +154,7 @@ static const std::set<std::string> CONTROL_OPS{"PM_LOAD", "RECORD_TIMER",
 static constexpr uint32_t CONTROL_PDI_ID = 0xFF;
 
 uint8_t static inline get_pdi_id(const OpPDIMap &op_pdi_map,
+                                 const CPUOpList &cpu_ops,
                                  const std::string &op_type) {
   if (op_pdi_map.op_to_pdi_id_map.empty()) {
     return 0;
@@ -134,12 +167,17 @@ uint8_t static inline get_pdi_id(const OpPDIMap &op_pdi_map,
     return OpsFusion::CONTROL_PDI_ID;
   }
 
-  if (op_pdi_map.op_to_pdi_id_map.find(op_type) !=
-      op_pdi_map.op_to_pdi_id_map.end()) {
-    pdi_id = op_pdi_map.op_to_pdi_id_map.at(op_type);
+  if (cpu_ops.find(op_type) != cpu_ops.end()) {
+    // these ops can be supported on any PDI
+    return 3; // We may need to have a pdi for cpu ops
   } else {
-    throw std::runtime_error("Op type " + op_type +
-                             " not registered in op_pdi_map");
+    if (op_pdi_map.op_to_pdi_id_map.find(op_type) !=
+        op_pdi_map.op_to_pdi_id_map.end()) {
+      pdi_id = op_pdi_map.op_to_pdi_id_map.at(op_type);
+    } else {
+      throw std::runtime_error("Op type " + op_type +
+                               " not registered in op_pdi_map");
+    }
   }
 
   return pdi_id;

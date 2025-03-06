@@ -1,6 +1,23 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 #include <any>
 #include <iostream>
 #include <map>
@@ -214,13 +231,13 @@ matmul<InT, WtT, OutT>::matmul(const std::string &a_dtype,
 
   matmul_id_++;
 
-  XCLBIN_FNAME_ =
-      OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\SDMatmul.xclbin";
-  RYZENAI_LOG_TRACE(OpsFusion::dd_format("xclbin fname : {}", XCLBIN_FNAME_));
   txn_fname_prefix_ = "sd_matmul_" + txnbin_a_header.at(a_dtype_) +
                       txnbin_b_header.at(b_dtype_) +
                       txnbin_acc_header.at(c_dtype_);
   if (load_xrt) {
+    XCLBIN_FNAME_ =
+        OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\SDMatmul.xclbin";
+    RYZENAI_LOG_TRACE(OpsFusion::dd_format("xclbin fname : {}", XCLBIN_FNAME_));
     xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
     std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
   }
@@ -318,18 +335,20 @@ matmul<InT, WtT, OutT>::matmul(const std::string &a_dtype,
   });
 
   RYZENAI_LOG_TRACE("[SD Matmul] ID: " + std::to_string(matmul_id_) +
-                    ", XCLBIN: " + XCLBIN_FNAME_ +
                     ", (a_dtype, b_dtype, c_dtype): (" + a_dtype + ", " +
                     b_dtype + ", " + c_dtype + ")");
 }
 
 template <typename InT, typename WtT, typename OutT>
-void matmul<InT, WtT, OutT>::set_params(const std::string &model_name,
+void matmul<InT, WtT, OutT>::set_params(const std::string &xclbin,
                                         std::vector<size_t> input_shape) {
   DD_ASSERT(
       input_shape.size() == 4,
       OpsFusion::dd_format("sd matmul input_shape set_params expects 4. Got {}",
                            input_shape.size()));
+  if (!xclbin.empty()) {
+    XCLBIN_FNAME_ = OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\" + xclbin;
+  }
   B_ = input_shape[0];
   M_ = input_shape[1];
   K_ = input_shape[2];

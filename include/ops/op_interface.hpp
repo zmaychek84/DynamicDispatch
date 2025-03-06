@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -133,6 +132,9 @@ public:
 
   virtual void execute(std::vector<xrt::bo> &input,
                        std::vector<xrt::bo> &output) {}
+
+  virtual void execute_cpu(std::vector<Tensor> &input, void *consts,
+                           std::vector<Tensor> &output) {}
 
   static void set_dd_base_dir(const std::string &dir);
 

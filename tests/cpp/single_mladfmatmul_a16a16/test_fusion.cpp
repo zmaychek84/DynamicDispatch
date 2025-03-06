@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -70,7 +70,7 @@ static int test_matmul(const std::string &meta_json, size_t M, size_t K,
       X, W, cpu_Y, C0, C1, C2, C3, shift_gemm_out, shift_qdq_out, "uint16");
 
   std::string xclbin_fname =
-      Utils::get_env_var("DD_ROOT") + MLADF_2x4x2_GEMM_A16A16_XCLBIN_PATH;
+      Utils::get_env_var("DD_ROOT") + "/" + MLADF_2x4x2_GEMM_A16A16_XCLBIN_PATH;
 
   auto meta = OpsFusion::load_meta_json(meta_json);
 
@@ -78,6 +78,7 @@ static int test_matmul(const std::string &meta_json, size_t M, size_t K,
   OpsFusion::DDConfig cfg;
   auto xclbin_content = OpsFusion::read_bin_file<char>(xclbin_fname);
   cfg.xclbin_content = &xclbin_content;
+  cfg.enable_preemption = false;
   rt_cmp.compile(meta, "", cfg);
   rt_cmp.save_state("dd_metastate");
 

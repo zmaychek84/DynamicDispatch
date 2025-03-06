@@ -1,6 +1,22 @@
-/*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -70,7 +86,8 @@ int test_conv2matmul_silu(int H, int W, int C, int N, int vec_coeffs,
   // initialize_random<int32_t>(c1_vec, 1 * N, 10, 0); // for PSU, zp_wgt = 0;
   initialize_random<int32_t>(c2_vec, 1 * N, 10, 0);
   uint32_t C1 = -11;
-  if (model_name == "psu") {
+  if (model_name == "4x4PSU" || model_name == "8x4PSU" ||
+      model_name == "8x4HFDS") {
     C1 = 0; // for PSU, zp_wgt = 0;
   }
   uint32_t C2 = 3;
@@ -102,7 +119,72 @@ int test_conv2matmul_silu(int H, int W, int C, int N, int vec_coeffs,
   // SILU OUT quant params
   silu_qdq_params[2] = silu_out_q_zero_point;
   silu_qdq_params[3] = float_to_bfloat16(1.0 / silu_out_q_scale);
+  silu_qdq_params[4] = 1; // DQ enable
+  silu_qdq_params[5] = 0; // Q enable
+#else
+  std::string data_folder =
+      OpInterface::get_dd_base_dir() + "//bin//psu_conv2matmulsilu_layer1//";
+  std::string wgt_filename = data_folder + "wgt_int4.bin";
+  std::string c0_filename = data_folder + "C0.bin";
+  std::string qdq_params_filename = data_folder + "qdq.bin";
+  std::string qdq_silu_filename = data_folder + "qdq_silu.bin";
+  std::string C1_vec_filename = data_folder + "C1_vec.bin";
+  std::string C2_vec_filename = data_folder + "C2_vec.bin";
+  std::string in_filename = data_folder + "incarf_trans.bin";
+  std::string golden_filename = data_folder + "outcarf_trans_float32.bin";
 
+  // std::vector<WgT> b_full(K * N * 2); //int8 only store one int4, (2*N, K)
+  // read_bin_file(wgt_filename, reinterpret_cast<char *>(b_full.data()));
+  // uint8_t temp;
+  // uint8_t temp1;
+  // for (int r = 0; r < N; r ++) {
+  //   for (int c = 0; c < K; c+=2) {
+  //     temp = (b_full[r * K + c] & 0x0F);
+  //     temp1 = (b_full[r * K + c + 1] << 4);
+
+  //    b[r * K / 2 + c / 2] = (WgT) (temp + temp1);
+  //  }
+  //}
+  // write_bin_file(data_folder + "wgt_int4.bin", (char *)b.data(), b.size());
+  read_bin_file(wgt_filename, reinterpret_cast<char *>(b.data()));
+  read_bin_file(c0_filename, reinterpret_cast<char *>(qdq.data()));
+  read_bin_file(qdq_params_filename,
+                reinterpret_cast<char *>(qdq_params.data()));
+  read_bin_file(qdq_silu_filename,
+                reinterpret_cast<char *>(silu_qdq_params.data()));
+  read_bin_file(C1_vec_filename, reinterpret_cast<char *>(c1_vec.data()));
+  read_bin_file(C2_vec_filename, reinterpret_cast<char *>(c2_vec.data()));
+  std::vector<InT> a_trans(M * K);
+  read_bin_file(in_filename, reinterpret_cast<char *>(a_trans.data()));
+  for (int i = 0; i < M; i++) {
+    for (int j = 0; j < K; j++) {
+      a[i * K + j] = a_trans[j * M + i];
+    }
+  }
+  int32_t sum_c1 = 0;
+  for (int i = 0; i < N; i++) {
+    sum_c1 += c1_vec[i];
+  }
+  std::cout << "c1_vec_sum = " << sum_c1 << std::endl;
+  c0 = *(int64_t *)(&qdq_params[qdq_c0_idx]);
+  C1 = qdq_params[qdq_c1_idx];
+  C2 = qdq_params[qdq_c2_idx];
+  SQb = qdq_params[qdq_SQb_idx];
+  Sout = qdq_params[qdq_Sout_idx];
+  Stdm = qdq_params[qdq_Stdm_idx];
+  silu_in_dq_zero_point = silu_qdq_params[0];
+  silu_out_q_zero_point = silu_qdq_params[2];
+  // layer0
+  silu_in_dq_scale =
+      0.00010200127144344151; // bfloat16_to_float(silu_qdq_params[1]);
+  silu_out_q_scale =
+      0.00007138730143196881; // 1.0 / bfloat16_to_float(silu_qdq_params[3]);
+  // layer1
+  silu_in_dq_scale = bfloat16_to_float(silu_qdq_params[1]);
+  // 0.001203302526846528;
+  silu_out_q_scale = // bfloat16_to_float(silu_qdq_params[3]);
+      0.0009057784336619079;
+#endif
   RowMajorMatrix<WgT> Wmat(K, N, b_trans.data());
   if (b_dtype == "int4") {
     // b is NxK int4 matrix 2x4bit in a single byte
@@ -138,26 +220,37 @@ int test_conv2matmul_silu(int H, int W, int C, int N, int vec_coeffs,
                RowMajorMatrix<OuT>>(X, cpu_Y, C2, C1, C0_vec, SQb, Sout,
                                     cpu_gemm_out_mat, c_dtype);
   }
-
-  // Compute SILU golden
+  // read_bin_file(data_folder + "sigmoid_in.bin",
+  //               reinterpret_cast<char *>(cpu_gemm_out.data()));
+  //  Compute SILU golden
   for (int r = 0; r < M; r++) {
     for (int c = 0; c < N; c++) {
       float in_gold = (cpu_gemm_out_mat.at(r, c) - silu_in_dq_zero_point) *
                       silu_in_dq_scale;
-      silu_out_mat.at(r, c) = float_to_bfloat16(silu_golden(in_gold));
+      float out_gold = silu_golden(in_gold);
+
+      silu_out_mat.at(r, c) = float_to_bfloat16(out_gold);
     }
   }
   // Quantize SILU output
-  quant_bfloat16_to_int16(silu_out_mat, cpu_Y_qdq, silu_out_q_scale,
-                          silu_out_q_zero_point);
-
-#endif
+  if (silu_qdq_params[5] == 1) {
+    quant_bfloat16_to_int16(silu_out_mat, cpu_Y_qdq, 1.0 / silu_out_q_scale,
+                            silu_out_q_zero_point);
+  }
   std::map<std::string, std::any> attr;
   attr["input_format"] = std::vector<string>{"NCHW"};
 
   if (model_name == "4x4PSU") {
     attr["design_param"] = std::vector<string>{"4x4PSU"};
     attr["input_shape"] = std::vector<int>{1, C, H, W};
+  } else if (model_name == "8x4PSU") {
+    attr["design_param"] = std::vector<string>{"8x4PSU"};
+    attr["input_shape"] = std::vector<int>{1, C, H, W};
+  } else if (model_name == "8x4HFDS") {
+    attr["design_param"] = std::vector<string>{"8x4HFDS"};
+    attr["input_shape"] = std::vector<int>{1, C, H, W};
+  } else {
+    throw std::runtime_error("Invalid model_name.");
   }
   ryzenai::conv2matmul_silu conv2matmul_silu_ =
       ryzenai::conv2matmul_silu<InT, WgT, OuT>(a_dtype, b_dtype, c_dtype, false,
@@ -196,34 +289,63 @@ int test_conv2matmul_silu(int H, int W, int C, int N, int vec_coeffs,
 #else
   conv2matmul_silu_.execute(input_Tensor, output_Tensor);
 #endif
-  // read_bin_file(golden_out_name,
-  // reinterpret_cast<char*>(cpu_out_qdq.data()));
-  err_count = check_add_result(cpu_Y_qdq, aie_Y, 0.1);
+#ifndef RANDOM_DATA
+  std::vector<float> ref_out_trans(M * N);
+  read_bin_file(golden_filename,
+                reinterpret_cast<char *>(ref_out_trans.data()));
+  for (int i = 0; i < M; i++) {
+    for (int j = 0; j < N; j++) {
+      silu_out[i * N + j] = float_to_bfloat16(ref_out_trans[j * M + i]);
+    }
+  }
+#endif
+  if (silu_qdq_params[5] == 1) {
+    err_count = check_add_result(cpu_Y_qdq, aie_Y, 1);
+  } else {
+    std::vector<size_t> out_shape = {Hs * Ws, Ns};
+    err_count =
+        check_add_result_bfloat16<OuT>(silu_out, aie_out, out_shape, 5.1);
+  }
 
   return err_count;
 }
 
-// PSU0/1 v1.2 channelwise qdq
-// TEST(PSU_CONV2GEMM_SILU_Testa16w4, Kernel_1_64_3072_16384) {
-//  int err_count = test_conv2matmul_silu<uint16_t, int8_t, uint16_t>(
-//      1, 64, 3072, 16384, 16384, false, "uint16", "int4", "uint16", "4x4PSU");
-//  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-//}
-
-// TEST(PSU_CONV2GEMM_SILU_Testa16w4, Kernel_1_1_3072_16384) {
-//   int err_count = test_conv2matmul_silu<uint16_t, int8_t, uint16_t>(
-//       1, 1, 3072, 16384, 16384, false, "uint16", "int4", "uint16", "4x4PSU");
-//   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-// }
-
-TEST(PSU_CONV2GEMM_SILU_Testa16w4, Kernel_1_1_3072_8192) {
+// PSU 4x4 v1.2
+TEST(PSU4x4_CONV2GEMM_SILU_Testa16w4, Kernel_1_1_3072_8192) {
   int err_count = test_conv2matmul_silu<uint16_t, int8_t, uint16_t>(
-      1, 1, 3072, 8192, 8192, false, "uint16", "int4", "uint16", "4x4PSU");
+      1, 1, 3072, 8192, 8192, false, "uint16", "int4", "bfloat16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(PSU_CONV2GEMM_SILU_Testa16w4, Kernel_1_64_3072_8192) {
+TEST(PSU4x4_CONV2GEMM_SILU_Testa16w4, Kernel_1_64_3072_8192) {
   int err_count = test_conv2matmul_silu<uint16_t, int8_t, uint16_t>(
-      1, 64, 3072, 8192, 8192, false, "uint16", "int4", "uint16", "4x4PSU");
+      1, 64, 3072, 8192, 8192, false, "uint16", "int4", "bfloat16", "4x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// PSU 8x4 v1.2
+TEST(PSU8x4_CONV2GEMM_SILU_Testa16w4, Kernel_1_1_3072_8192) {
+  int err_count = test_conv2matmul_silu<uint16_t, int8_t, uint16_t>(
+      1, 1, 3072, 8192, 8192, false, "uint16", "int4", "bfloat16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_CONV2GEMM_SILU_Testa16w4, Kernel_1_64_3072_8192) {
+  int err_count = test_conv2matmul_silu<uint16_t, int8_t, uint16_t>(
+      1, 64, 3072, 8192, 8192, false, "uint16", "int4", "bfloat16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// HFDS0 8x4
+TEST(HFDS8x4_CONV2GEMM_SILU_Testa16w4, Kernel_1_64_1536_8960) {
+  int err_count = test_conv2matmul_silu<uint16_t, int8_t, uint16_t>(
+      1, 64, 1536, 8960, 4, false, "uint16", "int4", "bfloat16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// HFDS1 8x4
+TEST(HFDS8x4_CONV2GEMM_SILU_Testa16w4, Kernel_1_1_1536_8960) {
+  int err_count = test_conv2matmul_silu<uint16_t, int8_t, uint16_t>(
+      1, 1, 1536, 8960, 4, false, "uint16", "int4", "bfloat16", "8x4HFDS");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

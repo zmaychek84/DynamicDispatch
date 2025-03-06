@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -64,7 +79,7 @@ int test_conv2matmul(int H, int W, int C, int N, int vec_coeffs,
   // initialize_random<int32_t>(c1_vec, 1 * N, 10, 0); // for PSU, zp_wgt = 0;
   initialize_random<int32_t>(c2_vec, 1 * N, 10, 0);
   uint32_t C1 = -11;
-  if (model_name == "4x4PSU") {
+  if (model_name == "4x4PSU" || model_name == "8x4PSU") {
     C1 = 0; // for PSU, zp_wgt = 0;
   }
   uint32_t C2 = 3;
@@ -171,6 +186,14 @@ int test_conv2matmul(int H, int W, int C, int N, int vec_coeffs,
   } else if (model_name == "4x4PSU") {
     attr["design_param"] = std::vector<string>{"4x4PSU"};
     attr["input_shape"] = std::vector<int>{1, C, H, W};
+  } else if (model_name == "8x4PSU") {
+    attr["design_param"] = std::vector<string>{"8x4PSU"};
+    attr["input_shape"] = std::vector<int>{1, C, H, W};
+  } else if (model_name == "8x4HFDS") {
+    attr["design_param"] = std::vector<string>{"8x4HFDS"};
+    attr["input_shape"] = std::vector<int>{1, C, H, W};
+  } else {
+    throw std::runtime_error("Invalid model_name.");
   }
   ryzenai::conv2matmul conv2matmul_ = ryzenai::conv2matmul<InT, WgT, OuT>(
       a_dtype, b_dtype, c_dtype, false, attr);
@@ -330,76 +353,214 @@ TEST(PSW_CONV2GEMM_Testa16w8, Kernel_a16_w8_acc16_1_1_768_8) {
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-// PSU0/1 v1.2
-TEST(PSU_CONV2GEMM_Testa16w8, Kernel_1_1_3072_3072) {
+// PSU0/1 4x4 v1.2 int8
+TEST(PSU4x4_CONV2GEMM_Testa16w8, Kernel_1_1_3072_3072) {
   int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
       1, 1, 3072, 3072, 1, false, "uint16", "int8", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(PSU_CONV2GEMM_Testa16w8, Kernel_1_1_8192_3072) {
+TEST(PSU4x4_CONV2GEMM_Testa16w8, Kernel_1_1_8192_3072) {
   int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
       1, 1, 8192, 3072, 1, false, "uint16", "int8", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(PSU_CONV2GEMM_Testa16w8, Kernel_1_64_3072_3072) {
+TEST(PSU4x4_CONV2GEMM_Testa16w8, Kernel_1_64_3072_3072) {
   int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
       1, 64, 3072, 3072, 1, false, "uint16", "int8", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(PSU_CONV2GEMM_Testa16w8, Kernel_1_64_8192_3072) {
+TEST(PSU4x4_CONV2GEMM_Testa16w8, Kernel_1_64_8192_3072) {
   int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
       1, 64, 8192, 3072, 1, false, "uint16", "int8", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-// PSU0/1 v1.2 channelwise qdq
-TEST(PSU_CONV2GEMM_Testa16w4, Kernel_1_64_3072_9216) {
+// PSU0/1 4x4 v1.2 channelwise qdq
+TEST(PSU4x4_CONV2GEMM_Testa16w4, Kernel_1_64_3072_9216) {
   int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
       1, 64, 3072, 9216, 9216, false, "uint16", "int4", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(PSU_CONV2GEMM_Testa16w4, Kernel_1_1_3072_9216) {
+TEST(PSU4x4_CONV2GEMM_Testa16w4, Kernel_1_1_3072_9216) {
   int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
       1, 1, 3072, 9216, 9216, false, "uint16", "int4", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(PSU_CONV2GEMM_Testa16w4, Kernel_1_1_3072_8192) {
+TEST(PSU4x4_CONV2GEMM_Testa16w4, Kernel_1_1_3072_8192) {
   int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
       1, 1, 3072, 8192, 8192, false, "uint16", "int4", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(PSU_CONV2GEMM_Testa16w4, Kernel_1_64_3072_8192) {
+TEST(PSU4x4_CONV2GEMM_Testa16w4, Kernel_1_64_3072_8192) {
   int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
       1, 64, 3072, 8192, 8192, false, "uint16", "int4", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(PSU_CONV2GEMM_Testa16w4, Kernel_1_64_3072_3072) {
+TEST(PSU4x4_CONV2GEMM_Testa16w4, Kernel_1_64_3072_3072) {
   int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
       1, 64, 3072, 3072, 3072, false, "uint16", "int4", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(PSU_CONV2GEMM_Testa16w4, Kernel_1_1_3072_3072) {
+TEST(PSU4x4_CONV2GEMM_Testa16w4, Kernel_1_1_3072_3072) {
   int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
       1, 1, 3072, 3072, 3072, false, "uint16", "int4", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(PSU_CONV2GEMM_Testa16w4, Kernel_1_64_8192_3072) {
+TEST(PSU4x4_CONV2GEMM_Testa16w4, Kernel_1_64_8192_3072) {
   int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
       1, 64, 8192, 3072, 3072, false, "uint16", "int4", "uint16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(PSU_CONV2GEMM_Testa16w4, Kernel_1_1_8192_3072) {
+TEST(PSU4x4_CONV2GEMM_Testa16w4, Kernel_1_1_8192_3072) {
   int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
       1, 1, 8192, 3072, 3072, false, "uint16", "int4", "uint16", "4x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// PSU0/1 8x4 v1.2 int8
+TEST(PSU8x4_CONV2GEMM_Testa16w8, Kernel_1_1_3072_3072) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 1, 3072, 3072, 1, false, "uint16", "int8", "uint16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_CONV2GEMM_Testa16w8, Kernel_1_1_8192_3072) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 1, 8192, 3072, 1, false, "uint16", "int8", "uint16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_CONV2GEMM_Testa16w8, Kernel_1_64_3072_3072) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 64, 3072, 3072, 1, false, "uint16", "int8", "uint16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_CONV2GEMM_Testa16w8, Kernel_1_64_8192_3072) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 64, 8192, 3072, 1, false, "uint16", "int8", "uint16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// PSU0/1 8x4 v1.2 channelwise qdq
+TEST(PSU8x4_CONV2GEMM_Testa16w4, Kernel_1_64_3072_9216) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 64, 3072, 9216, 9216, false, "uint16", "int4", "uint16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_CONV2GEMM_Testa16w4, Kernel_1_1_3072_9216) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 1, 3072, 9216, 9216, false, "uint16", "int4", "uint16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_CONV2GEMM_Testa16w4, Kernel_1_1_3072_8192) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 1, 3072, 8192, 8192, false, "uint16", "int4", "uint16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_CONV2GEMM_Testa16w4, Kernel_1_64_3072_8192) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 64, 3072, 8192, 8192, false, "uint16", "int4", "uint16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_CONV2GEMM_Testa16w4, Kernel_1_64_3072_3072) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 64, 3072, 3072, 3072, false, "uint16", "int4", "uint16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_CONV2GEMM_Testa16w4, Kernel_1_1_3072_3072) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 1, 3072, 3072, 3072, false, "uint16", "int4", "uint16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_CONV2GEMM_Testa16w4, Kernel_1_64_8192_3072) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 64, 8192, 3072, 3072, false, "uint16", "int4", "uint16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_CONV2GEMM_Testa16w4, Kernel_1_1_8192_3072) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 1, 8192, 3072, 3072, false, "uint16", "int4", "uint16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// HFDS0 8x4 uint8
+TEST(HFDS8x4_CONV2GEMM_Testa16w8, Kernel_1_64_8960_1536) {
+  int err_count = test_conv2matmul<uint16_t, uint8_t, uint16_t>(
+      1, 64, 8960, 1536, 1, false, "uint16", "uint8", "uint16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// HFDS0 8x4 int4 channelwise qdq
+TEST(HFDS8x4_CONV2GEMM_Testa16w4, Kernel_1_64_1536_256) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 64, 1536, 256, 4, false, "uint16", "int4", "uint16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(HFDS8x4_CONV2GEMM_Testa16w4, Kernel_1_64_1536_8960) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 64, 1536, 8960, 4, false, "uint16", "int4", "uint16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(HFDS8x4_CONV2GEMM_Testa16w4, Kernel_1_64_1536_1536) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 64, 1536, 1536, 4, false, "uint16", "int4", "uint16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(HFDS8x4_CONV2GEMM_Testa16w4, Kernel_1_64_8960_1536) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 64, 8960, 1536, 4, false, "uint16", "int4", "uint16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// HFDS1 8x4 uint8
+TEST(HFDS8x4_CONV2GEMM_Testa16w8, Kernel_1_1_8960_1536) {
+  int err_count = test_conv2matmul<uint16_t, uint8_t, uint16_t>(
+      1, 1, 8960, 1536, 1, false, "uint16", "uint8", "uint16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// HFDS1 8x4 int4 channelwise qdq
+TEST(HFDS8x4_CONV2GEMM_Testa16w4, Kernel_1_1_1536_256) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 1, 1536, 256, 4, false, "uint16", "int4", "uint16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(HFDS8x4_CONV2GEMM_Testa16w4, Kernel_1_1_1536_8960) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 1, 1536, 8960, 4, false, "uint16", "int4", "uint16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(HFDS8x4_CONV2GEMM_Testa16w4, Kernel_1_1_1536_1536) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 1, 1536, 1536, 4, false, "uint16", "int4", "uint16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(HFDS8x4_CONV2GEMM_Testa16w4, Kernel_1_1_8960_1536) {
+  int err_count = test_conv2matmul<uint16_t, int8_t, uint16_t>(
+      1, 1, 8960, 1536, 4, false, "uint16", "int4", "uint16", "8x4HFDS");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

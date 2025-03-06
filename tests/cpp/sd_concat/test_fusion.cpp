@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -159,17 +159,18 @@ int test_sd_concat(const std::string &meta_json) {
   OpsFusion::FusionRuntime rt_cmp;
   OpsFusion::DDConfig cfg;
   std::string xclbin_fname =
-      Utils::get_env_var("DD_ROOT") + "\\xclbin\\stx\\SDConcat.xclbin";
+      Utils::get_env_var("DD_ROOT") + "\\xclbin\\stx\\SD15_unet_2x4x4.xclbin";
 
   auto xclbin_content = OpsFusion::read_bin_file<char>(xclbin_fname);
   cfg.xclbin_content = &xclbin_content;
+  cfg.model_name = "SD15";
   rt_cmp.compile(meta, "", cfg);
   rt_cmp.save_state("dd_metastate");
   std::cerr << "Compiled" << std::endl;
 
   OpsFusion::FusionRuntime rt(xclbin_fname, xclbin_content);
   rt.load_state("dd_metastate");
-  rt.init(meta);
+  rt.init(meta, "", cfg);
   const std::vector<size_t> a_shape = {2, 8, 8, 1280};
   const std::vector<size_t> b_shape = {2, 8, 8, 1280};
   const std::vector<size_t> c_shape = {2, 8, 8, 2560};

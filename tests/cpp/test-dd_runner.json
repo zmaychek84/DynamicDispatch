@@ -3,13 +3,12 @@
   "owner": "z1_acas_test",
   "setup": [
     "cmake -S . -B build -DENABLE_DD_TESTS=ON -DPERF_LOGGING_EN=ON -DCMAKE_INSTALL_PREFIX=build/Release",
-    "cmake --build build --config=Release --target install --parallel",
-    "pip install -e ext\\dd_helper"
+    "cmake --build build --config=Release --target install --parallel"
   ],
   "test_steps": [
     {
-      "name": "fwd_compatibility_test",
-      "command": "build\\Release\\tests\\test_fwd_compatibility.exe",
+      "name": "dd_runner_1",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSQ2-v1_0.quant\\fused.onnx.subgraph_3273.state 4x2_psq2_model_a16w8_qdq.xclbin",
       "run_type": [
         "pr",
         "daily"
@@ -19,8 +18,8 @@
       ]
     },
     {
-      "name": "dd_runner_PSF",
-      "command": "pushd %DD_METASTATE%\\PSF  && %DD_ROOT%\\build\\Release\\tests\\dd_runner.exe fused.onnx.subgraph_1961.json  fused.onnx.subgraph_1961.state  4x2_psf_stops_v1.1_model_a8w8_qdq.xclbin         L C & popd",
+      "name": "dd_runner_2",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSR-v1_0.quant\\fused.onnx.subgraph_22056.state 4x4_psr_model_a16w8_qdq.xclbin",
       "run_type": [
         "pr",
         "daily"
@@ -30,8 +29,8 @@
       ]
     },
     {
-      "name": "dd_runner_PSH",
-      "command": "pushd %DD_METASTATE%\\PSH  && %DD_ROOT%\\build\\Release\\tests\\dd_runner.exe fused.onnx.subgraph_725.json   fused.onnx.subgraph_725.state   4x2_psh_stops_v1.2_model_a16w8_qdq.xclbin        L C & popd",
+      "name": "dd_runner_3",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model_PSF_v1.1.0\\fused.onnx.subgraph_1961.state 4x2_psf_stops_v1.1_model_a8w8_qdq.xclbin",
       "run_type": [
         "pr",
         "daily"
@@ -41,8 +40,8 @@
       ]
     },
     {
-      "name": "dd_runner_PSI",
-      "command": "pushd %DD_METASTATE%\\PSI  && %DD_ROOT%\\build\\Release\\tests\\dd_runner.exe fused.onnx.subgraph_4019.json  fused.onnx.subgraph_4019.state   4x2_psi_integrated_stops_model_a16w8_qdq.xclbin L C & popd",
+      "name": "dd_runner_4",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model_PSH_v1.2\\fused.onnx.subgraph_725.state 4x2_psh_v1.2_model_a16w8_qdq_00.xclbin",
       "run_type": [
         "pr",
         "daily"
@@ -52,8 +51,8 @@
       ]
     },
     {
-      "name": "dd_runner_PSJ",
-      "command": "pushd %DD_METASTATE%\\PSJ  && %DD_ROOT%\\build\\Release\\tests\\dd_runner.exe fused.onnx.subgraph_1903.json  fused.onnx.subgraph_1903.state   4x2_psj_stops_model_a16w8_qdq.xclbin            L C & popd",
+      "name": "dd_runner_5",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model_PSI_v1.1_e255659e71c9b17f8b2df740f926e2204c06a2f3\\fused.onnx.subgraph_4019.state 4x2_psi_integrated_stops_model_a16w8_qdq.xclbin",
       "run_type": [
         "pr",
         "daily"
@@ -63,8 +62,8 @@
       ]
     },
     {
-      "name": "dd_runner_PSQ2",
-      "command": "pushd %DD_METASTATE%\\PSQ2 && %DD_ROOT%\\build\\Release\\tests\\dd_runner.exe fused.onnx.subgraph_3273.json  fused.onnx.subgraph_3273.state   4x2_psq2_model_a16w8_qdq.xclbin                 L C & popd",
+      "name": "dd_runner_6",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model_PSJ_v1.a16w8\\fused.onnx.subgraph_1903.state 4x2_psj_stops_model_a16w8_qdq.xclbin",
       "run_type": [
         "pr",
         "daily"
@@ -74,8 +73,371 @@
       ]
     },
     {
-      "name": "dd_runner_PSR",
-      "command": "pushd %DD_METASTATE%\\PSR  && %DD_ROOT%\\build\\Release\\tests\\dd_runner.exe fused.onnx.subgraph_22056.json fused.onnx.subgraph_22056.state  4x4_psr_model_a16w8_qdq.xclbin                  L C & popd",
+      "name": "dd_runner_7",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model_PSR_v1.1\\fused.onnx.subgraph_22062.state 4x4_psr_model_a16w8_qdq.xclbin",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_8",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSH-240103\\fused.onnx.subgraph_725.state 4x2_psh_stops_v1.2_model_a16w8_qdq.xclbin",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_9",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSO2_320\\fused.onnx.subgraph_154.state 4x2_pso2_model_a16w16_qdq.xclbin",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_10",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSO2_640\\fused.onnx.subgraph_154.state 4x2_pso2_model_a16w16_qdq.xclbin",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_11",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSO2_1280\\fused.onnx.subgraph_154.state 4x2_pso2_model_a16w16_qdq.xclbin",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_12",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSO2_2560\\fused.onnx.subgraph_154.state 4x2_pso2_model_a16w16_qdq.xclbin",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_13",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSR-v1_0.quant-200\\fused.onnx.subgraph_22056.state 4x4_psr_model_a16w8_qdq.xclbin",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_14",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSQ1-v1_0.quant\\fused.onnx.subgraph_4.state 4x2_psq_model_a8w8_qdq.xclbin",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_15",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSW-QDQ-v1\\fused.onnx.subgraph_2073.state 4x4_psw_v1.0_model_a16w8_qdq.xclbin",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_28",
+      "command": "build\\Release\\tests\\dd_runner.exe --use_state \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSI-QDQ-v1_6\\fused.onnx.subgraph_4012.state 4x2_psi_integrated_stops_model_a16w8_qdq.xclbin",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_201",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSQ2-v1_0.quant-250221\\fused.onnx.subgraph_3273.json --gen_state 4x2_psq2_model_a16w8_qdq.xclbin C Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_202",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSR-v1_0.quant-250221\\fused.onnx.subgraph_22056.json --gen_state 4x4_psr_model_a16w8_qdq.xclbin C Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_203",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model_PSF_v1.1.0-250221\\fused.onnx.subgraph_1963.json --gen_state 4x2_psf_stops_v1.1_model_a8w8_qdq.xclbin C Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_204",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model_PSH_v1.2-250221\\fused.onnx.subgraph_725.json --gen_state 4x2_psh_v1.2_model_a16w8_qdq_00.xclbin C Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_206",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model_PSJ_v1.a16w8-250221\\fused.onnx.subgraph_1904.json --gen_state 4x2_psj_stops_model_a16w8_qdq.xclbin C Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_209",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSO2_320-250221\\fused.onnx.subgraph_154.json --gen_state 4x2_pso2_model_a16w16_qdq.xclbin C Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_210",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSO2_640-250221\\fused.onnx.subgraph_154.json --gen_state 4x2_pso2_model_a16w16_qdq.xclbin C Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_211",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSO2_1280-250221\\fused.onnx.subgraph_154.json --gen_state 4x2_pso2_model_a16w16_qdq.xclbin C Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_212",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSO2_2560-250221\\fused.onnx.subgraph_154.json --gen_state 4x2_pso2_model_a16w16_qdq.xclbin C Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_214",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSQ1-v1_0.quant-250221\\fused.onnx.subgraph_4.json --gen_state 4x2_psq_model_a8w8_qdq.xclbin C Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_215",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSW-QDQ-v1-250221\\fused.onnx.subgraph_2073.json --gen_state 4x4_psw_v1.0_model_a16w8_qdq.xclbin C Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_228",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSI-QDQ-v1_6-250221\\fused.onnx.subgraph_4012.json --gen_state 4x2_psi_integrated_stops_model_a16w8_qdq.xclbin C Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_201T",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSQ2-v1_0.quant-250221\\fused.onnx.subgraph_3273.json --gen_state 4x2_psq2_model_a16w8_qdq.xclbin C T Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_202T",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSR-v1_0.quant-250221\\fused.onnx.subgraph_22056.json --gen_state 4x4_psr_model_a16w8_qdq.xclbin C T Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_203T",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model_PSF_v1.1.0-250221\\fused.onnx.subgraph_1963.json --gen_state 4x2_psf_stops_v1.1_model_a8w8_qdq.xclbin C T Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_204T",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model_PSH_v1.2-250221\\fused.onnx.subgraph_725.json --gen_state 4x2_psh_v1.2_model_a16w8_qdq_00.xclbin C T Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_206T",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model_PSJ_v1.a16w8-250221\\fused.onnx.subgraph_1904.json --gen_state 4x2_psj_stops_model_a16w8_qdq.xclbin C T Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_209T",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSO2_320-250221\\fused.onnx.subgraph_154.json --gen_state 4x2_pso2_model_a16w16_qdq.xclbin C T Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_210T",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSO2_640-250221\\fused.onnx.subgraph_154.json --gen_state 4x2_pso2_model_a16w16_qdq.xclbin C T Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_211T",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSO2_1280-250221\\fused.onnx.subgraph_154.json --gen_state 4x2_pso2_model_a16w16_qdq.xclbin C T Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_212T",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\PSO2_2560-250221\\fused.onnx.subgraph_154.json --gen_state 4x2_pso2_model_a16w16_qdq.xclbin C T Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_214T",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSQ1-v1_0.quant-250221\\fused.onnx.subgraph_4.json --gen_state 4x2_psq_model_a8w8_qdq.xclbin C T Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_215T",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSW-QDQ-v1-250221\\fused.onnx.subgraph_2073.json --gen_state 4x4_psw_v1.0_model_a16w8_qdq.xclbin C T Q W",
+      "run_type": [
+        "pr",
+        "daily"
+      ],
+      "devices": [
+        "strix"
+      ]
+    },
+    {
+      "name": "dd_runner_228T",
+      "command": "build\\Release\\tests\\dd_runner.exe \\\\xsjswsvm1-abuildsFG.xilinx.com\\aiebuilds\\dd_ci\\models_data\\Model-PSI-QDQ-v1_6-250221\\fused.onnx.subgraph_4012.json --gen_state 4x2_psi_integrated_stops_model_a16w8_qdq.xclbin C T Q W",
       "run_type": [
         "pr",
         "daily"

@@ -1,6 +1,22 @@
-/*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cfenv>
 #include <cmath>
@@ -181,10 +197,10 @@ int test_sd_slice(std::vector<size_t> in_shape, std::vector<size_t> out_shape,
                   const std::string &ifm_type = "bfloat16", // a bo
                   const std::string &out_type = "bfloat16", // c bo
                   const std::string &model_name = "SD_VAE_UNet",
-                  float pixel_L2_norm_tolerance = 0.01,
+                  float pixel_L2_norm_tolerance = 0.01f,
                   bool test_with_golden = false) {
   int err_count = 0;
-  float error_tolerance = 0.01;
+  float error_tolerance = 0.01f;
   std::map<std::string, std::string> txnbin_a_header = {{"bfloat16", "a16bf"}};
   std::map<std::string, std::string> txnbin_acc_header = {
       {"bfloat16", "acc16bf"}};
@@ -205,13 +221,16 @@ int test_sd_slice(std::vector<size_t> in_shape, std::vector<size_t> out_shape,
   std::vector<int> c_shape_int(aie_out_shape.begin(), aie_out_shape.end());
   attr["input_shape"] = a_shape_int;
   attr["output_shape"] = c_shape_int;
+  std::string xclbin = sd_get_xclbin(model_name);
+  std::string pdi_name = xclbin.empty() ? "DPU" : sd_get_pdi(xclbin, "SDSlice");
+  std::cerr << "xclbin: " << xclbin << " pdi_name: " << pdi_name << std::endl;
   if (test_with_golden) {
 
     ryzenai::sd::slice sd_slice =
         ryzenai::sd::slice<std::uint16_t, std::uint16_t>(ifm_type, out_type,
                                                          false, attr);
     sd_slice.debug(debug);
-    sd_slice.set_params();
+    sd_slice.set_params(xclbin, pdi_name);
     std::string test_golden_root_dir =
         "tests/cpp/unit_tests/testDataMladf/sd3_slice/";
 
@@ -263,7 +282,7 @@ int test_sd_slice(std::vector<size_t> in_shape, std::vector<size_t> out_shape,
         ryzenai::sd::slice<std::uint16_t, std::uint16_t>(ifm_type, out_type,
                                                          false, attr);
     sd_slice.debug(debug);
-    sd_slice.set_params();
+    sd_slice.set_params(xclbin, pdi_name);
     std::vector<float> raw_ifms(a_size, 0);
     initialize_random_float(raw_ifms, 2, -2);
     auto bf16_ifms = float2bf16_vec(raw_ifms);
@@ -322,7 +341,7 @@ TEST(SD_SLICE_Test, Golden_KernelShape1) {
   std::vector<int64_t> slice_attr = {0, 0, 0, 0};
   int err_count = test_sd_slice<uint16_t, uint16_t>(
       in_shape, out_shape, slice_attr, false, "bfloat16", "bfloat16",
-      "SD_MMDIT", 0.01, true);
+      "SD_MMDIT", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -333,7 +352,7 @@ TEST(SD_SLICE_Test, Golden_KernelShape2) {
   std::vector<int64_t> slice_attr = {0, 0, 0, 0};
   int err_count = test_sd_slice<uint16_t, uint16_t>(
       in_shape, out_shape, slice_attr, false, "bfloat16", "bfloat16",
-      "SD_MMDIT", 0.01, true);
+      "SD_MMDIT", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -344,7 +363,7 @@ TEST(SD_SLICE_Test, Golden_KernelShape3) {
   std::vector<int64_t> slice_attr = {0, 0, 0, 0};
   int err_count = test_sd_slice<uint16_t, uint16_t>(
       in_shape, out_shape, slice_attr, false, "bfloat16", "bfloat16",
-      "SD_MMDIT", 0.01, true);
+      "SD_MMDIT", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -355,51 +374,98 @@ TEST(SD_SLICE_Test, Golden_KernelShape4) {
   std::vector<int64_t> slice_attr = {0, 0, 0, 0};
   int err_count = test_sd_slice<uint16_t, uint16_t>(
       in_shape, out_shape, slice_attr, false, "bfloat16", "bfloat16",
-      "SD_MMDIT", 0.01, true);
+      "SD_MMDIT", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // random test
-TEST(SD_SLICE_Test, Random_KernelShape1) {
-  std::vector<size_t> in_shape = {2, 1178, 1536};
-  std::vector<size_t> out_shape = {2, 154, 1536};
-  // dim, start, end,  step
-  std::vector<int64_t> slice_attr = {1, 1024, 9223372036854775807, 1};
-  int err_count = test_sd_slice<uint16_t, uint16_t>(
-      in_shape, out_shape, slice_attr, false, "bfloat16", "bfloat16",
-      "SD_MMDIT", 0.01);
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(SD_SLICE_Test, Random_KernelShape2) {
+//  SD3.0
+// 512
+TEST(SD_SLICE_Test, Random_SD3_DIT512_1) {
   std::vector<size_t> in_shape = {2, 1178, 1536};
   std::vector<size_t> out_shape = {2, 1024, 1536};
   // dim, start, end,  step
   std::vector<int64_t> slice_attr = {1, 0, 1024, 1};
-  int err_count = test_sd_slice<uint16_t, uint16_t>(
-      in_shape, out_shape, slice_attr, false, "bfloat16", "bfloat16",
-      "SD_MMDIT", 0.01);
+  int err_count =
+      test_sd_slice<uint16_t, uint16_t>(in_shape, out_shape, slice_attr, false,
+                                        "bfloat16", "bfloat16", "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SLICE_Test, Random_KernelShape3) {
-  std::vector<size_t> in_shape = {2, 4250, 1536};
-  std::vector<size_t> out_shape = {2, 4096, 1536};
+TEST(SD_SLICE_Test, Random_SD3_DIT512_2) {
+  std::vector<size_t> in_shape = {2, 1178, 1536};
+  std::vector<size_t> out_shape = {2, 154, 1536};
   // dim, start, end,  step
-  std::vector<int64_t> slice_attr = {1, 0, 4096, 1};
-  int err_count = test_sd_slice<uint16_t, uint16_t>(
-      in_shape, out_shape, slice_attr, false, "bfloat16", "bfloat16",
-      "SD_MMDIT", 0.01);
+  std::vector<int64_t> slice_attr = {1, 1024, 9223372036854775807, 1};
+  int err_count =
+      test_sd_slice<uint16_t, uint16_t>(in_shape, out_shape, slice_attr, false,
+                                        "bfloat16", "bfloat16", "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SLICE_Test, Random_KernelShape4) {
+TEST(SD_SLICE_Test, Random_SD3_DIT512_3) {
+  std::vector<size_t> in_shape = {2, 1184, 1536};
+  std::vector<size_t> out_shape = {2, 160, 1536};
+  // dim, start, end,  step
+  std::vector<int64_t> slice_attr = {1, 1024, 9223372036854775807, 1};
+  int err_count =
+      test_sd_slice<uint16_t, uint16_t>(in_shape, out_shape, slice_attr, false,
+                                        "bfloat16", "bfloat16", "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SLICE_Test, Random_SD3_DIT512_4) {
+  std::vector<size_t> in_shape = {2, 1184, 1536};
+  std::vector<size_t> out_shape = {2, 1024, 1536};
+  // dim, start, end,  step
+  std::vector<int64_t> slice_attr = {1, 0, 1024, 1};
+  int err_count =
+      test_sd_slice<uint16_t, uint16_t>(in_shape, out_shape, slice_attr, false,
+                                        "bfloat16", "bfloat16", "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// 1024
+TEST(SD_SLICE_Test, Random_SD3_DIT1024_1) {
   std::vector<size_t> in_shape = {2, 4250, 1536};
   std::vector<size_t> out_shape = {2, 154, 1536};
   // dim, start, end,  step
   std::vector<int64_t> slice_attr = {1, 4096, 9223372036854775807, 1};
-  int err_count = test_sd_slice<uint16_t, uint16_t>(
-      in_shape, out_shape, slice_attr, false, "bfloat16", "bfloat16",
-      "SD_MMDIT", 0.01);
+  int err_count =
+      test_sd_slice<uint16_t, uint16_t>(in_shape, out_shape, slice_attr, false,
+                                        "bfloat16", "bfloat16", "SD3_DIT1024");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SLICE_Test, Random_SD3_DIT1024_2) {
+  std::vector<size_t> in_shape = {2, 4250, 1536};
+  std::vector<size_t> out_shape = {2, 4096, 1536};
+  // dim, start, end,  step
+  std::vector<int64_t> slice_attr = {1, 0, 4096, 1};
+  int err_count =
+      test_sd_slice<uint16_t, uint16_t>(in_shape, out_shape, slice_attr, false,
+                                        "bfloat16", "bfloat16", "SD3_DIT1024");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SLICE_Test, Random_SD3_DIT1024_3) {
+  std::vector<size_t> in_shape = {2, 4256, 1536};
+  std::vector<size_t> out_shape = {2, 160, 1536};
+  // dim, start, end,  step
+  std::vector<int64_t> slice_attr = {1, 4096, 9223372036854775807, 1};
+  int err_count =
+      test_sd_slice<uint16_t, uint16_t>(in_shape, out_shape, slice_attr, false,
+                                        "bfloat16", "bfloat16", "SD3_DIT1024");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SLICE_Test, Random_SD3_DIT1024_4) {
+  std::vector<size_t> in_shape = {2, 4256, 1536};
+  std::vector<size_t> out_shape = {2, 4096, 1536};
+  // dim, start, end,  step
+  std::vector<int64_t> slice_attr = {1, 0, 4096, 1};
+  int err_count =
+      test_sd_slice<uint16_t, uint16_t>(in_shape, out_shape, slice_attr, false,
+                                        "bfloat16", "bfloat16", "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

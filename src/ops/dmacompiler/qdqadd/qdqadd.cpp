@@ -1,6 +1,22 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 #include <any>
 #include <iostream>
 #include <map>
@@ -24,7 +40,9 @@
 
 #include <ops/dmacompiler/qdqadd/qdqadd.hpp>
 #include <ops/op_interface.hpp>
+#include <ops/ops_common/coeffs.hpp>
 #include <ops/ops_common/ctrlpkt.hpp>
+#include <ops/ops_common/op_util.hpp>
 #include <txn_container.hpp>
 #include <utils/instruction_registry.hpp>
 #include <utils/logging.hpp>
@@ -144,6 +162,7 @@ qdq_add<InT, WtT, OutT>::qdq_add(const std::string &a_dtype,
   txnbin_b_header = {{"bfloat16", "abf16"}, {"uint16", "a16"}, {"uint8", "a8"}};
   txnbin_c_header = {{"bfloat16", "accbf16"}, {"uint16", "acc16"}};
 
+  is_generic_pass = OpsFusion::check_generic_fusion(attr);
   // default shape is the padded shaped used in AIE for BO allocation
   default_shapes_["qdqadd_4x4_a16a16acc16"] =
       std::vector<std::tuple<int, int>>();
@@ -243,7 +262,6 @@ void qdq_add<InT, WtT, OutT>::set_params(const std::string &model_name,
     throw std::invalid_argument("model_name is not supported");
   }
   // std::cout << XCLBIN_FNAME << std::endl;
-
   auto [M, K] = map_padded_shape(input_shape.at(0), input_shape.at(1));
   w_shape_[0] = M;
   w_shape_[1] = K;
@@ -258,13 +276,34 @@ void qdq_add<InT, WtT, OutT>::initialize_const_params(
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("qdqadd initialize_const_params(ptr) ...");
 
-  DD_THROW_IF((const_params.size() != 1),
-              OpsFusion::dd_format("Unsupported const spec for qdqadd\n") +
-                  OpsFusion::dd_format("(Details : #const params == 1 ({})",
-                                       const_params.size()));
+  std::vector<int32_t> elt_coeffs(16, 0);
+  int32_t *qdq_params;
+  if (is_generic_pass == true) {
+    float a_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(0))[0];
+    uint16_t a_zp =
+        OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(1))[0];
 
-  // Model: "4x4PSW1.0"
-  auto qdq_params = (int32_t *)const_params.at(0).data;
+    float b_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(2))[0];
+    uint16_t b_zp =
+        OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(3))[0];
+
+    float y_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(4))[0];
+    uint16_t y_zp =
+        OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(5))[0];
+
+    elt_coeffs = OpsFusion::coeffs::calculate_add_qdq_params(a_sc, a_zp, b_sc,
+                                                             b_zp, y_sc, y_zp);
+
+    qdq_params = elt_coeffs.data();
+
+  } else {
+    DD_THROW_IF((const_params.size() != 1),
+                OpsFusion::dd_format("Unsupported const spec for qdqadd\n") +
+                    OpsFusion::dd_format("(Details : #const params == 1 ({})",
+                                         const_params.size()));
+    // Model: "4x4PSW1.0"
+    qdq_params = (int32_t *)const_params.at(0).data;
+  }
   auto qdq_params_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
   io.write(0, (void *)qdq_params, qdq_params_size);
 
@@ -544,9 +583,8 @@ std::vector<OpArgMap> qdq_add<InT, WtT, OutT>::get_buffer_reqs(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
   auto [M, N] = extract_MK(input);
-
   auto [Mo, No] = map_padded_shape(M, N);
-
+  size_t output_idx = is_generic_pass ? 8 : 3;
   size_t const_params_bo_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
   size_t input_1_bo_size = (Mo * No * sizeof(InT));
   size_t input_2_bo_size = (Mo * No * sizeof(WtT));
@@ -558,7 +596,7 @@ std::vector<OpArgMap> qdq_add<InT, WtT, OutT>::get_buffer_reqs(
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_1_bo_size},
       {OpArgMap::OpArgType::INPUT, 1, 1, input_1_bo_size, input_2_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 2, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 3, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};

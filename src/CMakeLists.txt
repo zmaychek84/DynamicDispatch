@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Advanced Micro Devices, Inc
+# Copyright (c) 2025 Advanced Micro Devices, Inc
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of
 # this software and associated documentation files (the "Software"), to deal in
@@ -122,6 +122,7 @@ set(LIB_SRC
     fusion_rt/md5.h
     fusion_rt/weak.hpp
     passes/insert_pm_swap.cpp
+    passes/remove_identity_ops.cpp
     passes/insert_record_timer.cpp
     passes/insert_preemption_pass.cpp
     passes/assign_pdi_id_pass.cpp
@@ -129,8 +130,13 @@ set(LIB_SRC
     passes/analyze_buffer_reqs.cpp
     passes/optimize_scratch.cpp
     passes/split_max_partition_pass.cpp
+    passes/sync_identity_tensors.cpp
     passes/fetch_op_txn_bins.cpp
     passes/relocate_ctrl_pkt_patch_info.cpp
+    passes/cont_reuse.hpp
+    passes/cont_reuse.cpp
+    passes/optimize_scratch_bucket.cpp
+    passes/optimize_scratch_contiguous.cpp
     txn/txn_utils.cpp
     utils/logging.cpp
     utils/xrt_context.cpp
@@ -139,6 +145,7 @@ set(LIB_SRC
     utils/op_utils.cpp
     utils/ctrl_pkt_utils.cpp
     utils/platform.cpp
+    utils/pass_utils.cpp
     ops/conv/conv.cpp
     ops/convForMatmulAdd/convForMatmulAdd.cpp
     ops/concateOps/concateOps.cpp
@@ -184,12 +191,18 @@ set(LIB_SRC
     ops/sd/resize.cpp
     ops/sd/layernorm.cpp
     ops/sd/mha.cpp
+    ops/ops_common/coeffs.cpp
     ops/sd/slice.cpp
     ops/sd/groupnorm.cpp
     ops/sd/gemm.cpp
     ops/flat/mlp.cpp
     ops/flat/mha_v2.cpp
     ops/flat/rms_add.cpp
+    ops/cast/cast.cpp
+    ops/matmul_cpu/matmul_cpu.cpp
+    ops/quantizelinear_cpu/quantizelinear_cpu.cpp
+    ops/dequantizelinear_cpu/dequantizelinear_cpu.cpp
+    ops/identity/identity.cpp
 )
 
 # Hook for simnow lite
@@ -203,6 +216,13 @@ if(MSVC)
   target_compile_options(${LIBRARY_NAME} PRIVATE /MP)
 endif()
 
+set(AIEBU_CORE_LIB "")
+if(WIN32 AND (NOT DD_DISABLE_AIEBU))
+  set(AIEBU_CORE_LIB AIEBU::aiebu_static)
+else()
+  set(AIEBU_INCLUDE_DIRS "")
+endif()
+
 target_include_directories(
   ${LIBRARY_NAME}
   PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
@@ -211,13 +231,18 @@ target_include_directories(
   PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
   PRIVATE ${XRT_INCLUDE_DIRS}
   PRIVATE ${DD_SRC_INCLUDE_DIRS}
-  #PRIVATE ${AIEBU_INCLUDE_DIRS}
+  PRIVATE ${AIEBU_INCLUDE_DIRS}
 )
 
 target_link_libraries(
   ${LIBRARY_NAME}
-  PUBLIC nlohmann_json::nlohmann_json spdlog::spdlog xaiengine::xaiengine
-         transaction xclbin #AIEBU::aiebu_static
+  PUBLIC nlohmann_json::nlohmann_json
+         spdlog::spdlog
+         xaiengine::xaiengine
+         transaction
+         xclbin
+         pm_package
+         ${AIEBU_CORE_LIB}
          $<TARGET_PROPERTY:dd_metastate_proto,INTERFACE_LINK_LIBRARIES>
   PRIVATE ${XRT_COREUTIL_LIBRARIES} ${HWEMU}
   # $<TARGET_PROPERTY:dd_metastate_proto,LINK_LIBRARIES>
@@ -278,7 +303,6 @@ if(CMAKE_SOURCE_DIR STREQUAL DynamicDispatch_SOURCE_DIR)
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   )
 endif()
-
 if(ENABLE_DD_PYTHON AND SKBUILD AND CMAKE_SOURCE_DIR STREQUAL
                                     DynamicDispatch_SOURCE_DIR
 )

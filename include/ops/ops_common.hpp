@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -148,6 +147,10 @@ const std::string PSW1_0_A16W8_QDQ_XCLBIN_PATH =
     "/xclbin/stx/4x4_psw_v1.0_model_a16w8_qdq.xclbin";
 const std::string PSU_4x4_A16W8_QDQ_XCLBIN_PATH =
     "/xclbin/stx/4x4_psu_model_a16w8_qdq.xclbin";
+const std::string PSU_8x4_A16W8_QDQ_XCLBIN_PATH =
+    "/xclbin/stx/8x4_psu_model_a16w8_qdq.xclbin";
+const std::string HFDS_8x4_A16W8_QDQ_XCLBIN_PATH =
+    "/xclbin/stx/8x4_hfds_model_a16w8_qdq.xclbin";
 
 // the name here appends folders after REPO_ROOT/xclbin
 const std::string
@@ -156,6 +159,9 @@ const std::string
 const std::string
     LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME =
         "stx_llama2_mladf_2x4x4_v1_gemmbfp16_silu_mul_mha_rms_rope";
+const std::string
+    LLAMA2_MLADF_2x4x4_V2_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME =
+        "stx_llama2_mladf_2x4x4_v2_gemmbfp16_silu_mul_mha_rms_rope";
 const std::string LLAMA2_MLADF_2x4x4_BFP16_GEMM_SILU_MUL_FLAT_RMS_XCLBIN_NAME =
     "stx_llama2_mladf_2x4x4_bfp16_gemm_silu_mul_flat_rms";
 

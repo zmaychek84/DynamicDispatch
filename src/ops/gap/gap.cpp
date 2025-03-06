@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <fstream>
 #include <iostream>
@@ -13,8 +28,10 @@
 #include <iterator>
 #include <string>
 
+#include "utils/ctrl_pkt_utils.hpp"
 #include <ops/gap/gap.hpp>
 #include <ops/op_interface.hpp>
+#include <ops/ops_common/ctrlpkt.hpp>
 #include <txn_container.hpp>
 #include <utils/logging.hpp>
 #include <utils/tfuncs.hpp>
@@ -418,11 +435,13 @@ std::vector<OpArgMap> gap<InT, OutT>::get_buffer_reqs(
       (inputShape_[0] * inputShape_[1] * inputShape_[2] * ifmDtypeSize_);
   size_t ofm_bo_size =
       ((outputShape_[0]) * outputShape_[1] * (outputShape_[2]) * ofmDtypeSize_);
+  size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
 
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, ifm_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 0, 1, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 2, 2, 0, ofm_bo_size}};
+      {OpArgMap::OpArgType::OUTPUT, 2, 2, 0, ofm_bo_size},
+      {OpArgMap::OpArgType::CTRL_PKT_BIN, 3, 0, 0, ctrl_pkt_size}};
 
   RYZENAI_LOG_TRACE(
       OpsFusion::dd_format("Gap Argmap : {}", cvt_to_string(arg_map)));
@@ -503,6 +522,35 @@ std::vector<uint8_t> gap<InT, OutT>::get_transaction_bin() const {
   }
 
   return txnData;
+}
+
+template <typename InT, typename OutT>
+std::vector<uint8_t> gap<InT, OutT>::get_ctrl_pkts(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  std::string ctrl_key =
+      "gap_" + txn_fname_prefix_ + "_" + (std::to_string(zp_) + "_") +
+      std::to_string(inputShape_[1]) + "_" + std::to_string(inputShape_[2]) +
+      "_" + std::to_string(inputShape_[0]) + "_ctrl";
+
+  Transaction &txn = Transaction::getInstance();
+  std::vector<uint8_t> txnData = txn.get_txn_bvec(ctrl_key);
+
+  return txnData;
+}
+
+template <typename InT, typename OutT>
+std::vector<CtrlPktPatchInfo> gap<InT, OutT>::get_ctrl_pkt_patch_info(
+    std::vector<Tensor> &input, std::vector<Tensor> &output,
+    const std::map<std::string, std::any> &attr) const {
+  std::string ctrl_key =
+      "gap_" + txn_fname_prefix_ + "_" + (std::to_string(zp_) + "_") +
+      std::to_string(inputShape_[1]) + "_" + std::to_string(inputShape_[2]) +
+      "_" + std::to_string(inputShape_[0]) + "_ctrl_meta";
+
+  Transaction &txn = Transaction::getInstance();
+  return ext_buf_json_to_ctrlpkt_patch_info(txn.get_txn_bvec(ctrl_key),
+                                            get_ctrl_pkts(input, output, attr));
 }
 
 template <typename InT, typename OutT>

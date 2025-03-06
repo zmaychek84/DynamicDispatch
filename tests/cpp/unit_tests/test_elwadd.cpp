@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -212,6 +227,10 @@ int test_elwadd(size_t M, size_t K, bool debug = false,
     attr["design_param"] = std::vector<string>{"4x4PSW1.0"};
   } else if (model_name == "4x4PSU") {
     attr["design_param"] = std::vector<string>{"4x4PSU"};
+  } else if (model_name == "8x4PSU") {
+    attr["design_param"] = std::vector<string>{"8x4PSU"};
+  } else if (model_name == "8x4HFDS") {
+    attr["design_param"] = std::vector<string>{"8x4HFDS"};
   } else if (model_name.find("4x4") != std::string::npos) {
     attr["design_param"] = std::vector<string>{"4x4"};
   }
@@ -478,15 +497,82 @@ TEST(mdsqrv1_1_ELWADD_Testa8a8, Kernel1) {
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-// PSU v1.2
-TEST(PSU1_ELWADD_Testa16a16, Kernel_uint16_uint16_uint16_1_3072) {
+/// PSU v1.2 4x4
+// PSU1
+TEST(PSU4x4_ELWADD_Testa16a16, Kernel_uint16_uint16_bfloat16_1_3072) {
   int err_count = test_elwadd<uint16_t, uint16_t, uint16_t>(
-      1, 3072, false, "uint16", "uint16", "uint16", "4x4PSU");
+      1, 3072, false, "uint16", "uint16", "bfloat16", "4x4PSU");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(PSU0_ELWADD_Testa16a16, Kernel_uint16_uint16_uint16_196608_1) {
+TEST(PSU4x4_ELWADD_Testa16a16, Kernel_bfloat16_uint16_bfloat16_1_3072) {
   int err_count = test_elwadd<uint16_t, uint16_t, uint16_t>(
-      196608, 1, false, "uint16", "uint16", "uint16", "4x4PSU");
+      1, 3072, false, "bfloat16", "uint16", "bfloat16", "4x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// PSU0
+TEST(PSU4x4_ELWADD_Testa16a16, Kernel_uint16_uint16_bfloat16_196608_1) {
+  int err_count = test_elwadd<uint16_t, uint16_t, uint16_t>(
+      196608, 1, false, "uint16", "uint16", "bfloat16", "4x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU4x4_ELWADD_Testa16a16, Kernel_bfloat16_uint16_bfloat16_196608_1) {
+  int err_count = test_elwadd<uint16_t, uint16_t, uint16_t>(
+      196608, 1, false, "bfloat16", "uint16", "bfloat16", "4x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// PSU v1.2 8x4
+// PSU1
+TEST(PSU8x4_ELWADD_Testa16a16, Kernel_uint16_uint16_bfloat16_1_3072) {
+  int err_count = test_elwadd<uint16_t, uint16_t, uint16_t>(
+      1, 3072, false, "uint16", "uint16", "bfloat16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_ELWADD_Testa16a16, Kernel_bfloat16_uint16_bfloat16_1_3072) {
+  int err_count = test_elwadd<uint16_t, uint16_t, uint16_t>(
+      1, 3072, false, "bfloat16", "uint16", "bfloat16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+//  PSU0
+TEST(PSU8x4_ELWADD_Testa16a16, Kernel_uint16_uint16_bfloat16_196608_1) {
+  int err_count = test_elwadd<uint16_t, uint16_t, uint16_t>(
+      196608, 1, false, "uint16", "uint16", "bfloat16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(PSU8x4_ELWADD_Testa16a16, Kernel_bfloat16_uint16_bfloat16_196608_1) {
+  int err_count = test_elwadd<uint16_t, uint16_t, uint16_t>(
+      196608, 1, false, "bfloat16", "uint16", "bfloat16", "8x4PSU");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+/// HFDS0 8x4
+TEST(HFDS8x4_ELWADD_Testa16a16, Kernel_uint16_uint16_bfloat16_98304_1) {
+  int err_count = test_elwadd<uint16_t, uint16_t, uint16_t>(
+      98304, 1, false, "uint16", "uint16", "bfloat16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(HFDS8x4_ELWADD_Testa16a16, Kernel_bfloat16_uint16_bfloat16_98304_1) {
+  int err_count = test_elwadd<uint16_t, uint16_t, uint16_t>(
+      98304, 1, false, "bfloat16", "uint16", "bfloat16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+/// HFDS1 8x4
+TEST(HFDS8x4_ELWADD_Testa16a16, Kernel_uint16_uint16_bfloat16_1_1536) {
+  int err_count = test_elwadd<uint16_t, uint16_t, uint16_t>(
+      1, 1536, false, "uint16", "uint16", "bfloat16", "8x4HFDS");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(HFDS8x4_ELWADD_Testa16a16, Kernel_bfloat16_uint16_bfloat16_1_1536) {
+  int err_count = test_elwadd<uint16_t, uint16_t, uint16_t>(
+      1, 1536, false, "bfloat16", "uint16", "bfloat16", "8x4HFDS");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

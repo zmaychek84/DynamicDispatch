@@ -1,6 +1,22 @@
-/*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <fstream>
 #include <iostream>
@@ -83,9 +99,6 @@ gemm<InT, WtT, BiasT, OutT>::gemm(const std::string &ifm_dtype,
   ofmDtypeSize_ = sizeof(OutT);
   biasDtypeSize_ = sizeof(BiasT);
   gemm_id_ = gemm_count++;
-  XCLBIN_FNAME_ =
-      OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\SDGemm.xclbin";
-  RYZENAI_LOG_TRACE(OpsFusion::dd_format("xclbin fname : {}", XCLBIN_FNAME_));
   txn_fname_prefix_ = sd_gemm_key_ + txnbin_a_header.at(ifmDtype_) +
                       txnbin_b_header.at(weightDtype_) +
                       txnbin_acc_header.at(ofmDtype_);
@@ -199,7 +212,20 @@ gemm<InT, WtT, BiasT, OutT>::gemm(const std::string &ifm_dtype,
   default_shapes_[txn_fname_prefix_].emplace_back(
       std::vector<size_t>{1, 4096, 512, 512});
 
+  // bf16-160 shapes
+  default_shapes_[txn_fname_prefix_].emplace_back(
+      std::vector<size_t>{2, 160, 1536, 1536});
+  default_shapes_[txn_fname_prefix_].emplace_back(
+      std::vector<size_t>{2, 160, 1536, 6144});
+  default_shapes_[txn_fname_prefix_].emplace_back(
+      std::vector<size_t>{2, 160, 4096, 1536});
+  default_shapes_[txn_fname_prefix_].emplace_back(
+      std::vector<size_t>{2, 160, 6144, 1536});
+
   if (load_xrt) {
+    XCLBIN_FNAME_ =
+        OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\SDGemm.xclbin";
+    RYZENAI_LOG_TRACE(OpsFusion::dd_format("xclbin fname : {}", XCLBIN_FNAME_));
     xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
     std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
   }
@@ -323,13 +349,19 @@ gemm<InT, WtT, BiasT, OutT>::gemm(const std::string &ifm_dtype,
     RYZENAI_LOG_INFO(header);
   });
 
-  RYZENAI_LOG_TRACE("[SD_GEMM] ID: " + std::to_string(gemm_id_) + ", XCLBIN: " +
-                    XCLBIN_FNAME_ + ", (a_dtype, b_dtype, c_dtype): (" +
-                    ifmDtype_ + ", " + weightDtype_ + ", " + ofmDtype_ + ")");
+  RYZENAI_LOG_TRACE("[SD_GEMM] ID: " + std::to_string(gemm_id_) +
+                    ", (a_dtype, b_dtype, c_dtype): (" + ifmDtype_ + ", " +
+                    weightDtype_ + ", " + ofmDtype_ + ")");
 }
 
 template <typename InT, typename WtT, typename BiasT, typename OutT>
-void gemm<InT, WtT, BiasT, OutT>::set_params() {
+void gemm<InT, WtT, BiasT, OutT>::set_params(const std::string &xclbin,
+                                             const std::string &pdi_name) {
+  if (!xclbin.empty()) {
+    XCLBIN_FNAME_ = OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\" + xclbin;
+  }
+
+  pdi_name_ = pdi_name;
   xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }
@@ -393,11 +425,11 @@ void gemm<InT, WtT, BiasT, OutT>::initialize_const_params(
                     " OFM_BO_SIZE:" + std::to_string(OFM_BO_SIZE_));
   constBo_ =
       xrt::bo(xrt_ctx_->get_device(), CONST_BO_SIZE_, XRT_BO_FLAGS_HOST_ONLY,
-              xrt_ctx_->get_kernel().group_id(0));
+              xrt_ctx_->get_kernel(pdi_name_).group_id(0));
   ifmBo_ = xrt::bo(xrt_ctx_->get_device(), IFM_BO_SIZE_, XRT_BO_FLAGS_HOST_ONLY,
-                   xrt_ctx_->get_kernel().group_id(0));
+                   xrt_ctx_->get_kernel(pdi_name_).group_id(0));
   ofmBo_ = xrt::bo(xrt_ctx_->get_device(), OFM_BO_SIZE_, XRT_BO_FLAGS_HOST_ONLY,
-                   xrt_ctx_->get_kernel().group_id(0));
+                   xrt_ctx_->get_kernel(pdi_name_).group_id(0));
 
   weightCopyTime_ = 0;
   weightFormatTime_ = 0;
@@ -434,7 +466,7 @@ void gemm<InT, WtT, BiasT, OutT>::execute(std::vector<Tensor> &input,
   auto instr_bo = xrt_ctx_->get_registry().get_instr_bo(instr_bo_key);
   size_t instr_bo_words = instr_bo.size() / sizeof(int);
 
-  auto kernel_ = xrt_ctx_->get_kernel();
+  auto kernel_ = xrt_ctx_->get_kernel(pdi_name_);
 
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   // TODO: figure out the Bo order

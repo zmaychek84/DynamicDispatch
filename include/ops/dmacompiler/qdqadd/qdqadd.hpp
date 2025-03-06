@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -110,6 +110,7 @@ private:
 
   std::string get_instr_key(std::string prefix, size_t m, size_t k) const;
   std::tuple<size_t, size_t> map_padded_shape(size_t M, size_t N) const;
+  bool is_generic_pass = false;
 
 public:
   qdq_add(const std::string &a_dtype, const std::string &b_dtype,

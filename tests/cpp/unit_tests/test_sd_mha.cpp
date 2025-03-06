@@ -1,6 +1,22 @@
-/*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cfenv>
 #include <cmath>
@@ -212,7 +228,7 @@ int test_sd_mha(int B, int M, int K, int N, int heads,
                 const std::string &c_dtype = "bfloat16",
                 float pixel_L2_norm_tolerance = 0.01,
                 bool test_with_golden = false,
-                const std::string &model_name = "SD1.5") {
+                const std::string &model_name = "SD15") {
   int err_count = 0;
   float error_tolerance = 0.01f;
   std::vector<OuT> aie_out(B * M * K, 0);
@@ -222,7 +238,10 @@ int test_sd_mha(int B, int M, int K, int N, int heads,
   auto sd_mha = ryzenai::sd::mha<std::uint16_t, std::uint16_t, std::uint16_t>(
       a_dtype, b_dtype, c_dtype, false, attr);
   sd_mha.debug(true);
-  sd_mha.set_params();
+  std::string xclbin = sd_get_xclbin(model_name);
+  std::string pdi_name = xclbin.empty() ? "DPU" : sd_get_pdi(xclbin, "SDMHA");
+  std::cerr << "xclbin: " << xclbin << " pdi_name: " << pdi_name << std::endl;
+  sd_mha.set_params(xclbin, pdi_name);
   // generate mask
   int N_padded = N < 128 ? 128 : N;
   uint64_t N_256_aligned = Utils::align_to_next(N, 256);
@@ -335,72 +354,113 @@ int test_sd_mha(int B, int M, int K, int N, int heads,
 // MHA
 // Random test
 // Unet
-TEST(SD_MHA_Test, Random_KernelUnetlayer1) {
+TEST(SD_MHA_Test, Random_SD15_UNET_3) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
-      2, 1024, 640, 1024, 8, "bfloat16", "bfloat16", "bfloat16");
+      2, 1024, 640, 1024, 8, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_MHA_Test, Random_KernelUnetlayer2) {
+TEST(SD_MHA_Test, Random_SD15_UNET_4) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
-      2, 1024, 640, 77, 8, "bfloat16", "bfloat16", "bfloat16");
+      2, 1024, 640, 77, 8, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_MHA_Test, Random_KernelUnetlayer3) {
+TEST(SD_MHA_Test, Random_SD15_UNET_5) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
-      2, 256, 1280, 256, 8, "bfloat16", "bfloat16", "bfloat16");
+      2, 256, 1280, 256, 8, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_MHA_Test, Random_KernelUnetlayer4) {
+TEST(SD_MHA_Test, Random_SD15_UNET_6) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
-      2, 256, 1280, 77, 8, "bfloat16", "bfloat16", "bfloat16");
+      2, 256, 1280, 77, 8, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_MHA_Test, Random_KernelUnetlayer5) {
+TEST(SD_MHA_Test, Random_SD15_UNET_1) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
-      2, 4096, 320, 4096, 8, "bfloat16", "bfloat16", "bfloat16");
+      2, 4096, 320, 4096, 8, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_MHA_Test, Random_KernelUnetlayer6) {
+TEST(SD_MHA_Test, Random_SD15_UNET_2) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
-      2, 4096, 320, 77, 8, "bfloat16", "bfloat16", "bfloat16");
+      2, 4096, 320, 77, 8, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_MHA_Test, Random_KernelUnetlayer7) {
+TEST(SD_MHA_Test, Random_SD15_UNET_7) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
-      2, 64, 1280, 64, 8, "bfloat16", "bfloat16", "bfloat16");
+      2, 64, 1280, 64, 8, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_MHA_Test, Random_KernelUnetlayer8) {
+TEST(SD_MHA_Test, Random_SD15_UNET_8) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
-      2, 64, 1280, 77, 8, "bfloat16", "bfloat16", "bfloat16");
+      2, 64, 1280, 77, 8, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // SD3 mmdit aka SD 3.0 MHA_mmdit layer 1
-TEST(SD_MHA_Test, Random_KernelMMDITLayer1) {
+TEST(SD_MHA_Test, Random_SD3_DIT512_1) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
-      2, 1178, 1536, 1178, 24, "bfloat16", "bfloat16", "bfloat16");
+      2, 1178, 1536, 1178, 24, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-// SD 3.0 MHA_mmdit layer 2
-TEST(SD_MHA_Test, Random_KernelMMDITLayer2) {
+TEST(SD_MHA_Test, Random_SD3_DIT1024_Layer1) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
-      2, 4250, 1536, 4250, 24, "bfloat16", "bfloat16", "bfloat16");
+      2, 4250, 1536, 4250, 24, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_DIT1024");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_MHA_Test, Random_SD3_DIT512_2) {
+  // 160 shape
+  int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
+      2, 1184, 1536, 1184, 24, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_MHA_Test, Random_SD3_DIT1024_2) {
+  // 160 shape
+  int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
+      2, 4256, 1536, 4256, 24, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // Vae
-TEST(SD_MHA_Test, Random_KernelVaelayer1) {
+TEST(SD_MHA_Test, Random_SD3_VAE512_1) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
-      1, 4096, 512, 4096, 1, "bfloat16", "bfloat16", "bfloat16");
+      1, 4096, 512, 4096, 1, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_MHA_Test, Random_SD15_VAE_1) {
+  int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
+      1, 4096, 512, 4096, 1, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD15_VAE");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// SD3 1024 VAE
+TEST(SD_MHA_Test, Random_SD3_VAE1024_Layer1) {
+  int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
+      1, 16384, 512, 16384, 1, "bfloat16", "bfloat16", "bfloat16", 0.01f, false,
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -461,10 +521,24 @@ TEST(SD_MHA_Test, Golden_KernelMMDITLayer1) {
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-// SD 3.0 MHA_mmdit layer 2
-TEST(SD_MHA_Test, Golden_KernelMMDITLayer2) {
+TEST(SD_MHA_Test, Golden_SD3_DIT1024_Layer1) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
-      2, 4250, 1536, 4250, 24, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
+      2, 4250, 1536, 4250, 24, "bfloat16", "bfloat16", "bfloat16", 0.01f, true,
+      "SD3_DIT1024");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_MHA_Test, Golden_SD3_MHA_mmdit_Layer3) {
+  int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
+      2, 1184, 1536, 1184, 24, "bfloat16", "bfloat16", "bfloat16", 0.01f, true,
+      "SD3_MHA_mmdit_layer3");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_MHA_Test, Golden_SD3_MHA_mmdit_Layer4) {
+  int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
+      2, 4256, 1536, 4256, 24, "bfloat16", "bfloat16", "bfloat16", 0.01f, true,
+      "SD3_MHA_mmdit_layer4");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -472,5 +546,13 @@ TEST(SD_MHA_Test, Golden_KernelMMDITLayer2) {
 TEST(SD_MHA_Test, Golden_KernelVaelayer1) {
   int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
       1, 4096, 512, 4096, 1, "bfloat16", "bfloat16", "bfloat16", 0.01f, true);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// SD3 1024 VAE
+TEST(SD_MHA_Test, Golden_SD3_VAE1024_Layer1) {
+  int err_count = test_sd_mha<uint16_t, uint16_t, uint16_t>(
+      1, 16384, 512, 16384, 1, "bfloat16", "bfloat16", "bfloat16", 0.01f, true,
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

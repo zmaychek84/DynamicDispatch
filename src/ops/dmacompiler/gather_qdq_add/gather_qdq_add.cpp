@@ -1,6 +1,22 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 #include <any>
 #include <iostream>
 #include <map>
@@ -42,7 +58,7 @@ using namespace kernel_structs;
 namespace ryzenai {
 
 static std::tuple<size_t, size_t, size_t>
-extract_MKN(const std::vector<Tensor> &inputs) {
+extract_MKN(const std::vector<Tensor> &inputs, bool is_generic_fusion) {
   size_t M = 0;
   size_t K = 0;
   size_t N = 0;
@@ -50,7 +66,8 @@ extract_MKN(const std::vector<Tensor> &inputs) {
   if (inputs.at(0).shape.size() == 3) {
     M = inputs.at(0).shape.at(0);
     K = inputs.at(0).shape.at(1) * inputs.at(0).shape.at(2);
-    N = inputs.at(3).shape.at(1) * inputs.at(3).shape.at(2);
+    size_t output_idx = is_generic_fusion ? 8 : 3;
+    N = inputs.at(output_idx).shape.at(1) * inputs.at(output_idx).shape.at(2);
   }
 
   return std::make_tuple(M, K, N);
@@ -155,6 +172,8 @@ gather_qdq_add<InT, WtT, OutT>::gather_qdq_add(
       std::vector<std::tuple<int, int, int>>();
   raw_shapes_["gatherqdqadd_4x4_a16a16acc16"].push_back(
       std::make_tuple(12, 32768, 4096));
+
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
 
   a_dtype_ = a_dtype;
   b_dtype_ = b_dtype;
@@ -314,12 +333,30 @@ void gather_qdq_add<InT, WtT, OutT>::initialize_const_params(
   RYZENAI_LOG_TRACE("gatherqdqadd initialize_const_params(ptr) ...");
 
   DD_THROW_IF(
-      (const_params.size() != 1),
+      !OpsFusion::check_generic_fusion(attr) && ((const_params.size() != 1)),
       OpsFusion::dd_format("Unsupported const spec for gatherqdqadd\n") +
           OpsFusion::dd_format("(Details : #const params == 1 ({})",
                                const_params.size()));
 
-  auto qdq_params = (int32_t *)const_params.at(0).data;
+  int32_t *qdq_params;
+
+  if (is_generic_fusion) {
+    float *inp1_sc = (float *)const_params.at(0).data;
+    *inp1_sc = (*inp1_sc) / std::sqrt(192.0f);
+    uint16_t *inp1_zp = (uint16_t *)const_params.at(1).data;
+    float *inp2_sc = (float *)const_params.at(2).data;
+    *inp2_sc = (*inp2_sc) / std::sqrt(192.0f);
+    uint16_t *inp2_zp = (uint16_t *)const_params.at(3).data;
+    float *out_sc = (float *)const_params.at(4).data;
+    uint16_t *out_zp = (uint16_t *)const_params.at(5).data;
+    qdq_tensor.resize(16, 0);
+    qdq_tensor = OpsFusion::coeffs::calculate_add_qdq_params(
+        *inp1_sc, *inp1_zp, *inp2_sc, *inp2_zp, *out_sc, *out_zp);
+    qdq_params = qdq_tensor.data();
+  } else {
+    qdq_params = (int32_t *)const_params.at(0).data;
+  }
+
   auto qdq_params_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
   io.write(0, (void *)qdq_params, qdq_params_size);
 
@@ -331,7 +368,7 @@ void gather_qdq_add<InT, WtT, OutT>::initialize_const_params(
     const std::vector<Tensor> &const_params,
     const std::map<std::string, std::any> &attr) {
 
-  if (const_params.size() != 1) {
+  if (!is_generic_fusion && const_params.size() != 1) {
     throw std::runtime_error(
         "GATHERQDQADD IPU Wrapper expect to have one constant.");
   }
@@ -542,7 +579,7 @@ template <typename InT, typename WtT, typename OutT>
 const std::vector<uint8_t> gather_qdq_add<InT, WtT, OutT>::get_transaction_bin(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
-  auto [M, K, N] = extract_MKN(input);
+  auto [M, K, N] = extract_MKN(input, is_generic_fusion);
   auto [Mo, Ko, No] = map_padded_shape(M, K, N);
   std::string txn_key = get_instr_key(txn_fname_prefix_, Mo, Ko, No);
   Transaction &txn = Transaction::getInstance();
@@ -554,7 +591,7 @@ const std::vector<uint8_t>
 gather_qdq_add<InT, WtT, OutT>::get_super_kernel_params(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
-  auto [M, K, N] = extract_MKN(input);
+  auto [M, K, N] = extract_MKN(input, is_generic_fusion);
   auto [Mo, Ko, No] = map_padded_shape(M, K, N);
   // TODO: Add check to validate tensor shapes
   std::string param_key =
@@ -568,7 +605,7 @@ template <typename InT, typename WtT, typename OutT>
 std::vector<uint8_t> gather_qdq_add<InT, WtT, OutT>::get_ctrl_pkts(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
-  auto [M, K, N] = extract_MKN(input);
+  auto [M, K, N] = extract_MKN(input, is_generic_fusion);
   auto [Mo, Ko, No] = map_padded_shape(M, K, N);
   // TODO: Add check to validate tensor shapes
   std::string ctrl_key =
@@ -586,7 +623,7 @@ std::vector<CtrlPktPatchInfo>
 gather_qdq_add<InT, WtT, OutT>::get_ctrl_pkt_patch_info(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
-  auto [M, K, N] = extract_MKN(input);
+  auto [M, K, N] = extract_MKN(input, is_generic_fusion);
   auto [Mo, Ko, No] = map_padded_shape(M, K, N);
   // TODO: Add check to validate tensor shapes
   try {
@@ -605,7 +642,7 @@ template <typename InT, typename WtT, typename OutT>
 std::vector<OpArgMap> gather_qdq_add<InT, WtT, OutT>::get_buffer_reqs(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
-  auto [M, K, N] = extract_MKN(input);
+  auto [M, K, N] = extract_MKN(input, is_generic_fusion);
 
   auto [Mo, Ko, No] = map_padded_shape(M, K, N);
 
@@ -616,11 +653,13 @@ std::vector<OpArgMap> gather_qdq_add<InT, WtT, OutT>::get_buffer_reqs(
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
   size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
 
+  size_t output_idx = is_generic_fusion ? 8 : 3;
+
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_1_bo_size},
       {OpArgMap::OpArgType::INPUT, 1, 1, input_1_bo_size, input_2_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 2, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 3, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};

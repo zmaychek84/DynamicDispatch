@@ -1,0 +1,176 @@
+# Copyright (c) 2025 Advanced Micro Devices, Inc
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so,
+# subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+import os
+import numpy as np
+import onnx
+from onnx.helper import (
+    make_model,
+    make_node,
+    make_graph,
+    make_opsetid,
+    make_tensor_value_info,
+    make_tensor,
+    make_attribute,
+)
+from onnx.checker import check_model
+import onnxruntime
+from ryzenai_dynamic_dispatch import onnx_graph as ogm
+from ryzenai_dynamic_dispatch import fuse
+import argparse
+
+# from cal_coeff import MatMul
+np.random.seed(42)
+
+
+def shape2tuple(shape):
+    return tuple(getattr(d, "dim_value", 0) for d in shape.dim)
+
+
+def create_identity_model(M, K, N, InT, WtT, OutT):
+    X = make_tensor_value_info("X", InT, [1, M, K])
+    Y = make_tensor_value_info("Y", OutT, [1, M, N])
+
+    # wts = np.load("tensor.npy")
+    wts = np.random.randint(low=0, high=32, size=(K, N)).astype(np.uint8)
+    # np_wts[...] = 1
+    wts_tsor = make_tensor(f"W0", WtT, wts.shape, wts)
+
+    # bias = np.random.uniform(-1, 1, wts.shape[1])
+
+    c0 = np.random.randint(0, 32, size=(1 * N)).astype(np.int64)
+    qdq_tsor = make_tensor(f"qdq", onnx.TensorProto.INT64, c0.shape, c0)
+
+    # np_qdq_params = np.random.randint(-16, 16, size=(16)).astype(np.int32)
+    np_qdq_params = np.zeros(16).astype(np.int32)
+    np_qdq_params[0] = 0
+    np_qdq_params[1] = 0  # c1
+    np_qdq_params[2] = 10  # c2
+    np_qdq_params[3] = 0
+    np_qdq_params[4] = 32
+    np_qdq_params[5] = 64
+    np_qdq_params[6] = 0
+    np_qdq_params[7] = 13
+
+    qdq_params_tsor = make_tensor(
+        f"qdq_params", onnx.TensorProto.INT32, np_qdq_params.shape, np_qdq_params
+    )
+
+    id1 = make_node(
+        name="id1",
+        op_type="Identity",
+        inputs=["X"],
+        outputs=["id1_out"],
+    )
+    id2 = make_node(
+        name="id2",
+        op_type="Identity",
+        inputs=["id1_out"],
+        outputs=["id2_out"],
+    )
+
+    mul1 = make_node(
+        name="mul1",
+        op_type="MatMul",
+        inputs=["id2_out", "W0", "qdq", "qdq_params"],
+        outputs=["mul1_out"],
+    )
+    new_attr = make_attribute("input_shape", [1, M, K])
+    mul1.attribute.append(new_attr)
+
+    id3 = make_node(
+        name="id3",
+        op_type="Identity",
+        inputs=["mul1_out"],
+        outputs=["id3_out"],
+    )
+    id4 = make_node(
+        name="id4",
+        op_type="Identity",
+        inputs=["id3_out"],
+        outputs=["id4_out"],
+    )
+
+    mul2 = make_node(
+        name="mul2",
+        op_type="MatMul",
+        inputs=["id4_out", "W0", "qdq", "qdq_params"],
+        outputs=["mul2_out"],
+    )
+    new_attr = make_attribute("input_shape", [1, M, K])
+    mul2.attribute.append(new_attr)
+    id5 = make_node(
+        name="id5",
+        op_type="Identity",
+        inputs=["mul2_out"],
+        outputs=["id5_out"],
+    )
+    id6 = make_node(
+        name="id6",
+        op_type="Identity",
+        inputs=["id5_out"],
+        outputs=["Y"],
+    )
+    graph = make_graph(
+        [id1,id2,mul1,id3,id4,mul2,id5,id6], "lr", [X], [Y], initializer=[wts_tsor, qdq_tsor, qdq_params_tsor]
+    )
+    onnx_model = make_model(graph, opset_imports=[make_opsetid("", 19)])
+    # check_model(onnx_model)
+    shape_inferred_model = onnx.shape_inference.infer_shapes(onnx_model)
+    # check_model(shape_inferred_model)
+    return shape_inferred_model, [wts, c0, np_qdq_params]
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dtype", help="Dtype (a16w8/a8w8)", required=True)
+
+    args = parser.parse_args()
+    dtype = args.dtype
+    dir_name = "test_identity_" + str(dtype)
+    model_name = dir_name + "/model_identity.onnx"
+    json_name = dir_name + "/model_identity_meta_" + str(dtype) + ".json"
+    K, N = (768, 768)
+    if dtype == "a16w8":
+        M = 128
+        onnx_model, wts = create_identity_model(
+            M,
+            K,
+            N,
+            onnx.TensorProto.UINT16,
+            onnx.TensorProto.UINT8,
+            onnx.TensorProto.UINT16,
+        )
+    else:
+        M = 512
+        onnx_model, wts = create_identity_model(
+            M,
+            K,
+            N,
+            onnx.TensorProto.UINT8,
+            onnx.TensorProto.UINT8,
+            onnx.TensorProto.UINT8,
+        )
+
+    os.makedirs(dir_name, exist_ok=True)
+
+    onnx.save(onnx_model, f"{model_name}")
+    metainfo = fuse.prepare_metadata(ogm.ONNXGraph(onnx_model), dir_name)
+    json_str = fuse.save_tensors_to_json(f"{json_name}", *metainfo)
+    print("JSON Metadata saved to", f"{json_name}")

@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,6 +28,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -208,10 +209,53 @@ static inline void confirmOpen(std::ofstream &file) {
   }
 }
 
-static void rand_init_int(int8_t *ptr, size_t size) {
-  srand(32);
+static void rand_init_int(int8_t *ptr, size_t size, uint32_t seed = 32) {
+  srand(seed);
   for (int i = 0; i < size; i++) {
     int8_t r = 16; // static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+    ptr[i] = r;
+  }
+}
+
+template <typename T> static void rrand_init_int(T *ptr, size_t size) {
+  static const T max_val = static_cast<T>((0x1 << (8 * sizeof(T))) - 1);
+  for (size_t i = 0; i < size; i++) {
+    T r = static_cast<T>(rand() & max_val);
+    ptr[i] = r;
+  }
+}
+
+template <typename T> static void init_int_00s(T *ptr, size_t size) {
+  for (size_t i = 0; i < size; i++) {
+    T r = static_cast<T>(0x00);
+    ptr[i] = r;
+  }
+}
+
+template <typename T> static void init_int_01s(T *ptr, size_t size) {
+  for (size_t i = 0; i < size; i++) {
+    T r = static_cast<T>(0x01);
+    ptr[i] = r;
+  }
+}
+
+template <typename T> static void init_int_10s(T *ptr, size_t size) {
+  for (size_t i = 0; i < size; i++) {
+    T r = static_cast<T>(0x10);
+    ptr[i] = r;
+  }
+}
+
+template <typename T> static void init_int_80s(T *ptr, size_t size) {
+  for (size_t i = 0; i < size; i++) {
+    T r = static_cast<T>(0x80);
+    ptr[i] = r;
+  }
+}
+
+static void init_int_ffs(int8_t *ptr, size_t size) {
+  for (int i = 0; i < size; i++) {
+    int8_t r = -1;
     ptr[i] = r;
   }
 }
@@ -258,6 +302,90 @@ static inline int AllClose(const std::vector<float> &golden,
   }
 
   return count_not_close;
+}
+
+using SDInfoMap = std::map<std::string, std::string>;
+
+static std::string sd_get_xclbin(const std::string &model_name) {
+  static SDInfoMap xclbin_map{
+      {"SD15_UNET", "SD15_unet_2x4x4.xclbin"},
+      {"SD15_VAE", "SD15_vae_2x4x4.xclbin"},
+      {"SD3_DIT1024", "SD3_MMDIT_2x4x4.xclbin"},
+      {"SD3_VAE1024", "SD3_1K_VAE_2x4x4.xclbin"},
+      {"SD3_DIT512", "SD3_MMDIT_2x4x4.xclbin"}, // same as 1k
+      {"SD3_VAE512", "SD3_VAE_2x4x4.xclbin"},
+  };
+  if (xclbin_map.find(model_name) == xclbin_map.end()) {
+    return "";
+  }
+  return xclbin_map.at(model_name);
+}
+
+static std::string sd_get_pdi(const std::string &xclbin,
+                              const std::string &op_type) {
+  static std::map<std::string, SDInfoMap> xclbin_pdi_info{
+      {"SD15_unet_2x4x4.xclbin",
+       {
+           {"SDLayerNorm", "DPU_0"},
+           {"SDGemm", "DPU_0"},
+           {"SDAdd", "DPU_0"},
+           {"SDGelu", "DPU_0"},
+           {"SDMul", "DPU_0"},
+           {"SDMHA", "DPU_0"},
+           {"SDConv", "DPU_1"},
+           {"SDGroupNorm", "DPU_1"},
+           {"SDSilu", "DPU_1"},
+           {"SDConcat", "DPU_1"},
+           {"SDResize", "DPU_1"},
+       }},
+      {"SD15_vae_2x4x4.xclbin",
+       {
+           {"SDGroupNorm", "DPU_0"},
+           {"SDAdd", "DPU_0"},
+           {"SDConv", "DPU_0"},
+           {"SDSilu", "DPU_0"},
+           {"SDConcat", "DPU_0"},
+           {"SDResize", "DPU_0"},
+           {"SDMHA", "DPU_1"},
+           {"SDGemm", "DPU_2"},
+       }},
+      {"SD3_MMDIT_2x4x4.xclbin",
+       {
+           {"SDLayerNorm", "DPU_0"},
+           {"SDMul", "DPU_0"},
+           {"SDGelu", "DPU_0"},
+           {"SDConcat", "DPU_0"},
+           {"SDSlice", "DPU_0"},
+           {"SDAdd", "DPU_0"},
+           {"SDGemm", "DPU_0"},
+           {"SDSilu", "DPU_0"},
+           {"SDMHA", "DPU_0"},
+           {"SDConv", "DPU_1"},
+       }},
+      {"SD3_1K_VAE_2x4x4.xclbin",
+       {
+           {"SDGroupNorm", "DPU_0"},
+           {"SDAdd", "DPU_0"},
+           {"SDConv", "DPU_0"},
+           {"SDSilu", "DPU_0"},
+           {"SDConcat", "DPU_0"},
+           {"SDResize", "DPU_0"},
+           {"SDMHA", "DPU_1"},
+           {"SDGemm", "DPU_2"},
+       }},
+      {"SD3_VAE_2x4x4.xclbin",
+       {
+           {"SDGroupNorm", "DPU_0"},
+           {"SDAdd", "DPU_0"},
+           {"SDConv", "DPU_0"},
+           {"SDSilu", "DPU_0"},
+           {"SDConcat", "DPU_0"},
+           {"SDResize", "DPU_0"},
+           {"SDMHA", "DPU_1"},
+           {"SDGemm", "DPU_2"},
+       }},
+  };
+  return xclbin_pdi_info.at(xclbin).at(op_type);
 }
 
 #endif

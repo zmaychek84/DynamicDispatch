@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 #include <any>
 #include <iostream>
 #include <map>
@@ -20,6 +35,9 @@
 #include <txn_container.hpp>
 #include <utils/instruction_registry.hpp>
 #include <xrt_context/xrt_context.hpp>
+
+#include <ops/ops_common/coeffs.hpp>
+#include <ops/ops_common/op_util.hpp>
 
 #include <ops/elwmul_qdq/elwmul_qdq.hpp>
 #include <ops/ops_common/ctrlpkt.hpp>
@@ -147,8 +165,12 @@ elwmul_qdq<InT, WtT, OutT>::elwmul_qdq(
       std::vector<std::tuple<int, int>>();
   default_shapes_["elwmul_qdq_4x2_abf16a16accbf16"] =
       std::vector<std::tuple<int, int>>();
-  // default_shapes_["elwmul_qdq_4x4_a16a16acc16"] =
-  //     std::vector<std::tuple<int, int>>();
+  default_shapes_["elwmul_qdq_4x4_a16a16acc16"] =
+      std::vector<std::tuple<int, int>>();
+  default_shapes_["elwmul_qdq_8x4_abf16a16acc16"] =
+      std::vector<std::tuple<int, int>>();
+  default_shapes_["elwmul_qdq_8x4_a16a16acc16"] =
+      std::vector<std::tuple<int, int>>();
 
   default_shapes_["elwmul_qdq_4x4_abf16a16acc16"].push_back(
       std::make_tuple(64, 5120));
@@ -166,13 +188,52 @@ elwmul_qdq<InT, WtT, OutT>::elwmul_qdq(
       std::make_tuple(1, 8192));
   default_shapes_["elwmul_qdq_4x4_a16a16acc16"].push_back(
       std::make_tuple(64 * 8192, 1));
+  default_shapes_["elwmul_qdq_4x4_abf16a16acc16"].push_back(
+      std::make_tuple(1, 8192));
+  default_shapes_["elwmul_qdq_4x4_abf16a16acc16"].push_back(
+      std::make_tuple(64 * 8192, 1));
+
+  default_shapes_["elwmul_qdq_8x4_a16a16acc16"].push_back(
+      std::make_tuple(1, 8192));
+  default_shapes_["elwmul_qdq_8x4_a16a16acc16"].push_back(
+      std::make_tuple(64 * 8192, 1));
+  default_shapes_["elwmul_qdq_8x4_abf16a16acc16"].push_back(
+      std::make_tuple(1, 8192));
+  default_shapes_["elwmul_qdq_8x4_abf16a16acc16"].push_back(
+      std::make_tuple(64 * 8192, 1));
+
+  default_shapes_["elwmul_qdq_8x4_a16a16acc16"].push_back(
+      std::make_tuple(1, 12288));
+  default_shapes_["elwmul_qdq_8x4_a16a16acc16"].push_back(
+      std::make_tuple(64 * 8960, 1));
+  default_shapes_["elwmul_qdq_8x4_a16a16acc16"].push_back(
+      std::make_tuple(64, 8960));
+  default_shapes_["elwmul_qdq_8x4_abf16a16acc16"].push_back(
+      std::make_tuple(1, 12288));
+  default_shapes_["elwmul_qdq_8x4_abf16a16acc16"].push_back(
+      std::make_tuple(64 * 8960, 1));
+  default_shapes_["elwmul_qdq_8x4_abf16a16acc16"].push_back(
+      std::make_tuple(64, 8960));
+  // After enabling ort optimizations in PSU, M,K will be 64,8192 (64*8192,1)
+  // As extract_MK function should not be disturbed, modified existing
+  // transaction binaries to have this shape Older shape is also supported as we
+  // may run without optimizations sometimes
+  default_shapes_["elwmul_qdq_4x4_abf16a16acc16"].push_back(
+      std::make_tuple(64, 8192));
+
+  default_shapes_["elwmul_qdq_8x4_abf16a16acc16"].push_back(
+      std::make_tuple(64, 8192));
 
   // raw shape is the actual shape from ONNX
   raw_shapes_["elwmul_qdq_4x4_abf16a16acc16"] =
       std::vector<std::tuple<int, int>>();
-  raw_shapes_["elwmul_qdq_4x4_abf16a16accbf16"] =
+  raw_shapes_["elwmul_qdq_4x2_abf16a16accbf16"] =
       std::vector<std::tuple<int, int>>();
   raw_shapes_["elwmul_qdq_4x4_a16a16acc16"] =
+      std::vector<std::tuple<int, int>>();
+  raw_shapes_["elwmul_qdq_8x4_abf16a16acc16"] =
+      std::vector<std::tuple<int, int>>();
+  raw_shapes_["elwmul_qdq_8x4_a16a16acc16"] =
       std::vector<std::tuple<int, int>>();
 
   raw_shapes_["elwmul_qdq_4x4_abf16a16acc16"].push_back(
@@ -190,6 +251,42 @@ elwmul_qdq<InT, WtT, OutT>::elwmul_qdq(
   raw_shapes_["elwmul_qdq_4x4_a16a16acc16"].push_back(std::make_tuple(1, 8192));
   raw_shapes_["elwmul_qdq_4x4_a16a16acc16"].push_back(
       std::make_tuple(64 * 8192, 1));
+  raw_shapes_["elwmul_qdq_4x4_abf16a16acc16"].push_back(
+      std::make_tuple(1, 8192));
+  raw_shapes_["elwmul_qdq_4x4_abf16a16acc16"].push_back(
+      std::make_tuple(64 * 8192, 1));
+
+  raw_shapes_["elwmul_qdq_8x4_a16a16acc16"].push_back(std::make_tuple(1, 8192));
+  raw_shapes_["elwmul_qdq_8x4_a16a16acc16"].push_back(
+      std::make_tuple(64 * 8192, 1));
+  raw_shapes_["elwmul_qdq_8x4_abf16a16acc16"].push_back(
+      std::make_tuple(1, 8192));
+  raw_shapes_["elwmul_qdq_8x4_abf16a16acc16"].push_back(
+      std::make_tuple(64 * 8192, 1));
+
+  raw_shapes_["elwmul_qdq_8x4_a16a16acc16"].push_back(std::make_tuple(1, 8960));
+  raw_shapes_["elwmul_qdq_8x4_a16a16acc16"].push_back(
+      std::make_tuple(64 * 8960, 1));
+  raw_shapes_["elwmul_qdq_8x4_a16a16acc16"].push_back(
+      std::make_tuple(64, 8960));
+  raw_shapes_["elwmul_qdq_8x4_abf16a16acc16"].push_back(
+      std::make_tuple(1, 8960));
+  raw_shapes_["elwmul_qdq_8x4_abf16a16acc16"].push_back(
+      std::make_tuple(64 * 8960, 1));
+  raw_shapes_["elwmul_qdq_8x4_abf16a16acc16"].push_back(
+      std::make_tuple(64, 8960));
+  // After enabling ort optimizations in PSU, M,K will be 64,8192 instead of
+  // (64*8192,1) As extract_MK function should not be disturbed, modified
+  // existing transaction binaries to have this shape Older shape is also
+  // supported as we may run without optimizations sometimes After enabling ort
+  // optimizations in PSU, M,K will be 64,8192 instead of (64*8192,1) As
+  // extract_MK function should not be disturbed, modified existing transaction
+  // binaries to have this shape Older shape is also supported as we may run
+  // without optimizations sometimes
+  raw_shapes_["elwmul_qdq_4x4_abf16a16acc16"].push_back(
+      std::make_tuple(64, 8192));
+  raw_shapes_["elwmul_qdq_8x4_abf16a16acc16"].push_back(
+      std::make_tuple(64, 8192));
 
   a_dtype_ = a_dtype;
   b_dtype_ = b_dtype;
@@ -198,6 +295,8 @@ elwmul_qdq<InT, WtT, OutT>::elwmul_qdq(
   a_dtype_size_ = sizeof(InT);
   b_dtype_size_ = sizeof(WtT);
   c_dtype_size_ = sizeof(OutT);
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
+
   elwmul_qdq_id_ = elwmul_qdq_count++;
 
   /*select xclbin based on the input/output types*/
@@ -242,6 +341,14 @@ elwmul_qdq<InT, WtT, OutT>::elwmul_qdq(
                         txnbin_c_header.at(c_dtype_);
 
     param_fname_prefix_ = "elwmul_qdq_4x4_" + txnbin_a_header.at(a_dtype_) +
+                          txnbin_b_header.at(b_dtype_) +
+                          txnbin_c_header.at(c_dtype_);
+  } else if (design_param_.find("8x4") != std::string::npos) { // 8x4 design
+    txn_fname_prefix_ = "elwmul_qdq_8x4_" + txnbin_a_header.at(a_dtype_) +
+                        txnbin_b_header.at(b_dtype_) +
+                        txnbin_c_header.at(c_dtype_);
+
+    param_fname_prefix_ = "elwmul_qdq_8x4_" + txnbin_a_header.at(a_dtype_) +
                           txnbin_b_header.at(b_dtype_) +
                           txnbin_c_header.at(c_dtype_);
   }
@@ -302,6 +409,14 @@ void elwmul_qdq<InT, WtT, OutT>::set_params(const std::string &model_name,
     is_ctrl_pkt_ = 1;
     XCLBIN_FNAME =
         OpInterface::get_dd_base_dir() + ryzenai::PSU_4x4_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "8x4PSU") {
+    is_ctrl_pkt_ = 1;
+    XCLBIN_FNAME =
+        OpInterface::get_dd_base_dir() + ryzenai::PSU_8x4_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "8x4HFDS") {
+    is_ctrl_pkt_ = 1;
+    XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
+                   ryzenai::HFDS_8x4_A16W8_QDQ_XCLBIN_PATH;
   } else {
     throw std::invalid_argument("model_name is not supported");
   }
@@ -314,19 +429,67 @@ void elwmul_qdq<InT, WtT, OutT>::set_params(const std::string &model_name,
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }
 
+void calculate_qdq(ConstBufferIO &io, const std::vector<Tensor> &const_params,
+                   const std::map<std::string, std::any> &attr,
+                   std::vector<int32_t> &elwmul_coeffs) {
+
+  float in_1_scale = *((float *)const_params.at(0).data);
+  uint32_t in_1_zp = *((uint32_t *)const_params.at(1).data);
+  float in_0_scale = *((float *)const_params.at(2).data);
+  uint32_t in_0_zp = *((uint32_t *)const_params.at(3).data);
+  float out_scale = *((float *)const_params.at(4).data);
+  uint32_t out_zp = *((uint32_t *)const_params.at(5).data);
+
+  float slice_q_scale =
+      std::any_cast<std::vector<float>>(attr.at("input_q_params"))[0];
+  float slice_q_zp =
+      std::any_cast<std::vector<float>>(attr.at("input_q_params"))[1];
+
+  in_0_scale = (float)slice_q_scale;
+  in_0_zp = (int)slice_q_zp;
+
+  auto [a_scale, a_zp] = OpsFusion::coeffs::calc_lrn_coeff(in_0_scale, in_0_zp);
+  auto [b_scale, b_zp] = OpsFusion::coeffs::calc_lrn_coeff(in_1_scale, in_1_zp);
+  auto [final_out_scale, final_out_zp] =
+      OpsFusion::coeffs::calc_lrn_coeff(1 / out_scale, out_zp);
+
+  elwmul_coeffs[0] = b_scale;
+  elwmul_coeffs[1] = b_zp;
+  elwmul_coeffs[2] = a_scale;
+  elwmul_coeffs[3] = a_zp;
+  elwmul_coeffs[4] = final_out_scale;
+  elwmul_coeffs[5] = final_out_zp;
+  elwmul_coeffs[6] = 0;
+  elwmul_coeffs[7] = 1; // elwmul_coeffs
+}
+
 template <typename InT, typename WtT, typename OutT>
 void elwmul_qdq<InT, WtT, OutT>::initialize_const_params(
     ConstBufferIO &io, const std::vector<Tensor> &const_params,
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("Elwmul_qdq initialize_const_params(ptr) ...");
 
-  DD_THROW_IF((const_params.size() != 1),
-              OpsFusion::dd_format("Unsupported const spec for elwmul_qdq\n") +
-                  OpsFusion::dd_format("(Details : #const params == 1 ({})",
-                                       const_params.size()));
+  int32_t *qdq_params;
+  elwmul_qdq_coeffs = std::vector<int32_t>(16, 0);
+  if (is_generic_fusion) {
+    DD_THROW_IF(
+        (const_params.size() != 6),
+        OpsFusion::dd_format("Unsupported const spec for elwmul_qdq\n") +
+            OpsFusion::dd_format("(Details : #const params == 6 ({})",
+                                 const_params.size()));
+    calculate_qdq(io, const_params, attr, elwmul_qdq_coeffs);
+    qdq_params = elwmul_qdq_coeffs.data();
+  } else {
+    DD_THROW_IF(
+        (const_params.size() != 1),
+        OpsFusion::dd_format("Unsupported const spec for elwmul_qdq\n") +
+            OpsFusion::dd_format("(Details : #const params == 1 ({})",
+                                 const_params.size()));
+    qdq_params = (int32_t *)const_params.at(0).data;
+  }
 
-  auto qdq_params = (int32_t *)const_params.at(0).data;
-  if (design_param_ == "4x4PSU") {
+  if (design_param_ == "4x4PSU" || design_param_ == "8x4PSU" ||
+      design_param_ == "8x4HFDS") {
     std::vector<int32_t> qdq_data(QDQparam_size,
                                   0); // temp buffer to create qdq params
                                       // required by kernel
@@ -513,7 +676,6 @@ void elwmul_qdq<InT, WtT, OutT>::execute(std::vector<Tensor> &input,
 
   // each input needs to have M * K size
   auto [M, K] = map_padded_shape(a_shape_[0], a_shape_[1]);
-
   c_shape_[0] = a_shape_[0];
   c_shape_[1] = a_shape_[1];
 
@@ -650,6 +812,7 @@ std::vector<OpArgMap> elwmul_qdq<InT, WtT, OutT>::get_buffer_reqs(
 
   auto [Mo, No] = map_padded_shape(M, N);
 
+  size_t output_idx = is_generic_fusion ? 8 : 3;
   size_t const_params_bo_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
   size_t input_1_bo_size = (Mo * No * sizeof(InT));
   size_t input_2_bo_size = (Mo * No * sizeof(WtT));
@@ -661,7 +824,7 @@ std::vector<OpArgMap> elwmul_qdq<InT, WtT, OutT>::get_buffer_reqs(
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_1_bo_size},
       {OpArgMap::OpArgType::INPUT, 1, 1, input_1_bo_size, input_2_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 2, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 3, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};

@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <fstream>
@@ -27,7 +42,9 @@
 // #include "ops/ops_common/silu_lut_bf16_512.h"
 #include "utils/ctrl_pkt_utils.hpp"
 #include <ops/gelu/gelu.hpp>
+#include <ops/ops_common/coeffs.hpp>
 #include <ops/ops_common/ctrlpkt.hpp>
+#include <ops/ops_common/op_util.hpp>
 #include <utils/logging.hpp>
 #include <utils/utils.hpp>
 // AIE Driver header
@@ -151,11 +168,11 @@ std::vector<OpArgMap> gelu<InT, WtT, OutT>::get_buffer_reqs(
   size_t output_bo_size = (Mo * No * sizeof(OutT));
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
   size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
-
+  size_t output_idx = is_generic_fusion ? 5 : 2;
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 2, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};
@@ -219,6 +236,7 @@ gelu<InT, WtT, OutT>::gelu(const std::string &a_dtype,
   a_dtype_size_ = sizeof(InT);
   b_dtype_size_ = sizeof(WtT);
   c_dtype_size_ = sizeof(OutT);
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
 
   gelu_id_ = gelu_count++;
   /*select xclbin based on the input/output types*/
@@ -327,17 +345,36 @@ void gelu<InT, WtT, OutT>::initialize_const_params(
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("Gelu initialize_const_params(ptr) ...");
 
-  DD_THROW_IF((const_params.size() != 1) ||
-                  (const_params.at(0).shape.size() != 1),
-              OpsFusion::dd_format("Unsupported const spec for Gelu\n") +
-                  OpsFusion::dd_format(
-                      "(Details : #const params == 1 ({}), Const param1 dim "
-                      "== 1 ({})",
-                      const_params.size(), const_params.at(0).shape.size()));
+  if (is_generic_fusion == 0) {
+    DD_THROW_IF((const_params.size() != 1) ||
+                    (const_params.at(0).shape.size() != 1),
+                OpsFusion::dd_format("Unsupported const spec for Gelu\n") +
+                    OpsFusion::dd_format(
+                        "(Details : #const params == 1 ({}), Const param1 dim "
+                        "== 1 ({})",
+                        const_params.size(), const_params.at(0).shape.size()));
+  }
 
-  const int qdq_params_idx = 0;
+  int16_t *qdq_params;
 
-  auto qdq_params = (int16_t *)const_params.at(qdq_params_idx).data;
+  // For generic flow
+  if (is_generic_fusion) {
+    std::vector<uint16_t> gelu_qdq_tensor(16, 0);
+    float q_scale =
+        std::any_cast<std::vector<float>>(attr.at("input_q_params"))[0];
+    float zero_point =
+        std::any_cast<std::vector<float>>(attr.at("input_q_params"))[1];
+
+    gelu_qdq_tensor[3] = (uint16_t)(zero_point);
+    gelu_qdq_tensor[4] = float_to_bfloat16(q_scale);
+    gelu_qdq_tensor[5] = 1;
+
+    qdq_params = (int16_t *)gelu_qdq_tensor.data();
+  } else {
+    // SW convert scale to 1/scale and bfloat16 for Q
+    const int qdq_params_idx = 0;
+    qdq_params = (int16_t *)const_params.at(qdq_params_idx).data;
+  }
 
   // SW convert scale to 1/scale and bfloat16 for Q
 

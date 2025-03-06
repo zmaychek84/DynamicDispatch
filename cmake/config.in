@@ -4,6 +4,7 @@ set(@PROJECT_NAME@_FOUND True)
 include(CMakeFindDependencyMacro)
 find_dependency(spdlog REQUIRED)
 find_dependency(nlohmann_json REQUIRED)
+find_dependency(AIEBU REQUIRED)
 find_dependency(xaiengine REQUIRED)
 
 set(ZLIB_USE_STATIC_LIBS ON)

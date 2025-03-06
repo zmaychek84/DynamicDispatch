@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -211,5 +226,18 @@ TEST(LLAMA2_MLADFADD_Testa16, Kernel767) {
 TEST(LLAMA2_MLADFADD_Testa16, Kernel850) {
   int err_count = test_mladfadd<uint16_t, uint16_t, uint16_t>(
       850, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// v2
+
+TEST(LLAMA2_MLADFADD_Testa16, Kernel1x4096_v2) {
+  int err_count = test_mladfadd<uint16_t, uint16_t, uint16_t>(
+      1, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v2");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+TEST(LLAMA2_MLADFADD_Testa16, Kernel128x4096_v2) {
+  int err_count = test_mladfadd<uint16_t, uint16_t, uint16_t>(
+      128, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v2");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

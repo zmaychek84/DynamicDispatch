@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cmath>
 #include <fstream>
@@ -163,112 +178,63 @@ int test_mladfrmsnorm(size_t M, size_t K, bool debug = false,
   return err_count;
 }
 
-// v1
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel2048x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      2048, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+// Auto runs all txn shapes for v1
+TEST(LLAMA2_MLADFRMSNORM_V0, AutoRunAllTxnShapes) {
+  // Create an operator instance that parses transaction files
+  //    and populates its supported_shapes_ as tuples (M, K).
+  using RMSNormOp = ryzenai::rms_norm<uint16_t, uint16_t, uint16_t>;
+  RMSNormOp shapeFinderOp("bfloat16", true, std::map<std::string, std::any>());
+
+  // Retrieve discovered shapes
+  auto shapes = shapeFinderOp.get_supported_shapes();
+
+  // OPTIONAL: If you only want to test shapes that have valid data,
+  //           you can filter them here. Example:
+  //   auto skipSet = buildSkipSet_rmsnorm();
+  //   shapes.erase(std::remove_if(shapes.begin(), shapes.end(), [&](auto &s){
+  //       std::string key = shapeToKey(std::get<0>(s), std::get<1>(s));
+  //       return skipSet.find(key) != skipSet.end();
+  //   }), shapes.end());
+
+  // Loop over each discovered shape
+  for (auto &s : shapes) {
+    int M = std::get<0>(s);
+    int K = std::get<1>(s);
+
+    // Decide how to get the golden reference:
+    //   - If shape is (2048, 4096), we have a file-based reference.
+    //   - Otherwise, compute a random input + RMSNorm reference dynamically.
+    int err_count = 0;
+    if (M == 2048 && K == 4096) {
+      // Use the file-based approach.
+      err_count = test_mladfrmsnorm<uint16_t, uint16_t, uint16_t>(
+          M, K,
+          /*debug=*/false,
+          /*a_dtype=*/"bfloat16",
+          /*b_dtype=*/"bfloat16",
+          /*c_dtype=*/"bfloat16",
+          /*model_name=*/"LLAMA2",
+          /*op_version=*/"v1");
+    } else {
+      // Use the dynamic approach.
+      err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
+          M, K,
+          /*debug=*/false,
+          /*a_dtype=*/"bfloat16",
+          /*b_dtype=*/"bfloat16",
+          /*c_dtype=*/"bfloat16",
+          /*model_name=*/"LLAMA2",
+          /*op_version=*/"v1");
+    }
+
+    EXPECT_EQ(err_count, 0) << "[RMSNormTest] Error count=" << err_count
+                            << " for shape M=" << M << ", K=" << K;
+  }
 }
 
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel1024x4096_v1) {
+// v2
+TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel128x4096_v2) {
   int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      1024, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel512x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      512, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel256x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      256, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel128x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      128, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel32x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      32, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel1x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      1, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel384x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      384, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel640x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      640, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel768x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      768, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel1152x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      1152, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel1280x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      1280, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel1408x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      1408, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel1536x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      1536, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel1664x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      1664, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel1792x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      1792, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel1920x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      1920, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-// tiling
-TEST(LLAMA2_MLADFRMSNORM_RAND_Testa16, Kernel4096x4096_v1) {
-  int err_count = test_mladfrmsnormRand<uint16_t, uint16_t, uint16_t>(
-      4096, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1");
+      128, 4096, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v2");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

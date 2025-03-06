@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,12 +26,14 @@
 #include <ops/act_const_add/act_const_add.hpp>
 #include <ops/act_matmul_softmax/act_matmul_softmax.hpp>
 #include <ops/bmm/bmm.hpp>
+#include <ops/cast/cast.hpp>
 #include <ops/concat/concat.hpp>
 #include <ops/concateOps/concateOps.hpp>
 #include <ops/conv/conv.hpp>
 #include <ops/conv2matmul/conv2matmul.hpp>
 #include <ops/conv2matmul_silu/conv2matmul_silu.hpp>
 #include <ops/dequant/dequant.hpp>
+#include <ops/dequantizelinear_cpu/dequantizelinear_cpu.hpp>
 #include <ops/dmacompiler/AttentionMaskPrePro_win25/AttentionMaskPrePro_win25.hpp>
 #include <ops/dmacompiler/batch_matmul/batch_matmul.hpp>
 #include <ops/dmacompiler/gather_qdq_add/gather_qdq_add.hpp>
@@ -55,6 +56,7 @@
 #include <ops/gelu_e/gelue.hpp>
 #include <ops/groupnorm/groupnorm.hpp>
 #include <ops/iconv/iconv.hpp>
+#include <ops/identity/identity.hpp>
 #include <ops/l2_norm/l2_norm.hpp>
 #include <ops/layernorm/layernorm.hpp>
 #include <ops/lstm/lstm.hpp>
@@ -62,6 +64,7 @@
 #include <ops/matmul/matmul.hpp>
 #include <ops/matmul_a16a16_mladf/matmul_a16a16_mladf.hpp>
 #include <ops/matmul_a16w8_mladf/matmul_a16w8_mladf.hpp>
+#include <ops/matmul_cpu/matmul_cpu.hpp>
 #include <ops/matmulbias/matmulbias.hpp>
 #include <ops/matmulgeluadd/matmulgeluadd.hpp>
 #include <ops/matvecadd/matvecadd.hpp>
@@ -83,6 +86,7 @@
 #include <ops/pm_load/pm_load.hpp>
 #include <ops/preemption/preemption.hpp>
 #include <ops/quant/quant.hpp>
+#include <ops/quantizelinear_cpu/quantizelinear_cpu.hpp>
 #include <ops/record_timer/record_timer.hpp>
 #include <ops/sd/concat.hpp>
 #include <ops/sd/conv2d.hpp>

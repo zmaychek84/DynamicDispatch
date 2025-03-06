@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -136,7 +136,7 @@ std::vector<uint8_t> get_tiled_fused_txnbin(
 }
 
 double minimum_tiles_helper(
-    const std::set<int64_t> &tile, const std::map<int64_t, double> &cost,
+    const std::set<int64_t> &tile, const std::map<int64_t, double> &costs,
     int64_t V,
     std::unordered_map<int64_t, std::pair<double, std::vector<int64_t>>>
         &memo) {
@@ -151,15 +151,11 @@ double minimum_tiles_helper(
   std::vector<int64_t> minSolution;
 
   for (int64_t m : tile) {
-    double sub_res = minimum_tiles_helper(tile, cost, V - m, memo);
-    double m_cost;
-    try {
-      m_cost = cost.at(m);
-    } catch (...) {
-      m_cost = 100;
-    }
-    if (sub_res >= 0 && sub_res + (m_cost) + 0.5 < res) {
-      res = sub_res + (m_cost) + 0.5;
+    const double sub_res = minimum_tiles_helper(tile, costs, V - m, memo);
+    auto it = costs.find(m);
+    const double cost = it == costs.end() ? 100 : it->second;
+    if (sub_res >= 0 && sub_res + (cost) + 0.5 < res) {
+      res = sub_res + (cost) + 0.5;
       minSolution = memo[V - m].second;
       minSolution.push_back(m);
     }
@@ -173,16 +169,16 @@ double minimum_tiles_helper(
  * cost function
  *
  * @param tile: list of supported tile shapes
- * @param cost: cost function for each tile shape
+ * @param costs: cost function for each tile shape
  * @param V: target shape
  *
  * @returns: list of tiles for the target shape
  */
 std::pair<double, std::vector<int64_t>>
 minimum_tiles(const std::set<int64_t> &tile,
-              const std::map<int64_t, double> &cost, int64_t V) {
+              const std::map<int64_t, double> &costs, int64_t V) {
   std::unordered_map<int64_t, std::pair<double, std::vector<int64_t>>> memo;
-  double res = minimum_tiles_helper(tile, cost, V, memo);
+  double res = minimum_tiles_helper(tile, costs, V, memo);
   if (res < 0) {
     DD_THROW("No valid tiling found");
   }
@@ -322,6 +318,9 @@ std::vector<uint8_t> matmul_nonuniform_tile_transaction_bin(
         it->offset += M * it->size;
       } break;
       case OpArgMap::OpArgType::SCRATCH_PAD: {
+        it->offset += M * it->size;
+      } break;
+      case OpArgMap::OpArgType::CTRL_PKT_BIN: {
         it->offset += M * it->size;
       } break;
       }

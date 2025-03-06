@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cmath>
 #include <fstream>
@@ -1192,6 +1207,62 @@ TEST(LLAMA2_MLADFMHAROPE_Testa16, Kernel32x1x128_v1_transpose) {
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
+TEST(LLAMA2_MLADFMHAROPE_Testa16, Kernel2x64x128_v1_transpose) {
+  int err_count = test_mladfmharope<uint16_t, uint16_t, uint16_t>(
+      2, 64, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1",
+      "input");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MLADFMHAROPE_Testa16, Kernel2x128x128_v1_transpose) {
+  int err_count = test_mladfmharope<uint16_t, uint16_t, uint16_t>(
+      2, 128, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1",
+      "input");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MLADFMHAROPE_Testa16, Kernel4x64x128_v1_transpose) {
+  int err_count = test_mladfmharope<uint16_t, uint16_t, uint16_t>(
+      4, 64, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1",
+      "input");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MLADFMHAROPE_Testa16, Kernel4x128x128_v1_transpose) {
+  int err_count = test_mladfmharope<uint16_t, uint16_t, uint16_t>(
+      4, 128, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1",
+      "input");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MLADFMHAROPE_Testa16, Kernel12x64x128_v1_transpose) {
+  int err_count = test_mladfmharope<uint16_t, uint16_t, uint16_t>(
+      12, 64, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1",
+      "input");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MLADFMHAROPE_Testa16, Kernel12x128x128_v1_transpose) {
+  int err_count = test_mladfmharope<uint16_t, uint16_t, uint16_t>(
+      12, 128, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1",
+      "input");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MLADFMHAROPE_Testa16, Kernel28x64x128_v1_transpose) {
+  int err_count = test_mladfmharope<uint16_t, uint16_t, uint16_t>(
+      28, 64, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1",
+      "input");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(LLAMA2_MLADFMHAROPE_Testa16, Kernel28x128x128_v1_transpose) {
+  int err_count = test_mladfmharope<uint16_t, uint16_t, uint16_t>(
+      28, 128, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1",
+      "input");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
 TEST(LLAMA2_MLADFMHAROPE_Testa16, Kernel32x2048x128_v1_all) {
   int err_count = test_mladfmharope<uint16_t, uint16_t, uint16_t>(
       32, 2048, 128, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1",
@@ -1685,5 +1756,14 @@ TEST(LLAMA2_MLADFMHAROPE_Testa16, Kernel8x8x96_v1_all) {
   int err_count = test_mladfmharope<uint16_t, uint16_t, uint16_t>(
       8, 8, 96, false, "bfloat16", "bfloat16", "bfloat16", "LLAMA2", "v1",
       "all");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// v2
+
+TEST(GLM_MLADFMHAROPE_Testa16, Kernel2x128x128_v2_glm_input) {
+  int err_count = test_mladfmharope<uint16_t, uint16_t, uint16_t>(
+      2, 128, 128, false, "bfloat16", "bfloat16", "bfloat16", "CHATGLM", "v2",
+      "input");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

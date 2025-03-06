@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -83,26 +82,17 @@ int constexpr gelu_q_scale_idx = 3;
 int constexpr gelu_isint16_idx = 4;
 
 using SUBV_T = std::array<int, 3>;
-int constexpr Mode_count = 17;
+int constexpr Mode_count = 23;
 // Msubv, Ksubv, Nsubv
 constexpr std::array<std::pair<int, SUBV_T>, Mode_count> subv_gemm4x4 = {
-    {{0, {24, 128, 16}},
-     {1, {32, 160, 16}},
-     {2, {32, 160, 32}},
-     {3, {16, 160, 16}},
-     {4, {16, 160, 32}},
-     {5, {32, 128, 64}},
-     {6, {16, 128, 64}},
-     {7, {32, 80, 64}},
-     {8, {64, 128, 32}},
-     {9, {32, 80, 80}},
-     {10, {16, 192, 48}},
-     {11, {8, 192, 48}},
-     {12, {8, 256, 32}},
-     {13, {16, 256, 32}},
-     {14, {64, 64, 64}},
-     {15, {8, 64, 64}},
-     {16, {16, 96, 8}}}}; // PSW GemmV
+    {{0, {24, 128, 16}},  {1, {32, 160, 16}},  {2, {32, 160, 32}},
+     {3, {16, 160, 16}},  {4, {16, 160, 32}},  {5, {32, 128, 64}},
+     {6, {16, 128, 64}},  {7, {32, 80, 64}},   {8, {64, 128, 32}},
+     {9, {32, 80, 80}},   {10, {16, 192, 48}}, {11, {8, 192, 48}},
+     {12, {8, 256, 32}},  {13, {16, 256, 32}}, {14, {64, 64, 64}},
+     {15, {8, 64, 64}},   {16, {16, 96, 8}}, // PSW GemmV
+     {17, {16, 256, 48}}, {18, {8, 256, 48}},  {19, {16, 256, 8}},
+     {20, {16, 192, 56}}, {21, {16, 160, 48}}, {22, {16, 280, 48}}}};
 
 int constexpr Shape_count = 36;
 
@@ -134,6 +124,34 @@ constexpr std::array<std::pair<SUBV_T, int>, Shape_count_int4>
                                {{1, 8192, 3072}, 12},
                                {{64, 8192, 3072}, 13}}};
 
+int constexpr Shape_count_8x4 = 6;
+constexpr std::array<std::pair<SUBV_T, int>, Shape_count_8x4>
+    subv_mode_gemm8x4 = {{{{64, 3072, 3072}, 10},
+                          {{64, 8192, 3072}, 17},
+                          {{1, 3072, 3072}, 11},
+                          {{1, 8192, 3072}, 17},
+                          {{64, 8960, 1536}, 22}, // HFDS
+                          {{1, 8960, 1536}, 22}}};
+
+int constexpr Shape_count_8x4_int4 = 16;
+constexpr std::array<std::pair<SUBV_T, int>, Shape_count_8x4_int4>
+    subv_mode_gemm8x4_int4 = {{{{64, 3072, 9216}, 17},
+                               {{64, 3072, 8192}, 13},
+                               {{64, 3072, 3072}, 17},
+                               {{64, 8192, 3072}, 17},
+                               {{1, 3072, 9216}, 18},
+                               {{1, 3072, 8192}, 12},
+                               {{1, 3072, 3072}, 18},
+                               {{1, 8192, 3072}, 18},
+                               {{64, 1536, 8960}, 20}, // HFDS
+                               {{1, 1536, 8960}, 20},
+                               {{64, 1536, 1536}, 10},
+                               {{1, 1536, 1536}, 11},
+                               {{64, 8960, 1536}, 21},
+                               {{1, 8960, 1536}, 21},
+                               {{64, 1536, 256}, 19},
+                               {{1, 1536, 256}, 19}}};
+
 constexpr bool arrayEqual(const SUBV_T &arr1, const SUBV_T &arr2) {
   for (size_t i = 0; i < 3; ++i) {
     if (arr1[i] != arr2[i]) {
@@ -154,19 +172,38 @@ constexpr SUBV_T get_subv(int &key) {
 }
 
 // Function to search for a key (shapes) and get subv mode
-inline int search_subv_mode(const SUBV_T &key, int b_shift_value = 0) {
-  if (b_shift_value == 0) { // int8
-    for (size_t i = 0; i < subv_mode_gemm4x4.size(); ++i) {
-      if (arrayEqual(subv_mode_gemm4x4[i].first, key)) {
-        return subv_mode_gemm4x4[i].second; // Key found
+inline int search_subv_mode(const SUBV_T &key, int b_shift_value = 0,
+                            const std::string &overlay = "4x4") {
+  if (overlay.find("4x4") != std::string::npos) {
+    if (b_shift_value == 0) { // int8
+      for (size_t i = 0; i < subv_mode_gemm4x4.size(); ++i) {
+        if (arrayEqual(subv_mode_gemm4x4[i].first, key)) {
+          return subv_mode_gemm4x4[i].second; // Key found
+        }
+      }
+    } else if (b_shift_value == 1) { // int4
+      for (size_t i = 0; i < subv_mode_gemm4x4_int4.size(); ++i) {
+        if (arrayEqual(subv_mode_gemm4x4_int4[i].first, key)) {
+          return subv_mode_gemm4x4_int4[i].second; // Key found
+        }
       }
     }
-  } else if (b_shift_value == 1) { // int4
-    for (size_t i = 0; i < subv_mode_gemm4x4_int4.size(); ++i) {
-      if (arrayEqual(subv_mode_gemm4x4_int4[i].first, key)) {
-        return subv_mode_gemm4x4_int4[i].second; // Key found
+  } else if (overlay.find("8x4") != std::string::npos) {
+    if (b_shift_value == 0) { // int8
+      for (size_t i = 0; i < subv_mode_gemm8x4.size(); ++i) {
+        if (arrayEqual(subv_mode_gemm8x4[i].first, key)) {
+          return subv_mode_gemm8x4[i].second; // Key found
+        }
+      }
+    } else if (b_shift_value == 1) { // int4
+      for (size_t i = 0; i < subv_mode_gemm8x4_int4.size(); ++i) {
+        if (arrayEqual(subv_mode_gemm8x4_int4[i].first, key)) {
+          return subv_mode_gemm8x4_int4[i].second; // Key found
+        }
       }
     }
+  } else {
+    throw std::runtime_error("Invalid overlay");
   }
   return -1; // Key not found
 }
@@ -939,7 +976,8 @@ int check_result(T cpu_Y, T aie_Y, bool enable_logging = false) {
 }
 
 template <typename T>
-int check_add_result(T cpu_Y, T aie_Y, float error_tolerance = 0.01) {
+int check_add_result(T cpu_Y, T aie_Y, float error_tolerance = 0.01,
+                     bool enable_logging = false) {
   int fail = 0;
   int err_count = 0;
   int max_diff = 0;
@@ -953,10 +991,12 @@ int check_add_result(T cpu_Y, T aie_Y, float error_tolerance = 0.01) {
         max_diff = diff;
       }
       if (relative_diff > error_tolerance) {
-        std::cout << "ERROR: Y[" << r << ", " << c << "]: "
-                  << "Expected: " << int(cpu_Y.at(r, c)) << ", "
-                  << "Received: " << int(aie_Y.at(r, c)) << ", "
-                  << "Diff: " << int(diff) << "\n";
+        if (enable_logging) {
+          std::cout << "ERROR: Y[" << r << ", " << c << "]: "
+                    << "Expected: " << int(cpu_Y.at(r, c)) << ", "
+                    << "Received: " << int(aie_Y.at(r, c)) << ", "
+                    << "Diff: " << int(diff) << "\n";
+        }
         fail = 1;
         err_count++;
       }
@@ -1036,11 +1076,13 @@ int check_add_result_bfloat16(std::vector<T> cpu_Y, std::vector<T> aie_Y,
   int fail = 0;
   int err_count = 0;
   float max_diff = 0.0;
+  float L2_norm = 0;
   for (int r = 0; r < num_rows; ++r) {
     for (int c = 0; c < num_cols; ++c) {
       float cpu_out_float = bfloat16_to_float(cpu_Y.at(r * num_cols + c));
       float aie_out_float = bfloat16_to_float(aie_Y.at(r * num_cols + c));
       float diff = std::abs(cpu_out_float - aie_out_float);
+      L2_norm += ((float)diff * (float)diff);
       if (diff > max_diff) {
         max_diff = diff;
       }
@@ -1068,8 +1110,10 @@ int check_add_result_bfloat16(std::vector<T> cpu_Y, std::vector<T> aie_Y,
       }
     }
   }
+  L2_norm = std::sqrt(L2_norm);
   std::cout << "max_diff is " << max_diff << std::endl;
-  return fail;
+  std::cout << "L2_norm is " << L2_norm << std::endl;
+  return err_count;
 }
 
 } // namespace matmul_matrix

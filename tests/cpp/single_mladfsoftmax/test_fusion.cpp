@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -51,7 +51,7 @@ int test_mladfsoftmax(const std::string &meta_json, std::vector<size_t> shape,
   std::string xclbin_fname;
   if (a_dtype == "uint16") {
     xclbin_fname =
-        Utils::get_env_var("DD_ROOT") + MLADF_SOFTMAX_A16_XCLBIN_PATH;
+        Utils::get_env_var("DD_ROOT") + "/" + MLADF_SOFTMAX_A16_XCLBIN_PATH;
   } else {
     throw std::invalid_argument("Unsupported data type: " + a_dtype);
   }
@@ -70,6 +70,7 @@ int test_mladfsoftmax(const std::string &meta_json, std::vector<size_t> shape,
   OpsFusion::DDConfig cfg;
   auto xclbin_content = OpsFusion::read_bin_file<char>(xclbin_fname);
   cfg.xclbin_content = &xclbin_content;
+  cfg.enable_preemption = false;
   rt_cmp.compile(meta, "", cfg);
   rt_cmp.save_state("dd_metastate");
 

@@ -1,6 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
-//
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -148,6 +146,10 @@ public:
   virtual bool verify(const std::vector<std::string> &op_types) {
     for (int i = 0; i < m_pos.size(); i++) {
       auto pos = m_pos[i];
+      if (pos == -99) {
+        pos = static_cast<int32_t>(op_types.size() - 1);
+      }
+
       if (pos == -1 || ARRAY_AT(op_types, pos) == m_types[i]) {
         continue;
       }

@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -63,6 +63,11 @@ void txn_util::pass_through(uint8_t **ptr) {
   }
   case (XAIE_IO_PREEMPT): {
     XAie_PreemptHdr *Hdr = (XAie_PreemptHdr *)(*ptr);
+    *ptr = *ptr + sizeof(*Hdr);
+    break;
+  }
+  case (XAIE_IO_LOAD_PM_START): {
+    XAie_PmLoadHdr *Hdr = (XAie_PmLoadHdr *)(*ptr);
     *ptr = *ptr + sizeof(*Hdr);
     break;
   }
@@ -666,7 +671,7 @@ txn_util::fuse_txns(const std::vector<std::vector<uint8_t>> &txns) {
     const XAie_TxnHeader *txn_hdr = (const XAie_TxnHeader *)txn.data();
     NumOps += txn_hdr->NumOps;
 
-    DD_ASSERT(txn_hdr->TxnSize > sizeof(XAie_TxnHeader),
+    DD_ASSERT(txn_hdr->TxnSize >= sizeof(XAie_TxnHeader),
               OpsFusion::dd_format(
                   "Size of fused_transaction {} smaller than its header {}",
                   txn_hdr->TxnSize, sizeof(XAie_TxnHeader)));

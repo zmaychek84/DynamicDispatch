@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <fstream>
@@ -25,6 +40,8 @@
 #include "ops/ops_common/matmul_matrix.hpp"
 #include <ops/AttentionMaskPrePro/AttentionMaskPrePro.hpp>
 #include <ops/op_interface.hpp>
+#include <ops/ops_common/coeffs.hpp>
+#include <ops/ops_common/op_util.hpp>
 #include <utils/logging.hpp>
 #include <utils/utils.hpp>
 
@@ -149,10 +166,12 @@ std::vector<OpArgMap> AttentionMaskPrePro<InT, WtT, OutT>::get_buffer_reqs(
   size_t output_bo_size = (Mo * No * sizeof(OutT));
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
 
+  size_t output_idx = is_generic_pass_in_onnx ? 9 : 2;
+
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 2, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size}};
   return arg_map;
@@ -186,6 +205,8 @@ AttentionMaskPrePro<InT, WtT, OutT>::AttentionMaskPrePro(
     const std::string &a_dtype, const std::string &b_dtype,
     const std::string &c_dtype, bool load_xrt,
     const std::map<std::string, std::any> &attr) {
+
+  is_generic_pass_in_onnx = OpsFusion::check_generic_fusion(attr);
 
   txnbin_a_header = {{"bfloat16", "abf16"}, {"uint16", "a16"}};
 
@@ -324,17 +345,48 @@ void AttentionMaskPrePro<InT, WtT, OutT>::initialize_const_params(
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("AttentionMaskPrePro initialize_const_params(ptr) ...");
 
-  DD_THROW_IF(
-      (const_params.size() != 1) || (const_params.at(0).shape.size() != 1),
-      OpsFusion::dd_format("Unsupported const spec for AttentionMaskPrePro\n") +
-          OpsFusion::dd_format(
-              "(Details : #const params == 1 ({}), Const param1 dim "
-              "== 1 ({})",
-              const_params.size(), const_params.at(0).shape.size()));
-
   const int qdq_params_idx = 0;
+  std::vector<int32_t> lrn_qdq_tensor(16, 0);
+  if (is_generic_pass_in_onnx) {
 
-  auto qdq_params = (int16_t *)const_params.at(qdq_params_idx).data;
+    DD_THROW_IF(
+        const_params.size() < 8,
+        OpsFusion::dd_format(
+            "Unsupported const spec for (generic) AttentionMaskPrePro\n") +
+            OpsFusion::dd_format(
+                "(Details : #const params == 1 ({}), Const param1 dim "
+                "== 1 ({})",
+                const_params.size(), const_params.at(0).shape.size()));
+
+    uint16_t sub_const_in = *((uint8_t *)const_params.at(3).data);
+    auto sub_const_scale = *((float *)const_params.at(4).data);
+    uint16_t sub_const_zp = *((uint8_t *)const_params.at(5).data);
+    uint16_t temp1 = float_to_bfloat16(
+        static_cast<float>(sub_const_in - sub_const_zp) * sub_const_scale);
+
+    uint16_t mul_const_in = *((uint8_t *)const_params.at(0).data);
+    auto mul_const_scale = *((float *)const_params.at(1).data);
+    uint16_t mul_const_zp = *((uint8_t *)const_params.at(2).data);
+    uint16_t temp2 = float_to_bfloat16(
+        static_cast<float>(mul_const_zp - mul_const_in) * mul_const_scale);
+
+    lrn_qdq_tensor[0] = (int32_t)temp1; // gamma[0];
+    lrn_qdq_tensor[1] = (int32_t)temp2; // gamma1[0];
+
+    qdq_params = (int16_t *)lrn_qdq_tensor.data();
+
+  } else {
+    DD_THROW_IF((const_params.size() != 1) ||
+                    (const_params.at(0).shape.size() != 1),
+                OpsFusion::dd_format(
+                    "Unsupported const spec for AttentionMaskPrePro\n") +
+                    OpsFusion::dd_format(
+                        "(Details : #const params == 1 ({}), Const param1 dim "
+                        "== 1 ({})",
+                        const_params.size(), const_params.at(0).shape.size()));
+
+    qdq_params = (int16_t *)const_params.at(qdq_params_idx).data;
+  }
 
   // SW convert scale to 1/scale and bfloat16 for Q
 

@@ -1,6 +1,22 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <fstream>
@@ -86,6 +102,7 @@ layernorm<InT, WtT, OutT>::layernorm(
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 64, 1280));
   // sd3.0
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 154, 1536));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 160, 1536));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 1024, 1536));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 4096, 1536));
   a_dtype_size_ = sizeof(InT);
@@ -197,12 +214,13 @@ void layernorm<InT, WtT, OutT>::initialize_const_params(
   RYZENAI_LOG_TRACE("LRN: A_BO_SIZE:" + std::to_string(A_BO_SIZE) +
                     " B_BO_SIZE:" + std::to_string(b_bo_size_ * 2) +
                     " C_BO_SIZE:" + std::to_string(C_BO_SIZE));
-  b_bo_ = xrt::bo(xrt_ctx_->get_device(), b_bo_size_ * 2,
-                  XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(0));
+  b_bo_ =
+      xrt::bo(xrt_ctx_->get_device(), b_bo_size_ * 2, XRT_BO_FLAGS_HOST_ONLY,
+              xrt_ctx_->get_kernel(pdi_name_).group_id(0));
   a_bo_ = xrt::bo(xrt_ctx_->get_device(), A_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
-                  xrt_ctx_->get_kernel().group_id(0));
+                  xrt_ctx_->get_kernel(pdi_name_).group_id(0));
   c_bo_ = xrt::bo(xrt_ctx_->get_device(), C_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
-                  xrt_ctx_->get_kernel().group_id(0));
+                  xrt_ctx_->get_kernel(pdi_name_).group_id(0));
 
   // copy b_bo
   b_copy_time_ = 0;
@@ -267,7 +285,7 @@ void layernorm<InT, WtT, OutT>::execute(std::vector<Tensor> &input,
   uint32_t instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
 
   // launch the kernel
-  auto kernel_ = xrt_ctx_->get_kernel();
+  auto kernel_ = xrt_ctx_->get_kernel(pdi_name_);
 
   auto run_aie_start = GET_ELAPSED_TIME_NS();
 
@@ -304,7 +322,12 @@ const std::vector<uint8_t> layernorm<InT, WtT, OutT>::get_transaction_bin(
 }
 
 template <typename InT, typename WtT, typename OutT>
-void layernorm<InT, WtT, OutT>::set_params() {
+void layernorm<InT, WtT, OutT>::set_params(const std::string &xclbin,
+                                           const std::string &pdi_name) {
+  if (!xclbin.empty()) {
+    XCLBIN_FNAME_ = OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\" + xclbin;
+  }
+  pdi_name_ = pdi_name;
   xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }

@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <fstream>
 #include <iostream>
@@ -92,9 +107,6 @@ conv<InT, WtT, BiasT, OutT>::conv(const std::string &ifm_dtype,
   const auto &output_shape_vec =
       std::any_cast<const std::vector<int> &>(attr.at("output_shape"));
   batch_ = output_shape_vec[0];
-  XCLBIN_FNAME_ =
-      OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\SDConv2d.xclbin";
-  RYZENAI_LOG_TRACE(OpsFusion::dd_format("xclbin fname : {}", XCLBIN_FNAME_));
   txn_fname_prefix_ = sd_conv_key_ + txnbin_a_header.at(ifmDtype_) +
                       txnbin_b_header.at(weightDtype_) +
                       txnbin_acc_header.at(ofmDtype_);
@@ -230,7 +242,71 @@ conv<InT, WtT, BiasT, OutT>::conv(const std::string &ifm_dtype,
       128, 128, 1024, 1024, 1024, 1024, 3, 3);
   default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
       256, 512, 512, 512, 512, 512, 3, 3);
+
+  // sd3.0 vae encoder
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      128, 128, 1024, 1024, 512, 512, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      128, 128, 512, 512, 256, 256, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      128, 4, 1024, 1024, 1024, 1024, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(128, 4, 512, 512,
+                                                               512, 512, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 128, 256, 256, 256, 256, 1, 1);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 128, 256, 256, 256, 256, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 128, 512, 512, 512, 512, 1, 1);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 128, 512, 512, 512, 512, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 256, 256, 256, 128, 128, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 256, 512, 512, 256, 256, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      32, 512, 128, 128, 128, 128, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(32, 512, 64, 64,
+                                                               64, 64, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      512, 256, 128, 128, 128, 128, 1, 1);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      512, 256, 128, 128, 128, 128, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      512, 256, 256, 256, 256, 256, 1, 1);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      512, 256, 256, 256, 256, 256, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      512, 512, 128, 128, 64, 64, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      512, 512, 256, 256, 128, 128, 3, 3);
+
+  // sd1.5 controlnet 512 512
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(16, 16, 512, 512,
+                                                               512, 512, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(16, 4, 512, 512,
+                                                               512, 512, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(
+      256, 96, 128, 128, 64, 64, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(320, 256, 64, 64,
+                                                               64, 64, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(320, 320, 32, 32,
+                                                               32, 32, 1, 1);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(32, 16, 512, 512,
+                                                               256, 256, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(32, 32, 256, 256,
+                                                               256, 256, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(640, 640, 16, 16,
+                                                               16, 16, 1, 1);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(96, 32, 256, 256,
+                                                               128, 128, 3, 3);
+  default_shapes_["sd_conv2d_a16bfw16bfpacc16bf"].emplace_back(96, 96, 128, 128,
+                                                               128, 128, 3, 3);
+
   if (load_xrt) {
+    XCLBIN_FNAME_ =
+        OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\SDConv2d.xclbin";
+    RYZENAI_LOG_TRACE(OpsFusion::dd_format("xclbin fname : {}", XCLBIN_FNAME_));
     xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
     std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
   }
@@ -383,7 +459,6 @@ conv<InT, WtT, BiasT, OutT>::conv(const std::string &ifm_dtype,
   });
 
   RYZENAI_LOG_TRACE("[SD_CONV2D] ID: " + std::to_string(conv_id_) +
-                    ", XCLBIN: " + XCLBIN_FNAME_ +
                     ", (a_dtype, b_dtype, c_dtype): (" + ifmDtype_ + ", " +
                     weightDtype_ + ", " + ofmDtype_ + ")");
 }
@@ -500,11 +575,11 @@ void conv<InT, WtT, BiasT, OutT>::initialize_const_params(
                     " OFM_BO_SIZE:" + std::to_string(OFM_BO_SIZE));
   constBo_ =
       xrt::bo(xrt_ctx_->get_device(), CONST_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
-              xrt_ctx_->get_kernel().group_id(0));
+              xrt_ctx_->get_kernel(pdi_name_).group_id(0));
   ifmBo_ = xrt::bo(xrt_ctx_->get_device(), IFM_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
-                   xrt_ctx_->get_kernel().group_id(0));
+                   xrt_ctx_->get_kernel(pdi_name_).group_id(0));
   ofmBo_ = xrt::bo(xrt_ctx_->get_device(), OFM_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
-                   xrt_ctx_->get_kernel().group_id(0));
+                   xrt_ctx_->get_kernel(pdi_name_).group_id(0));
 
   weightCopyTime_ = 0;
   weightFormatTime_ = 0;
@@ -538,14 +613,14 @@ void conv<InT, WtT, BiasT, OutT>::execute(std::vector<Tensor> &input,
 
   auto i_buf = transaction_op(txnData);
   size_t instr_bo_words = i_buf.get_txn_instr_size();
-  xrt::bo instr_bo =
-      xrt::bo(xrt_ctx_->get_context(), instr_bo_words,
-              xrt::bo::flags::cacheable, xrt_ctx_->get_kernel().group_id(1));
+  xrt::bo instr_bo = xrt::bo(xrt_ctx_->get_context(), instr_bo_words,
+                             xrt::bo::flags::cacheable,
+                             xrt_ctx_->get_kernel(pdi_name_).group_id(1));
   instr_bo.write(i_buf.get_txn_op().data());
   instr_bo.sync(XCL_BO_SYNC_BO_TO_DEVICE);
   instr_bo_words = instr_bo.size() / sizeof(int);
 
-  auto kernel_ = xrt_ctx_->get_kernel();
+  auto kernel_ = xrt_ctx_->get_kernel(pdi_name_);
 
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   // TODO: figure out the Bo order
@@ -590,8 +665,8 @@ const std::vector<uint8_t> conv<InT, WtT, BiasT, OutT>::get_transaction_bin(
 
 template <typename InT, typename WtT, typename BiasT, typename OutT>
 void conv<InT, WtT, BiasT, OutT>::set_params(
-    const std::string &modelName, const sd_conv2d_shapes &shape_info) {
-  // TODO: use modelName to find xclbin when need.
+    const std::string &xclbin, const std::string &pdi_name,
+    const sd_conv2d_shapes &shape_info) {
   OC_ = shape_info.OC;
   IC_ = shape_info.IC;
   IH_ = shape_info.IH;
@@ -636,6 +711,11 @@ void conv<InT, WtT, BiasT, OutT>::set_params(
   kernelOutputShape_[1] = outputShape_[2] / 8; // C / 8
   kernelOutputShape_[2] = outputShape_[1];     // W
   kernelOutputShape_[3] = 8;                   // C parallelism
+
+  if (!xclbin.empty()) {
+    XCLBIN_FNAME_ = OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\" + xclbin;
+  }
+  pdi_name_ = pdi_name;
   xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }

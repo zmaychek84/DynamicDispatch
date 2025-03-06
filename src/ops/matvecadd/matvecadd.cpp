@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 #include <any>
 #include <iostream>
 #include <map>
@@ -13,6 +28,9 @@
 #include "xrt/xrt_bo.h"
 #include "xrt/xrt_device.h"
 #include "xrt/xrt_kernel.h"
+
+#include <ops/ops_common/coeffs.hpp>
+#include <ops/ops_common/op_util.hpp>
 
 // dpu kernel metadata
 #include <utils/dpu_mdata.hpp>
@@ -178,6 +196,8 @@ matvec_add<InT, WtT, OutT>::matvec_add(
   c_dtype_size_ = sizeof(OutT);
   matvec_add_id_ = matvec_add_count++;
 
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
+
   /*select xclbin based on the input/output types*/
   std::string XCLBIN_FNAME =
       OpInterface::get_dd_base_dir() + ryzenai::mdsqr_A8W8_QDQ_XCLBIN_PATH;
@@ -284,6 +304,26 @@ void matvec_add<InT, WtT, OutT>::set_params(const std::string &model_name,
   xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME);
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }
+void calculate_qqdq(ConstBufferIO &io, const std::vector<Tensor> &const_params,
+                    const std::map<std::string, std::any> &attr,
+                    std::vector<int32_t> &matvecadd_qdq) {
+  auto in_0_scale = *((float *)const_params.at(0).data);
+  auto in_0_zp = *((uint16_t *)const_params.at(1).data);
+
+  auto in_1_scale = *((float *)const_params.at(2).data);
+  auto in_1_zp = *((uint16_t *)const_params.at(3).data);
+
+  auto out_scale = *((float *)const_params.at(4).data);
+  auto out_zp = *((uint16_t *)const_params.at(5).data);
+
+  matvecadd_qdq[1] = OpsFusion::coeffs::float_to_bfloat16(in_0_scale);
+  matvecadd_qdq[0] = uint16_t(in_0_zp);
+  matvecadd_qdq[3] = OpsFusion::coeffs::float_to_bfloat16(in_1_scale);
+  matvecadd_qdq[2] = uint16_t(in_1_zp);
+
+  matvecadd_qdq[5] = OpsFusion::coeffs::float_to_bfloat16(1.0f / out_scale);
+  matvecadd_qdq[4] = out_zp;
+}
 
 template <typename InT, typename WtT, typename OutT>
 void matvec_add<InT, WtT, OutT>::initialize_const_params(
@@ -291,12 +331,27 @@ void matvec_add<InT, WtT, OutT>::initialize_const_params(
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("matvecadd initialize_const_params(ptr) ...");
 
-  DD_THROW_IF((const_params.size() != 1),
-              OpsFusion::dd_format("Unsupported const spec for matvecadd\n") +
-                  OpsFusion::dd_format("(Details : #const params == 1 ({})",
-                                       const_params.size()));
+  uint16_t *qdq_params;
+  matvecadd_qdq = std::vector<int32_t>(32, 0);
+  std::vector<uint16_t> matvecadd_qdq_16_t(32, 0);
 
-  auto qdq_params = (uint8_t *)const_params.at(0).data;
+  if (is_generic_fusion) {
+    DD_THROW_IF((const_params.size() != 6),
+                OpsFusion::dd_format("Unsupported const spec for matvecadd\n") +
+                    OpsFusion::dd_format("(Details : #const params == 6 ({})",
+                                         const_params.size()));
+    calculate_qqdq(io, const_params, attr, matvecadd_qdq);
+    for (int i = 0; i < 32; i++) {
+      matvecadd_qdq_16_t[i] = matvecadd_qdq[i];
+    }
+    qdq_params = matvecadd_qdq_16_t.data();
+  } else {
+    DD_THROW_IF((const_params.size() != 1),
+                OpsFusion::dd_format("Unsupported const spec for matvecadd\n") +
+                    OpsFusion::dd_format("(Details : #const params == 1 ({})",
+                                         const_params.size()));
+    qdq_params = (uint16_t *)const_params.at(0).data;
+  }
 
   auto qdq_params_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
   io.write(0, (void *)qdq_params, qdq_params_size);
@@ -588,12 +643,13 @@ std::vector<OpArgMap> matvec_add<InT, WtT, OutT>::get_buffer_reqs(
   size_t output_bo_size = (Mo * No * sizeof(OutT));
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
   size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
+  size_t output_idx = is_generic_fusion ? 8 : 3;
 
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_1_bo_size},
       {OpArgMap::OpArgType::INPUT, 1, 1, input_1_bo_size, input_2_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 2, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 3, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};

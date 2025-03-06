@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -102,6 +101,8 @@ private:
   std::string txn_fname_prefix_;
   std::string param_fname_prefix_;
   bool is_ctrl_pkt_;
+  bool is_generic_fusion;
+  std::vector<int32_t> elwmul_qdq_coeffs;
 
   /*
    * Utility function that setups the instruction registry with transaction

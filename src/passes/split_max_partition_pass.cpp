@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +23,7 @@
 #include <op_fuser/fuse_types.hpp>
 #include <ops/op_builder.hpp>
 #include <utils/meta_utils.hpp>
+#include <utils/pass_utils.hpp>
 
 #include "passes.hpp"
 
@@ -43,6 +44,11 @@ bool split_max_partition_pass(
   for (size_t partition_idx = 0; partition_idx < meta.partitions.size();
        partition_idx++) {
     const auto &partition = meta.partitions.at(partition_idx);
+
+    if (partition.is_cpu) {
+      continue;
+    }
+
     size_t curr_instr_size = fused_instr_vec.at(partition_idx).size();
     size_t curr_partition_size =
         partition.op_range.second - partition.op_range.first;
@@ -90,6 +96,7 @@ bool split_max_partition_pass(
   // lastly create new partition,
   meta.partitions.at(max_partition_idx) = left;
   meta.partitions.at(max_partition_idx + 1) = right;
+  dynamic_dispatch::pass_utils::link_npu_partitions(meta.partitions);
 
   RYZENAI_LOG_TRACE(OpsFusion::dd_format("Splitting max partition: DONE"));
 

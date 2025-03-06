@@ -1,6 +1,22 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 #include <any>
 #include <iostream>
 #include <map>
@@ -32,6 +48,8 @@
 #include <xrt_context/xrt_context.hpp>
 // AIE Driver header
 #include "xaiengine.h"
+#include <ops/ops_common/coeffs.hpp>
+#include <ops/ops_common/op_util.hpp>
 
 #include "ops/ops_common/kernel_structs.hpp"
 #include "ops/ops_common/matmul_matrix.hpp"
@@ -150,6 +168,7 @@ qdq_mul<InT, WtT, OutT>::qdq_mul(const std::string &a_dtype,
   b_dtype_size_ = sizeof(WtT);
   c_dtype_size_ = sizeof(OutT);
   qdq_mul_id_ = qdq_mul_count++;
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
 
   std::string XCLBIN_FNAME =
       OpInterface::get_dd_base_dir() + ryzenai::PSW1_0_A16W8_QDQ_XCLBIN_PATH;
@@ -236,6 +255,29 @@ void qdq_mul<InT, WtT, OutT>::set_params(const std::string &model_name,
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }
 
+// function to calculate qdq_coefss in generic pass flow
+void calculate_qdqq(ConstBufferIO &io, const std::vector<Tensor> &const_params,
+                    const std::map<std::string, std::any> &attr,
+                    std::vector<int32_t> &elt_coeffs) {
+  auto weightss = static_cast<float *>(const_params.at(0).data);
+  auto in_0_scale = *(weightss + 0);
+  auto in_0_zp = *(weightss + 1);
+  auto in_1_scale = *(weightss + 2);
+  auto in_1_zp = *(weightss + 3);
+  auto out_scale = *(weightss + 4);
+  auto out_zp = *(weightss + 5);
+
+  auto [a_scale, a_zp] =
+      OpsFusion::coeffs::calc_lrn_coeff(in_0_scale, (uint32_t)in_0_zp);
+  auto [b_scale, b_zp] =
+      OpsFusion::coeffs::calc_lrn_coeff(in_1_scale, (uint32_t)in_1_zp);
+  auto [final_out_scale, final_out_zp] = OpsFusion::coeffs::calc_lrn_coeff(
+      (float)1 / (float)out_scale, (uint32_t)out_zp);
+
+  elt_coeffs[1] = final_out_scale;
+  elt_coeffs[0] = final_out_zp;
+}
+
 template <typename InT, typename WtT, typename OutT>
 void qdq_mul<InT, WtT, OutT>::initialize_const_params(
     ConstBufferIO &io, const std::vector<Tensor> &const_params,
@@ -248,7 +290,14 @@ void qdq_mul<InT, WtT, OutT>::initialize_const_params(
                                        const_params.size()));
 
   // Model: "4x4PSW1.0"
-  auto qdq_params = (int32_t *)const_params.at(0).data;
+  int32_t *qdq_params;
+  input_qdq = std::vector<int32_t>(16, 0);
+  if (is_generic_fusion) {
+    calculate_qdqq(io, const_params, attr, input_qdq);
+    qdq_params = input_qdq.data();
+  } else {
+    qdq_params = (int32_t *)const_params.at(0).data;
+  }
   auto qdq_params_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
   io.write(0, (void *)qdq_params, qdq_params_size);
 

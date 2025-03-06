@@ -1,6 +1,22 @@
-/*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cfenv>
 #include <cmath>
@@ -59,8 +75,8 @@ static std::vector<uint32_t> read_hex_file(const std::string &filePath) {
 
 template <typename T>
 int sd_elwadd_check_result(std::vector<T> cpu_Y, std::vector<T> aie_Y,
-                           float error_tolerance = 0.01,
-                           float pixel_L2_norm_tolerance = 0.01) {
+                           float error_tolerance = 0.01f,
+                           float pixel_L2_norm_tolerance = 0.01f) {
   int fail = 0;
   float max_diff = 0;
   float L2_norm = 0;
@@ -185,11 +201,11 @@ int test_sd_elwadd(const std::vector<int> &a_shape,
                    const std::string &b_type = "bfloat16", // b bo
                    const std::string &c_type = "bfloat16", // c bo
                    const std::string &model_name = "SD_VAE_DEC",
-                   float pixel_L2_norm_tolerance = 0.01,
+                   float pixel_L2_norm_tolerance = 0.01f,
                    bool test_with_golden = false) {
   int quantize_err_count = 0;
   int unquantize_err_count = 0;
-  float error_tolerance = 0.01;
+  float error_tolerance = 0.01f;
   std::map<std::string, std::string> txnbin_a_header = {
       {"bfloat16", "a16bf"}, {"bfp16ebs8", "a16bfp"}};
   std::map<std::string, std::string> txnbin_b_header = {
@@ -228,12 +244,15 @@ int test_sd_elwadd(const std::vector<int> &a_shape,
                  std::back_inserter(c_size_t_shape),
                  [](int val) { return static_cast<size_t>(val); });
   std::string shape_key;
+  std::string xclbin = sd_get_xclbin(model_name);
+  std::string pdi_name = xclbin.empty() ? "DPU" : sd_get_pdi(xclbin, "SDAdd");
+  std::cerr << "xclbin: " << xclbin << " pdi_name: " << pdi_name << std::endl;
   if (test_with_golden) {
     ryzenai::sd::elwadd sd_elwadd =
         ryzenai::sd::elwadd<std::uint16_t, std::uint16_t, std::uint16_t>(
             a_type, b_type, c_type, false, attr);
     sd_elwadd.debug(debug);
-    sd_elwadd.set_params(model_name, a_shape, b_shape);
+    sd_elwadd.set_params(xclbin, pdi_name, a_shape, b_shape);
     std::string test_golden_root_dir =
         "tests/cpp/unit_tests/testDataMladf/sd_vae_dec_elwadd/";
     shape_key = txnbin_a_header.at(a_type) + txnbin_b_header.at(b_type) +
@@ -286,7 +305,7 @@ int test_sd_elwadd(const std::vector<int> &a_shape,
         ryzenai::sd::elwadd<std::uint16_t, std::uint16_t, std::uint16_t>(
             a_type, b_type, c_type, false, attr);
     sd_elwadd.debug(debug);
-    sd_elwadd.set_params(model_name, a_shape, b_shape);
+    sd_elwadd.set_params(xclbin, pdi_name, a_shape, b_shape);
     // gen rand
     std::vector<float> raw_a(get_shape_ele_num(a_shape), 0);
     initialize_random_float(raw_a, 2, -2);
@@ -347,189 +366,189 @@ int test_sd_elwadd(const std::vector<int> &a_shape,
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer1) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 64, 64, 320}, {2, 1, 1, 320}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer2) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 32, 32, 640}, {2, 1, 1, 640}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer3) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 16, 16, 1280}, {2, 1, 1, 1280}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer4) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 8, 8, 1280}, {2, 1, 1, 1280}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer5) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 64, 64, 320}, {2, 64, 64, 320}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer6) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 32, 32, 640}, {2, 32, 32, 640}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer7) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 16, 16, 1280}, {2, 16, 16, 1280}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer8) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 8, 8, 1280}, {2, 8, 8, 1280}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer9) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 320}, {320}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer10) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 640}, {640}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer11) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 256, 1280}, {1280}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer12) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 64, 1280}, {1280}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer13) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 2560}, {2560}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer14) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 5120}, {5120}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer15) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 256, 10240}, {10240}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer16) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 64, 10240}, {10240}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer17) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 320}, {2, 4096, 320}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer18) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 640}, {2, 1024, 640}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer19) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 256, 1280}, {2, 256, 1280}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer20) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 64, 1280}, {2, 64, 1280}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer21) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1280}, {1280}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer22) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 640}, {640}, false, "bfloat16", "bfloat16", "bfloat16", "SD_VAE_DEC",
-      0.01, true);
+      0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer23) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 320}, {320}, false, "bfloat16", "bfloat16", "bfloat16", "SD_VAE_DEC",
-      0.01, true);
+      0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer24) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 1280}, {1280}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer25) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 2560}, {2560}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer26) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 256, 5120}, {5120}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_UnetAddLayer27) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 64, 5120}, {5120}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -538,644 +557,749 @@ TEST(SD_ELWADD_Test, Golden_UnetAddLayer27) {
 TEST(SD_ELWADD_Test, Golden_VaeAddLayer1) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 64, 64, 512}, {1, 64, 64, 512}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_VaeAddLayer2) {
+TEST(SD_ELWADD_Test, Golden_SD3_VAE1024_Layer2) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 128, 128, 512}, {1, 128, 128, 512}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD3_VAE1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_VaeAddLayer3) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 256, 256, 256}, {1, 256, 256, 256}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_VaeAddLayer4) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 512, 512, 128}, {1, 512, 512, 128}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_VaeAddLayer5) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 4096, 512}, {512}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // SD3
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer1) {
+TEST(SD_ELWADD_Test, Golden_SD3_VAE1024_Layer1) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 1024, 1024, 128}, {1, 1024, 1024, 128}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD3_VAE1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer2) {
+TEST(SD_ELWADD_Test, Golden_SD3_VAE1024_Layer3) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 16384, 512}, {512}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD3_VAE1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer3) {
+TEST(SD_ELWADD_Test, Golden_SD3_VAE1024_Layer4) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 256, 256, 512}, {1, 256, 256, 512}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD3_VAE1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer4) {
+TEST(SD_ELWADD_Test, Golden_SD3_VAE1024_Layer5) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 512, 512, 256}, {1, 512, 512, 256}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD3_VAE1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_SD3AddLayer5) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_SD3AddLayer6) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 1536}, {1, 1024, 1536}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_SD3AddLayer7) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_SD3AddLayer8) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 1536}, {2, 1, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_SD3AddLayer9) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 1536}, {2, 1024, 1536}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_SD3AddLayer10) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 6144}, {6144}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer11) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT512_10) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 64}, {64}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD3_DIT512", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer12) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT1024_Layer1) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD3_DIT1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer13) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT1024_Layer2) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1536}, {2, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD3_DIT1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer14) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT1024_Layer3) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 154, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD3_DIT1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer15) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT1024_Layer4) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 154, 1536}, {2, 1, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD3_DIT1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer16) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT1024_Layer5) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 154, 1536}, {2, 154, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD3_DIT1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer17) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT1024_Layer6) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 154, 6144}, {6144}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD3_DIT1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_SD3AddLayer18) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 333, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_SD3AddLayer19) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 333, 1536}, {2, 1, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_SD3AddLayer20) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 333, 6144}, {6144}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer21) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT1024_Layer7) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 1536}, {1, 4096, 1536}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD3_DIT1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer22) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT1024_Layer8) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD3_DIT1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer23) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT1024_Layer9) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 1536}, {2, 1, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD3_DIT1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer24) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT1024_Layer10) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 1536}, {2, 4096, 1536}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01, true);
+      "bfloat16", "SD3_DIT1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer25) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT1024_Layer11) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 6144}, {6144}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD3_DIT1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Golden_SD3AddLayer26) {
+TEST(SD_ELWADD_Test, Golden_SD3_DIT1024_Layer12) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 64}, {64}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD3_DIT1024", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Golden_SD3AddLayer27) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 333, 1536}, {2, 333, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // Random unittest
 // Unet
-TEST(SD_ELWADD_Test, Random_UnetAddLayer1) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_5) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 64, 64, 320}, {2, 1, 1, 320}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer2) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_7) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 32, 32, 640}, {2, 1, 1, 640}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer3) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_9) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 16, 16, 1280}, {2, 1, 1, 1280}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer4) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_11) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 8, 8, 1280}, {2, 1, 1, 1280}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer5) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_6) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 64, 64, 320}, {2, 64, 64, 320}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer6) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_8) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 32, 32, 640}, {2, 32, 32, 640}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer7) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_10) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 16, 16, 1280}, {2, 16, 16, 1280}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer8) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_12) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 8, 8, 1280}, {2, 8, 8, 1280}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer9) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_20) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 320}, {320}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer10) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_14) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 640}, {640}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer11) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_16) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 256, 1280}, {1280}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer12) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_22) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 64, 1280}, {1280}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Random_UnetAddLayer13) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 2560}, {2560}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD_VAE_DEC");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Random_UnetAddLayer14) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 5120}, {5120}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD_VAE_DEC");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Random_UnetAddLayer15) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 256, 10240}, {10240}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD_VAE_DEC");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Random_UnetAddLayer16) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 64, 10240}, {10240}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD_VAE_DEC");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer17) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_1) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 320}, {2, 4096, 320}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer18) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_2) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 640}, {2, 1024, 640}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer19) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_3) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 256, 1280}, {2, 256, 1280}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer20) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_4) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 64, 1280}, {2, 64, 1280}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer21) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_15) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1280}, {1280}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer22) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_21) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
-      {2, 640}, {640}, false, "bfloat16", "bfloat16", "bfloat16", "SD_VAE_DEC",
-      0.01);
+      {2, 640}, {640}, false, "bfloat16", "bfloat16", "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer23) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_18) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
-      {2, 320}, {320}, false, "bfloat16", "bfloat16", "bfloat16", "SD_VAE_DEC",
-      0.01);
+      {2, 320}, {320}, false, "bfloat16", "bfloat16", "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer24) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_19) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 1280}, {1280}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer25) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_13) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 2560}, {2560}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer26) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_17) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 256, 5120}, {5120}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_UnetAddLayer27) {
+TEST(SD_ELWADD_Test, Random_SD15_UNET_23) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 64, 5120}, {5120}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // VAE Decoder
 
-TEST(SD_ELWADD_Test, Random_VaeAddLayer1) {
+TEST(SD_ELWADD_Test, Random_SD3_VAE512_1) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 64, 64, 512}, {1, 64, 64, 512}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_VaeAddLayer2) {
+TEST(SD_ELWADD_Test, Random_SD15_VAE_1) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {1, 64, 64, 512}, {1, 64, 64, 512}, false, "bfloat16", "bfloat16",
+      "bfloat16", "SD15_VAE");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD3_VAE1024_Layer2) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 128, 128, 512}, {1, 128, 128, 512}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_VaeAddLayer3) {
+TEST(SD_ELWADD_Test, Random_SD3_VAE512_2) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {1, 128, 128, 512}, {1, 128, 128, 512}, false, "bfloat16", "bfloat16",
+      "bfloat16", "SD3_VAE512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD15_VAE_2) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {1, 128, 128, 512}, {1, 128, 128, 512}, false, "bfloat16", "bfloat16",
+      "bfloat16", "SD15_VAE");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD3_VAE512_3) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 256, 256, 256}, {1, 256, 256, 256}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_VaeAddLayer4) {
+TEST(SD_ELWADD_Test, Random_SD15_VAE_3) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {1, 256, 256, 256}, {1, 256, 256, 256}, false, "bfloat16", "bfloat16",
+      "bfloat16", "SD15_VAE");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD3_VAE512_4) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 512, 512, 128}, {1, 512, 512, 128}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_VaeAddLayer5) {
+TEST(SD_ELWADD_Test, Random_SD15_VAE_4) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {1, 512, 512, 128}, {1, 512, 512, 128}, false, "bfloat16", "bfloat16",
+      "bfloat16", "SD15_VAE");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD3_VAE512_5) {
+  // this shape no longer exist in final model with matmul+add -> gemm
+  // comment out if later xclbin is updated without txn
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 4096, 512}, {512}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // SD3
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer1) {
+TEST(SD_ELWADD_Test, Random_SD3_VAE1024_Layer1) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 1024, 1024, 128}, {1, 1024, 1024, 128}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer2) {
+TEST(SD_ELWADD_Test, Random_SD3_VAE1024_Layer3) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 16384, 512}, {512}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer3) {
+TEST(SD_ELWADD_Test, Random_SD3_VAE1024_Layer4) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 256, 256, 512}, {1, 256, 256, 512}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer4) {
+TEST(SD_ELWADD_Test, Random_SD3_VAE1024_Layer5) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {1, 512, 512, 256}, {1, 512, 512, 256}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Random_SD3AddLayer5) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD_VAE_DEC");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer6) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_2) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 1536}, {1, 1024, 1536}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer7) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_8) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer8) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_7) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 1536}, {2, 1, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer9) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_3) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 1536}, {2, 1024, 1536}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer10) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_9) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 6144}, {6144}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer11) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_10) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1024, 64}, {64}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer12) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT1024_Layer1) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer13) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_1) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {2, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
+      "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD3_DIT1024_Layer2) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 1536}, {2, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer14) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_4) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {2, 1536}, {2, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
+      "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD3_DIT1024_Layer3) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 154, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer15) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_11) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {2, 154, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
+      "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD3_DIT1024_Layer4) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 154, 1536}, {2, 1, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer16) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_6) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {2, 154, 1536}, {2, 1, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
+      "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD3_DIT1024_Layer5) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 154, 1536}, {2, 154, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer17) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_5) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {2, 154, 1536}, {2, 154, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
+      "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD3_DIT1024_Layer6) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 154, 6144}, {6144}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT1024");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_12) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {2, 154, 6144}, {6144}, false, "bfloat16", "bfloat16", "bfloat16",
+      "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Random_SD3AddLayer18) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 333, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD_VAE_DEC");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Random_SD3AddLayer19) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 333, 1536}, {2, 1, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD_VAE_DEC");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Random_SD3AddLayer20) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 333, 6144}, {6144}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD_VAE_DEC");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer21) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT1024_Layer7) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 1536}, {1, 4096, 1536}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer22) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT1024_Layer8) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 1536}, {1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer23) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT1024_Layer9) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 1536}, {2, 1, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer24) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT1024_Layer10) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 1536}, {2, 4096, 1536}, false, "bfloat16", "bfloat16",
-      "bfloat16", "SD_VAE_DEC", 0.01);
+      "bfloat16", "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer25) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT1024_Layer11) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 6144}, {6144}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_ELWADD_Test, Random_SD3AddLayer26) {
+TEST(SD_ELWADD_Test, Random_SD3_DIT1024_Layer12) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 4096, 64}, {64}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_DIT1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_ELWADD_Test, Random_SD3AddLayer27) {
   int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
       {2, 333, 1536}, {2, 333, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD_VAE_DEC");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD15_CTRLNET_AddLayer1) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {2, 16, 16, 640}, {2, 16, 16, 640}, false, "bfloat16", "bfloat16",
+      "bfloat16", "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD15_CTRLNET_AddLayer2) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {2, 32, 32, 320}, {2, 32, 32, 320}, false, "bfloat16", "bfloat16",
+      "bfloat16", "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_160_1) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {2, 160, 1536}, {2, 160, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
+      "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_ELWADD_Test, Random_SD3_DIT512_160_2) {
+  int err_count = test_sd_elwadd<uint16_t, uint16_t, uint16_t>(
+      {2, 160, 1536}, {2, 1, 1536}, false, "bfloat16", "bfloat16", "bfloat16",
+      "SD3_DIT512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

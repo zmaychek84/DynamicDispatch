@@ -1,6 +1,23 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 #include <any>
 #include <iostream>
 #include <map>
@@ -103,6 +120,15 @@ mha<InT, WtT, OutT>::mha(const std::string &a_dtype, const std::string &b_dtype,
   // SD 3.0 MHA_mmdit layer 2
   default_shapes_[txn_fname_prefix_].emplace_back(
       std::vector<size_t>{2, 4250, 1536, 4250});
+  // SD 3.0 MHA_mmdit layer 3
+  default_shapes_[txn_fname_prefix_].emplace_back(
+      std::vector<size_t>{2, 1184, 1536, 1184});
+  // SD 3.0 MHA_mmdit layer 4
+  default_shapes_[txn_fname_prefix_].emplace_back(
+      std::vector<size_t>{2, 4256, 1536, 4256});
+  // SD3 VAE 1024
+  default_shapes_[txn_fname_prefix_].emplace_back(
+      std::vector<size_t>{1, 16384, 512, 16384});
 
   a_dtype_size_ = sizeof(InT);
   b_dtype_size_ = sizeof(WtT);
@@ -151,8 +177,11 @@ mha<InT, WtT, OutT>::mha(const std::string &a_dtype, const std::string &b_dtype,
     v_size_ = k_size_;
     out_size_ = q_size_;
     // scratch = bmm1 out size + softmax out size(same as bmm1 out)
-    scratch_size_ = B_ * H_ * M_ * N_ * sizeof(InT) * 2;
     mask_size_ = M_ * sizeof(WtT);
+    // todo1:
+    // vae mha scratch size, mmdit mha v size and out size need to update after
+    // all txn update, for now they are different
+    scratch_size_ = B_ * H_ * M_ * N_ * sizeof(InT);
     if (M_ == 16384) {
       // sd3.0 vae 1024 use a different xclbin
       XCLBIN_FNAME_ =
@@ -164,11 +193,11 @@ mha<InT, WtT, OutT>::mha(const std::string &a_dtype, const std::string &b_dtype,
     }
   } else {
     // sd1.5 unet or sd3 mmdit batch = 2
+    out_size_ = q_size_;
     if (K_ == 1536) {
       // mmdit mha, v need to pad, align N_ to 256
       auto N_256_aligned = Utils::align_to_next(N_, 256);
       v_size_ = B_ * K_ * N_256_aligned * sizeof(InT);
-      out_size_ = v_size_;
       // mask align to 256
       mask_size_ = N_256_aligned * sizeof(WtT);
       // scratch also requires M to align to 256
@@ -177,7 +206,6 @@ mha<InT, WtT, OutT>::mha(const std::string &a_dtype, const std::string &b_dtype,
     } else {
       // sd1.5 unet mha
       v_size_ = k_size_;
-      out_size_ = q_size_;
       // align N_ to 4 for scratch size calculation
       auto N_4_aligned = Utils::align_to_next(N_, 4);
       // scratch = bmm1 out size(half of sd1.5 vae)
@@ -219,8 +247,13 @@ mha<InT, WtT, OutT>::mha(const std::string &a_dtype, const std::string &b_dtype,
 }
 
 template <typename InT, typename WtT, typename OutT>
-void mha<InT, WtT, OutT>::set_params() {
+void mha<InT, WtT, OutT>::set_params(const std::string &xclbin,
+                                     const std::string &pdi_name) {
   // shape already set in constructor
+  if (!xclbin.empty()) {
+    XCLBIN_FNAME_ = OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\" + xclbin;
+  }
+  pdi_name_ = pdi_name;
   xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }
@@ -242,17 +275,17 @@ void mha<InT, WtT, OutT>::initialize_const_params(
                                  const_params.size()));
   // confirm group_ids
   const int gid = 0;
-  qkv_bo_ =
-      xrt::bo(xrt_ctx_->get_device(), q_size_ + k_size_ + v_size_,
-              XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(gid));
+  qkv_bo_ = xrt::bo(xrt_ctx_->get_device(), q_size_ + k_size_ + v_size_,
+                    XRT_BO_FLAGS_HOST_ONLY,
+                    xrt_ctx_->get_kernel(pdi_name_).group_id(gid));
   const_mask_bo_ =
       xrt::bo(xrt_ctx_->get_device(), mask_size_, XRT_BO_FLAGS_HOST_ONLY,
-              xrt_ctx_->get_kernel().group_id(gid));
+              xrt_ctx_->get_kernel(pdi_name_).group_id(gid));
   scratch_bo_ =
       xrt::bo(xrt_ctx_->get_device(), scratch_size_, XRT_BO_FLAGS_HOST_ONLY,
-              xrt_ctx_->get_kernel().group_id(gid));
+              xrt_ctx_->get_kernel(pdi_name_).group_id(gid));
   out_bo_ = xrt::bo(xrt_ctx_->get_device(), out_size_, XRT_BO_FLAGS_HOST_ONLY,
-                    xrt_ctx_->get_kernel().group_id(gid));
+                    xrt_ctx_->get_kernel(pdi_name_).group_id(gid));
 
   // init const mask
   WtT *const_bo_map = const_mask_bo_.map<WtT *>();
@@ -281,7 +314,7 @@ void mha<InT, WtT, OutT>::execute(std::vector<Tensor> &input,
   auto instr_bo = xrt_ctx_->get_registry().get_instr_bo(instr_bo_key);
   size_t instr_bo_words = instr_bo.size() / sizeof(int);
 
-  auto kernel_ = xrt_ctx_->get_kernel();
+  auto kernel_ = xrt_ctx_->get_kernel(pdi_name_);
   // launch the kernel
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   // param order to be confirmed

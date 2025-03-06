@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -51,8 +51,20 @@ struct DDConfig {
   std::string cache_dir;
   // Key for accessing meta info
   std::string model_name = "";
+  // key to enable / disable elf flow.
+  bool use_elf_flow = false;
   std::vector<char> *xclbin_content;
   bool use_lazy_scratch_bo = true;
+  bool en_lazy_constbo = false;
+  std::string constbo_sharing_key = "";
+  bool dealloc_scratch_bo = false;
+  bool enable_preemption = true;
+};
+
+struct BoWithTag {
+  std::shared_ptr<xrt::bo> buffer; // Buffer object
+  std::string tag;                 // Tag associated with the buffer
+  size_t size;                     // Size of the buffer
 };
 
 class FusionRuntime {
@@ -75,6 +87,12 @@ public:
   void compile(const Metadata &meta, const std::string &base_dir = "",
                const DDConfig &cfg = {},
                std::map<std::string, SimpleSpan> const_map = {});
+
+  static void
+  build_const_map(const Metadata &meta,
+                  std::map<std::string, OpsFusion::SimpleSpan> &const_map,
+                  std::map<std::string, std::vector<char>> &const_buffers,
+                  const std::string &dir_path);
 
   /// @brief initialize the FusionRT for execution
   /// @param meta MetaJson Object
@@ -140,9 +158,10 @@ private:
   // Parse xclbin metadata from xclbin file directly (useful at compile time)
   bool parse_xclbin_metadata(OpPDIMap &op_pdi_map,
                              const std::string &model_name,
-                             const std::vector<char> *xclbin_content);
+                             const std::vector<char> *xclbin_content,
+                             bool use_elf_flow);
   void host_to_dev_memcpy(bool use_lazy_scratch_bo = true);
-  void initialize_runtime();
+  void initialize_runtime(bool elf_flow = false);
 
   // Device Independent APIs.
   void allocate_host_bos(const Metadata &meta);
@@ -159,6 +178,13 @@ private:
   std::string get_canonicalize_kernel_name(const OpPDIMap &op_pdi_map,
                                            int index);
 
+  void CPUSubgraphRunner(const Metadata &meta, size_t partition_idx);
+  void create_cpu_ops(const Metadata &meta);
+  void load_lazy_const_bo();
+  void execute_with_software_instr_cache();
+  void execute_without_instr_cache();
+  void check_and_prepare_instr_software_caching();
+
 private:
   bool elf_flow_ = false;
   static std::once_flag logger_flag_;
@@ -172,8 +198,10 @@ private:
   std::shared_ptr<ryzenai::dynamic_dispatch::xrt_context> xrt_ctx_;
   // External Context
   xrt::hw_context ctx_;
+  xrt::kernel default_kernel_;
   std::vector<xrt::kernel> kernels_;
   std::vector<xrt::run> runs_;
+  std::string const_filename;
 
   Metadata meta_;
   std::vector<xrt::bo> instr_bos_;
@@ -181,6 +209,9 @@ private:
   xrt::bo output_bo_;
   xrt::bo scratch_bo_;
   std::shared_ptr<xrt::bo> const_bo_;
+  std::string subgraph_name;
+  std::string const_bo_sharing_key;
+  std::shared_ptr<BoWithTag> bo_with_tag;
   xrt::bo super_instr_bo_;
 
   // Host buffers.
@@ -219,15 +250,25 @@ private:
   std::mutex load_save_state_mutex_;
   // Fallback to dynamically updating instr bo
   bool use_instr_sw_cache_ = false;
-
+  std::string constbo_tag;
   // procucer_ops_ = [{op_info1, op1}, {op_info2, op2}, ...]
-  std::vector<
-      std::pair<OpsFusion::Metadata::OpInfo, std::unique_ptr<OpInterface>>>
-      producer_ops_;
+  ///  A struct to store operator info plus the out_index for multi-output
+  struct ProducerEntry {
+    OpsFusion::Metadata::OpInfo op_info;
+    std::unique_ptr<OpInterface> op;
+    size_t out_index; ///< Which output index in op_info.out_args
+  };
+
+  /// A list of ProducerEntry items for the final graph outputs only.
+  /// build exactly one entry for each output in meta_.fused_tensors["out"].
+  std::vector<ProducerEntry> producer_ops_;
 
   std::map<std::string, std::uint32_t> kernel_name_to_pdi_idx_;
   bool use_xclbin_parse_data_;
   OpPDIMap op_pdi_map_;
+  std::map<size_t, std::unique_ptr<OpInterface>> cpu_ops;
+  const CPUOpList REGESTERED_CPU_OPS{"MatMul_CPU", "QLinear_CPU",
+                                     "DQLinear_CPU"};
   const OpPDIMap DEFAULT_OP_TO_PDI_MAP_ = {
       {{{"Add", 0},
         {"BMM1", 0},
@@ -320,8 +361,13 @@ private:
         {"QIntEltwiseAdd", 0},
         {"QIntEltwiseMul", 0},
         {"SDGroupNorm", 0},
-        {"SDGemm", 0}}},
+        {"SDGemm", 0},
+        {"Identity", 0},
+        {"Cast", 0}}},
       {{{0, "DPU"}, {1, "DPU_1"}, {2, "DPU_2"}}}};
+
+  OpPMMap op_pm_map_;
+  OverlayPMMeta overlay_pm_meta_;
 };
 
 class FusionSubgraphRuntime {

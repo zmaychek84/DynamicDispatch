@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 #include <any>
 #include <map>
 #include <sstream>
@@ -36,6 +51,8 @@ namespace {
 std::string getXCLBinName(std::string op_version) {
   if (op_version == "v1" || op_version == "flat") {
     return LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  } else if (op_version == "v2") {
+    return LLAMA2_MLADF_2x4x4_V2_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
   } else {
     return LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
   }
@@ -165,14 +182,15 @@ bmm<InT, WtT, OutT>::bmm(const std::string &a_dtype, const std::string &b_dtype,
   op_version_ = "v1";
   if (attr.find("op_version") != attr.end()) {
     op_version_ = std::any_cast<std::string>(attr.find("op_version")->second);
-    if (op_version_ != "v1" && op_version_ != "flat") {
+    if (op_version_ != "v1" && op_version_ != "v2" && op_version_ != "flat") {
       throw std::runtime_error("The selected op version does not exist");
     }
   }
 
-  std::string txn_key =
-      "bmm_v1_" + txnbin_a_header.at(a_dtype) + txnbin_b_header.at(b_dtype);
-  std::string txn_key_transpose = "bmm_v1_trans_" +
+  std::string txn_key = "bmm_" + op_version_ + "_" +
+                        txnbin_a_header.at(a_dtype) +
+                        txnbin_b_header.at(b_dtype);
+  std::string txn_key_transpose = "bmm_" + op_version_ + "_trans_" +
                                   txnbin_a_header.at(a_dtype) +
                                   txnbin_b_header.at(b_dtype);
 
@@ -569,6 +587,59 @@ bmm<InT, WtT, OutT>::bmm(const std::string &a_dtype, const std::string &b_dtype,
       std::vector<size_t>{32, 128, 128, 2, 128, 3072});
   default_shapes_[txn_key_transpose].emplace_back(
       std::vector<size_t>{32, 3072, 128, 2, 128, 3072});
+  // Gemma2 - head size = 256
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 3072, 256, 4, 256, 3072});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 2048, 256, 4, 256, 2048});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 1024, 256, 4, 256, 1024});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 512, 256, 4, 256, 512});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 256, 256, 4, 256, 256});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 128, 256, 4, 256, 128});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 64, 256, 4, 256, 64});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 64, 256, 4, 256, 3072});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 64, 256, 4, 256, 2048});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 64, 256, 4, 256, 1024});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 64, 256, 4, 256, 512});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 64, 256, 4, 256, 256});
+  default_shapes_[txn_key_transpose].emplace_back(
+      std::vector<size_t>{8, 64, 256, 4, 256, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 3072, 3072, 4, 3072, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 2048, 2048, 4, 2048, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 1024, 1024, 4, 1024, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 512, 512, 4, 512, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 256, 256, 4, 256, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 128, 128, 4, 128, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 64, 64, 4, 64, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 64, 64, 4, 3072, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 64, 64, 4, 2048, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 64, 64, 4, 1024, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 64, 64, 4, 512, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 64, 64, 4, 256, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{8, 64, 64, 4, 128, 256});
 
   default_shapes_[txn_key_transpose].emplace_back(
       std::vector<size_t>{32, 1, 128, 8, 128, 2176});
@@ -675,6 +746,118 @@ bmm<InT, WtT, OutT>::bmm(const std::string &a_dtype, const std::string &b_dtype,
       std::vector<size_t>{32, 1, 1792, 8, 1792, 128});
   default_shapes_[txn_key].emplace_back(
       std::vector<size_t>{32, 1, 1920, 8, 1920, 128});
+
+  // Qwen 2.5B
+
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 128, 128, 2, 128, 512});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 1024, 128, 2, 128, 1024});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 128, 128, 2, 128, 2048});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 256, 128, 2, 128, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 512, 128, 2, 128, 512});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 128, 128, 2, 128, 3072});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 128, 128, 2, 128, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 2048, 128, 2, 128, 2048});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 128, 128, 2, 128, 1024});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 3072, 128, 2, 128, 3072});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 128, 128, 2, 128, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 512, 512, 2, 512, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 128, 512, 2, 512, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 128, 128, 2, 128, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 128, 2048, 2, 2048, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 2048, 2048, 2, 2048, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 3072, 3072, 2, 3072, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 384, 384, 2, 384, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 128, 1024, 2, 1024, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 1024, 1024, 2, 1024, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 256, 256, 2, 256, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 128, 3072, 2, 3072, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 128, 256, 2, 256, 128});
+
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 64, 128, 2, 128, 64});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{12, 64, 64, 2, 64, 128});
+
+  // LLama3-8B 64 length
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 64, 128, 8, 128, 64});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{32, 64, 64, 8, 64, 128});
+
+  // Qwen 7B
+
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 128, 128, 4, 128, 512});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 1024, 128, 4, 128, 1024});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 128, 128, 4, 128, 2048});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 256, 128, 4, 128, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 512, 128, 4, 128, 512});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 128, 128, 4, 128, 3072});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 128, 128, 4, 128, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 2048, 128, 4, 128, 2048});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 128, 128, 4, 128, 1024});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 3072, 128, 4, 128, 3072});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 128, 128, 4, 128, 256});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 512, 512, 4, 512, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 128, 512, 4, 512, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 128, 128, 4, 128, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 128, 2048, 4, 2048, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 2048, 2048, 4, 2048, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 3072, 3072, 4, 3072, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 128, 1024, 4, 1024, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 1024, 1024, 4, 1024, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 256, 256, 4, 256, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 128, 3072, 4, 3072, 128});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 128, 256, 4, 256, 128});
+
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 64, 128, 4, 128, 64});
+  default_shapes_[txn_key].emplace_back(
+      std::vector<size_t>{28, 64, 64, 4, 64, 128});
 
   raw_shapes_[txn_key_transpose] = std::vector<std::vector<size_t>>{};
   raw_shapes_[txn_key] = std::vector<std::vector<size_t>>{};
@@ -1083,7 +1266,6 @@ void bmm<InT, WtT, OutT>::execute(std::vector<xrt::bo> &input,
   auto instr_bo = xrt_ctx_->get_registry().get_instr_bo(instr_bo_key_);
   auto instr_bo_words = uint32_t(instr_bo.size() / sizeof(int));
   auto kernel_ = xrt_ctx_->get_kernel();
-
   ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, instr_bo,
                                             instr_bo_words, input[0], input[1],
                                             output[0], 0, 0, wait, false);

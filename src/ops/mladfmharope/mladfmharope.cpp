@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 #include <iostream>
 #include <map>
 #include <numeric>
@@ -34,6 +49,8 @@ namespace {
 std::string getXCLBinName(std::string op_version) {
   if (op_version == "v1" || op_version == "flat") {
     return LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  } else if (op_version == "v2") {
+    return LLAMA2_MLADF_2x4x4_V2_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
   } else {
     return LLAMA2_MLADF_2x4x4_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
   }
@@ -183,7 +200,7 @@ mha_rope<LhsT, TrigT, OutT>::mha_rope(
   op_version_ = "v1";
   if (attr.find("op_version") != attr.end()) {
     op_version_ = std::any_cast<std::string>(attr.find("op_version")->second);
-    if (op_version_ != "v1" && op_version_ != "flat") {
+    if (op_version_ != "v1" && op_version_ != "v2" && op_version_ != "flat") {
       throw std::runtime_error("The selected op version does not exist");
     }
   }
@@ -202,7 +219,7 @@ mha_rope<LhsT, TrigT, OutT>::mha_rope(
     model_ = model_string_attr.at(model_str);
   }
 
-  txn_fname_prefix_ = "mharope_v1" + model_ +
+  txn_fname_prefix_ = "mharope_" + op_version_ + model_ +
                       transpose_txn_suffix.at(transpose_) + "_" +
                       txnbin_operand_header.at(operand_dtype_);
 
@@ -226,6 +243,7 @@ mha_rope<LhsT, TrigT, OutT>::mha_rope(
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 384, 128));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 256, 128));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 128, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 64, 128));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(2, 1, 128));
 
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(8, 4096, 128));
@@ -375,6 +393,33 @@ mha_rope<LhsT, TrigT, OutT>::mha_rope(
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 128, 128));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 8, 128));
   default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(24, 1, 128));
+
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(4, 1, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(4, 64, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(4, 128, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(4, 256, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(4, 512, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(4, 1024, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(4, 2048, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(4, 3072, 128));
+
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(12, 1, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(12, 64, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(12, 128, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(12, 256, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(12, 512, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(12, 1024, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(12, 2048, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(12, 3072, 128));
+
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(28, 1, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(28, 64, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(28, 128, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(28, 256, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(28, 512, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(28, 1024, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(28, 2048, 128));
+  default_shapes_[txn_fname_prefix_].push_back(std::make_tuple(28, 3072, 128));
 
   mha_rope_id_ = mha_rope_count++;
 

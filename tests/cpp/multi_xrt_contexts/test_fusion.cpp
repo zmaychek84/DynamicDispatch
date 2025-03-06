@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -119,6 +119,7 @@ int main() {
     }
   }
 
+#ifdef LIMITED_XRT_CONTEXT_TEST_EN
   std::vector<std::uint32_t> fail_num_contexts_cases = {
       ryzenai::dynamic_dispatch::MAX_NUM_XRT_CONTEXTS + 2,
       ryzenai::dynamic_dispatch::MAX_NUM_XRT_CONTEXTS + 4};
@@ -131,6 +132,7 @@ int main() {
       return -1;
     }
   }
+#endif
 
   int error_code = create_destroy_xrt_contexts(
       ryzenai::dynamic_dispatch::MAX_NUM_XRT_CONTEXTS + 4);

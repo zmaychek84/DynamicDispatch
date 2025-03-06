@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -54,6 +54,9 @@ public:
   /// @brief Load all the constant data from binary files in the whole meta
   static std::map<std::string, std::vector<char>>
   load_const_buffers(const Metadata &meta);
+
+  static std::map<std::string, std::vector<char>>
+  load_const_buffers_from_big_file(const Metadata &meta);
 
   /// @brief Get a list of args of an Op as Tensors. If const_buffer_ptrs are
   /// passed, Tensor::data will point to a valid buffer in const_buffer_ptrs,

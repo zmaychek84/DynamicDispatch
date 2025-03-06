@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -72,6 +72,7 @@ private:
   std::string txn_fname_prefix_;
   std::string XCLBIN_FNAME_;
   const std::string sd_slice_key_ = "sd_slice_";
+  std::string pdi_name_;
   /*
    * Utility function that setups the instruction registry with transaction
    * binaries.
@@ -109,7 +110,7 @@ public:
     return attr_;
   }
 
-  void set_params();
+  void set_params(const std::string &xclbin, const std::string &pdi_name);
 
   const std::vector<uint8_t> get_super_kernel_params(
       std::vector<Tensor> &input, std::vector<Tensor> &output,

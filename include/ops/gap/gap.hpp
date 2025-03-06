@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -125,5 +124,11 @@ public:
       const std::map<std::string, std::any> &attr = {}) const override {
     return {};
   }
+  std::vector<uint8_t> get_ctrl_pkts(
+      std::vector<Tensor> &input, std::vector<Tensor> &output,
+      const std::map<std::string, std::any> &attr = {}) const override;
+  std::vector<CtrlPktPatchInfo> get_ctrl_pkt_patch_info(
+      std::vector<Tensor> &input, std::vector<Tensor> &output,
+      const std::map<std::string, std::any> &attr) const override;
 };
 } // namespace ryzenai

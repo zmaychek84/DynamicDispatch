@@ -1,6 +1,22 @@
-/*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cfenv>
 #include <cmath>
@@ -59,8 +75,8 @@ static std::vector<uint32_t> read_hex_file(const std::string &filePath) {
 
 template <typename T>
 int sd_concat_check_result(std::vector<T> cpu_Y, std::vector<T> aie_Y,
-                           float error_tolerance = 0.01,
-                           float pixel_L2_norm_tolerance = 0.01) {
+                           float error_tolerance = 0.01f,
+                           float pixel_L2_norm_tolerance = 0.01f) {
   int fail = 0;
   float max_diff = 0;
   float L2_norm = 0;
@@ -137,7 +153,8 @@ static std::vector<uint16_t> float_2_bf16_vec(std::vector<float> &x) {
   return x_uint16;
 }
 
-inline void initialize_random_float(std::vector<float> &vec, int max, int min) {
+inline void initialize_random_float(std::vector<float> &vec, float max,
+                                    float min) {
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_real_distribution<float> dis(min, max);
@@ -163,11 +180,11 @@ int test_sd_concat(const std::vector<int> &a_shape,
                    const std::string &a_type = "bfloat16", // a bo
                    const std::string &c_type = "bfloat16", // c bo
                    const std::string &model_name = "SD_VAE_DEC",
-                   float pixel_L2_norm_tolerance = 0.01,
+                   float pixel_L2_norm_tolerance = 0.01f,
                    bool test_with_golden = false, int axis = -1) {
   int quantize_err_count = 0;
   int unquantize_err_count = 0;
-  float error_tolerance = 0.01;
+  float error_tolerance = 0.01f;
   std::map<std::string, std::string> txnbin_a_header = {
       {"bfloat16", "a16bf"}, {"bfp16ebs8", "a16bfp"}};
   std::map<std::string, std::string> txnbin_b_header = {
@@ -214,12 +231,16 @@ int test_sd_concat(const std::vector<int> &a_shape,
   for (int i = 0; i < b_shape.size(); i++) {
     shape_key += "_" + std::to_string(b_shape[i]);
   }
+  std::string xclbin = sd_get_xclbin(model_name);
+  std::string pdi_name =
+      xclbin.empty() ? "DPU" : sd_get_pdi(xclbin, "SDConcat");
+  std::cerr << "xclbin: " << xclbin << " pdi_name: " << pdi_name << std::endl;
   if (test_with_golden) {
     ryzenai::sd::concat sd_concat =
         ryzenai::sd::concat<std::uint16_t, std::uint16_t>(a_type, c_type, false,
                                                           attr);
     sd_concat.debug(debug);
-    sd_concat.set_params(model_name, a_shape, b_shape, axis);
+    sd_concat.set_params(xclbin, pdi_name, a_shape, b_shape, axis);
     std::string test_golden_root_dir =
         "tests/cpp/unit_tests/testDataMladf/sd_vae_dec_concat/";
     std::string ifm_path = test_golden_root_dir + shape_key + "_ifm32.txt";
@@ -258,7 +279,7 @@ int test_sd_concat(const std::vector<int> &a_shape,
         ryzenai::sd::concat<std::uint16_t, std::uint16_t>(a_type, c_type, false,
                                                           attr);
     sd_concat.debug(debug);
-    sd_concat.set_params(model_name, a_shape, b_shape, axis);
+    sd_concat.set_params(xclbin, pdi_name, a_shape, b_shape, axis);
     // gen rand
     std::vector<float> raw_a(get_shape_ele_num(a_shape), 0);
     initialize_random_float(raw_a, 2, -2);
@@ -311,63 +332,63 @@ int test_sd_concat(const std::vector<int> &a_shape,
 TEST(SD_CONCAT_Test, Golden_ConcatLayer6) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 64, 64, 320}, {2, 64, 64, 320}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONCAT_Test, Golden_ConcatLayer7) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 64, 64, 640}, {2, 64, 64, 320}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONCAT_Test, Golden_ConcatLayer8) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 8, 8, 1280}, {2, 8, 8, 1280}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONCAT_Test, Golden_ConcatLayer9) {
   int err_count =
       test_sd_concat<uint16_t, uint16_t>({2, 160}, {2, 160}, false, "bfloat16",
-                                         "bfloat16", "SD_VAE_DEC", 0.01, true);
+                                         "bfloat16", "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONCAT_Test, Golden_ConcatLayer1) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 16, 16, 1280}, {2, 16, 16, 1280}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONCAT_Test, Golden_ConcatLayer2) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 16, 16, 1280}, {2, 16, 16, 640}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONCAT_Test, Golden_ConcatLayer3) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 32, 32, 1280}, {2, 32, 32, 640}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONCAT_Test, Golden_ConcatLayer4) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 32, 32, 640}, {2, 32, 32, 320}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONCAT_Test, Golden_ConcatLayer5) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 32, 32, 640}, {2, 32, 32, 640}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -375,92 +396,108 @@ TEST(SD_CONCAT_Test, Golden_ConcatLayer5) {
 TEST(SD_CONCAT_Test, Golden_SD3ConcatLayer1) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 1024, 1536}, {2, 154, 1536}, true, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true, 1);
+      "SD_VAE_DEC", 0.01f, true, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONCAT_Test, Golden_SD3ConcatLayer2) {
+TEST(SD_CONCAT_Test, Golden_SD3_DIT1024_Layer1) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 4096, 1536}, {2, 154, 1536}, true, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true, 1);
+      "SD3_DIT1024", 0.01f, true, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // Random unittest
 
 // SD3.0
-TEST(SD_CONCAT_Test, Random_SD3ConcatLayer1) {
+// 512
+TEST(SD_CONCAT_Test, Random_SD3_DIT512_1) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 1024, 1536}, {2, 154, 1536}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, false, 1);
+      "SD3_DIT512", 0.01f, false, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONCAT_Test, Random_SD3ConcatLayer2) {
+TEST(SD_CONCAT_Test, Random_SD3_DIT512_2) {
+  int err_count = test_sd_concat<uint16_t, uint16_t>(
+      {2, 1024, 1536}, {2, 160, 1536}, false, "bfloat16", "bfloat16",
+      "SD3_DIT512", 0.01f, false, 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// 1024
+TEST(SD_CONCAT_Test, Random_SD3_DIT1024_Layer1) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 4096, 1536}, {2, 154, 1536}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, false, 1);
+      "SD3_DIT1024", 0.01f, false, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONCAT_Test, Random_ConcatLayer1) {
+TEST(SD_CONCAT_Test, Random_SD3_DIT1024_Layer2) {
+  int err_count = test_sd_concat<uint16_t, uint16_t>(
+      {2, 4096, 1536}, {2, 160, 1536}, false, "bfloat16", "bfloat16",
+      "SD3_DIT1024", 0.01f, false, 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONCAT_Test, Random_SD15_UNET_2) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 16, 16, 1280}, {2, 16, 16, 1280}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONCAT_Test, Random_ConcatLayer2) {
+TEST(SD_CONCAT_Test, Random_SD15_UNET_3) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 16, 16, 1280}, {2, 16, 16, 640}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONCAT_Test, Random_ConcatLayer3) {
+TEST(SD_CONCAT_Test, Random_SD15_UNET_4) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 32, 32, 1280}, {2, 32, 32, 640}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONCAT_Test, Random_ConcatLayer4) {
+TEST(SD_CONCAT_Test, Random_SD15_UNET_6) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 32, 32, 640}, {2, 32, 32, 320}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONCAT_Test, Random_ConcatLayer5) {
+TEST(SD_CONCAT_Test, Random_SD15_UNET_5) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 32, 32, 640}, {2, 32, 32, 640}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONCAT_Test, Random_ConcatLayer6) {
+TEST(SD_CONCAT_Test, Random_SD15_UNET_8) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 64, 64, 320}, {2, 64, 64, 320}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONCAT_Test, Random_ConcatLayer7) {
+TEST(SD_CONCAT_Test, Random_SD15_UNET_7) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 64, 64, 640}, {2, 64, 64, 320}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONCAT_Test, Random_ConcatLayer8) {
+TEST(SD_CONCAT_Test, Random_SD15_UNET_1) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
       {2, 8, 8, 1280}, {2, 8, 8, 1280}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONCAT_Test, Random_ConcatLayer9) {
+TEST(SD_CONCAT_Test, Random_SD15_UNET_9) {
   int err_count = test_sd_concat<uint16_t, uint16_t>(
-      {2, 160}, {2, 160}, false, "bfloat16", "bfloat16", "SD_VAE_DEC", 0.01);
+      {2, 160}, {2, 160}, false, "bfloat16", "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

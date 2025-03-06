@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -43,6 +43,59 @@ json_str_to_ctrlpkt_patch_info(const std::vector<uint8_t> &json_vec) {
     for (const auto &pi : data.at("ctrl_pkt_patch_info")) {
       patch_info.push_back({pi.at("offset"), pi.at("size"),
                             pi.at("xrt_arg_idx"), pi.at("bo_offset")});
+    }
+  } catch (std::exception &e) {
+    DD_THROW(OpsFusion::dd_format(
+        "Failed to parse ctrl pkt meta JSON String: (Detail: {})", e.what()));
+  }
+
+  return patch_info;
+}
+
+std::vector<CtrlPktPatchInfo>
+ext_buf_json_to_ctrlpkt_patch_info(const std::vector<uint8_t> &json_vec,
+                                   const std::vector<uint8_t> &ctrl_bin) {
+  std::string json_str(json_vec.begin(), json_vec.end());
+  json data;
+  try {
+    data = json::parse(json_str, nullptr, true);
+  } catch (std::exception &e) {
+    DD_THROW(OpsFusion::dd_format(
+        "Failed to parse ctrl pkt meta JSON String: (Detail: {})", e.what()));
+  }
+
+  RYZENAI_LOG_TRACE("Loading the ctrl_pkt_meta.json ... DONE");
+  std::vector<CtrlPktPatchInfo> patch_info;
+  try {
+    for (const auto &[key, value] : data.at("external_buffers").items()) {
+      size_t xrt_id = value.at("xrt_id").template get<std::uint8_t>();
+      size_t bo_offset = 0;
+      if (value.contains("coalesed_buffers")) {
+        for (const auto &buf : value.at("coalesed_buffers")) {
+          bo_offset = buf.at("offset_in_bytes");
+          for (const auto &pi : buf.at("control_packet_patch_locations")) {
+            uint64_t val = 0;
+            if (pi.at("operation") == "read_add_write") {
+              val =
+                  *(uint64_t *)(ctrl_bin.data() +
+                                pi.at("offset").template get<std::uint32_t>());
+            }
+            patch_info.push_back(
+                {pi.at("offset"), pi.at("size"), xrt_id, bo_offset + val});
+          }
+        }
+      } else {
+        if (!value.contains("control_packet_patch_locations")) {
+          continue;
+        }
+        for (const auto &pi : value.at("control_packet_patch_locations")) {
+          uint64_t val =
+              *(uint64_t *)(ctrl_bin.data() +
+                            pi.at("offset").template get<std::uint32_t>());
+          patch_info.push_back(
+              {pi.at("offset"), pi.at("size"), xrt_id, bo_offset + val});
+        }
+      }
     }
   } catch (std::exception &e) {
     DD_THROW(OpsFusion::dd_format(

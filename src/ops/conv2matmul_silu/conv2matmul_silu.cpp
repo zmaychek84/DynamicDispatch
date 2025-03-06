@@ -1,6 +1,23 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 #include <any>
 #include <iostream>
 #include <map>
@@ -23,7 +40,7 @@
 
 #include "utils/ctrl_pkt_utils.hpp"
 
-#include "ops/ops_common/silu_lut_bf16_512.h"
+#include "ops/ops_common/psu_silu_lut_bf16_512.h"
 #include <ops/conv2matmul_silu/conv2matmul_silu.hpp>
 #include <ops/op_interface.hpp>
 #include <ops/ops_common/ctrlpkt.hpp>
@@ -169,20 +186,43 @@ conv2matmul_silu<InT, WtT, OutT>::conv2matmul_silu(
   txnbin_b_header = {
       {"uint8", "w8"}, {"int8", "w8"}, {"uint4", "w4"}, {"int4", "w4"}};
 
-  txnbin_acc_header = {{"uint16", "acc16"}, {"int16", "acc16"}};
+  txnbin_acc_header = {{"uint16", "acc16"}, {"bfloat16", "accbf16"}};
 
   // default shape is the padded shaped used in AIE for BO allocation
-  default_shapes_["conv2gemm_silu_4x4_a16w4acc16"] =
+  default_shapes_["conv2gemm_silu_4x4_a16w4accbf16"] =
       std::vector<matrix_shapes>{};
 
-  default_shapes_["conv2gemm_silu_4x4_a16w4acc16"].emplace_back(1, 3072, 8192);
-  default_shapes_["conv2gemm_silu_4x4_a16w4acc16"].emplace_back(64, 3072, 8192);
+  default_shapes_["conv2gemm_silu_4x4_a16w4accbf16"].emplace_back(1, 3072,
+                                                                  8192);
+  default_shapes_["conv2gemm_silu_4x4_a16w4accbf16"].emplace_back(64, 3072,
+                                                                  8192);
+
+  default_shapes_["conv2gemm_silu_8x4_a16w4accbf16"] =
+      std::vector<matrix_shapes>{};
+
+  default_shapes_["conv2gemm_silu_8x4_a16w4accbf16"].emplace_back(1, 3072,
+                                                                  8192);
+  default_shapes_["conv2gemm_silu_8x4_a16w4accbf16"].emplace_back(64, 3072,
+                                                                  8192);
+
+  default_shapes_["conv2gemm_silu_8x4_a16w4accbf16"].emplace_back(1, 1536,
+                                                                  8960);
+  default_shapes_["conv2gemm_silu_8x4_a16w4accbf16"].emplace_back(64, 1536,
+                                                                  8960);
 
   // raw shape is the actual shape from ONNX
-  raw_shapes_["conv2gemm_silu_4x4_a16w4acc16"] = std::vector<matrix_shapes>{};
+  raw_shapes_["conv2gemm_silu_4x4_a16w4accbf16"] = std::vector<matrix_shapes>{};
 
-  raw_shapes_["conv2gemm_silu_4x4_a16w4acc16"].emplace_back(1, 3072, 8192);
-  raw_shapes_["conv2gemm_silu_4x4_a16w4acc16"].emplace_back(64, 3072, 8192);
+  raw_shapes_["conv2gemm_silu_4x4_a16w4accbf16"].emplace_back(1, 3072, 8192);
+  raw_shapes_["conv2gemm_silu_4x4_a16w4accbf16"].emplace_back(64, 3072, 8192);
+
+  raw_shapes_["conv2gemm_silu_8x4_a16w4accbf16"] = std::vector<matrix_shapes>{};
+
+  raw_shapes_["conv2gemm_silu_8x4_a16w4accbf16"].emplace_back(1, 3072, 8192);
+  raw_shapes_["conv2gemm_silu_8x4_a16w4accbf16"].emplace_back(64, 3072, 8192);
+
+  raw_shapes_["conv2gemm_silu_8x4_a16w4accbf16"].emplace_back(1, 1536, 8960);
+  raw_shapes_["conv2gemm_silu_8x4_a16w4accbf16"].emplace_back(64, 1536, 8960);
 
   a_dtype_ = a_dtype;
   b_dtype_ = b_dtype;
@@ -229,33 +269,39 @@ conv2matmul_silu<InT, WtT, OutT>::conv2matmul_silu(
     param_fname_prefix_ = "conv2gemm_silu_4x4_" + txnbin_a_header.at(a_dtype_) +
                           txnbin_b_header.at(b_dtype_) +
                           txnbin_acc_header.at(c_dtype_);
+  } else if (design_param_.find("8x4") != std::string::npos) { // 8x4 design
+    txn_fname_prefix_ = "conv2gemm_silu_8x4_" + txnbin_a_header.at(a_dtype_) +
+                        txnbin_b_header.at(b_dtype_) +
+                        txnbin_acc_header.at(c_dtype_);
+    param_fname_prefix_ = "conv2gemm_silu_8x4_" + txnbin_a_header.at(a_dtype_) +
+                          txnbin_b_header.at(b_dtype_) +
+                          txnbin_acc_header.at(c_dtype_);
+  }
 
-    if (attr.count("input_shape") &&
-        attr.at("input_shape").type() == typeid(std::vector<int>)) {
-      const auto &input_shape_vector =
-          std::any_cast<const std::vector<int> &>(attr.at("input_shape"));
+  if (attr.count("input_shape") &&
+      attr.at("input_shape").type() == typeid(std::vector<int>)) {
+    const auto &input_shape_vector =
+        std::any_cast<const std::vector<int> &>(attr.at("input_shape"));
 
-      if (input_shape_vector.size() == 4) {
-        inputShape_[0] = input_shape_vector[0];
-        inputShape_[1] = input_shape_vector[1];
-        inputShape_[2] = input_shape_vector[2];
-        inputShape_[3] = input_shape_vector[3];
-      } else {
-        std::cout
-            << "Input Shape attribute does not have the expected number of "
-               "elements.Number of passed : input_shape_vector.size(), "
-               "Expected:4"
-            << std::endl;
-      }
-      RYZENAI_LOG_TRACE("conv2gemm_silu: InputShape: " +
-                        std::to_string(input_shape_vector[0]) + ", " +
-                        std::to_string(input_shape_vector[1]) + ", " +
-                        std::to_string(input_shape_vector[2]) + ", " +
-                        std::to_string(input_shape_vector[3]));
+    if (input_shape_vector.size() == 4) {
+      inputShape_[0] = input_shape_vector[0];
+      inputShape_[1] = input_shape_vector[1];
+      inputShape_[2] = input_shape_vector[2];
+      inputShape_[3] = input_shape_vector[3];
     } else {
-      std::cout << "Input Shape attribute not found or not of correct type."
+      std::cout << "Input Shape attribute does not have the expected number of "
+                   "elements.Number of passed : input_shape_vector.size(), "
+                   "Expected:4"
                 << std::endl;
     }
+    RYZENAI_LOG_TRACE(
+        "conv2gemm_silu: InputShape: " + std::to_string(input_shape_vector[0]) +
+        ", " + std::to_string(input_shape_vector[1]) + ", " +
+        std::to_string(input_shape_vector[2]) + ", " +
+        std::to_string(input_shape_vector[3]));
+  } else {
+    std::cout << "Input Shape attribute not found or not of correct type."
+              << std::endl;
   }
 
   RYZENAI_LOG_TRACE(
@@ -327,6 +373,14 @@ void conv2matmul_silu<InT, WtT, OutT>::set_params(
     is_ctrl_pkt_ = 1;
     XCLBIN_FNAME =
         OpInterface::get_dd_base_dir() + ryzenai::PSU_4x4_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "8x4PSU") {
+    is_ctrl_pkt_ = 1;
+    XCLBIN_FNAME =
+        OpInterface::get_dd_base_dir() + ryzenai::PSU_8x4_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "8x4HFDS") {
+    is_ctrl_pkt_ = 1;
+    XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
+                   ryzenai::HFDS_8x4_A16W8_QDQ_XCLBIN_PATH;
   } else {
     throw std::invalid_argument("model_name is not supported");
   }
@@ -373,14 +427,16 @@ void conv2matmul_silu<InT, WtT, OutT>::initialize_const_params(
   std::vector<WtT> buf(w_shape_[0] * w_shape_[1]);
 
   size_t M;
-  if (design_param_ == "4x4PSU" && input_format_ == "NHWC") {
+  if ((design_param_ == "4x4PSU" && input_format_ == "NHWC") ||
+      (design_param_ == "8x4PSU" && input_format_ == "NHWC") ||
+      (design_param_ == "8x4HFDS" && input_format_ == "NHWC")) {
     M = inputShape_[1] * inputShape_[2];
   } else { // NCHW
     M = inputShape_[2] * inputShape_[3];
   }
 
   SUBV_T key = {(int)M, (int)w_shape_[0], (int)w_shape_[1]};
-  auto subv_mode = search_subv_mode(key, b_shift_value_);
+  auto subv_mode = search_subv_mode(key, b_shift_value_, design_param_);
   if (subv_mode < 0) {
     throw std::runtime_error("conv2matmul_silu : Invalid subv mode");
   }
@@ -479,7 +535,7 @@ void conv2matmul_silu<InT, WtT, OutT>::initialize_const_params(
   M = inputShape_[2] * inputShape_[3];
 
   SUBV_T key = {(int)M, (int)w_shape_[0], (int)w_shape_[1]};
-  auto subv_mode = search_subv_mode(key, b_shift_value_);
+  auto subv_mode = search_subv_mode(key, b_shift_value_, design_param_);
   if (subv_mode < 0) {
     throw std::runtime_error("conv2matmul_silu : Invalid subv mode");
   }
@@ -790,7 +846,7 @@ std::vector<OpArgMap> conv2matmul_silu<InT, WtT, OutT>::get_buffer_reqs(
 
   int Ksubv;
   SUBV_T key = {(int)M, (int)K, (int)N};
-  auto subv_mode = search_subv_mode(key, b_shift_value_);
+  auto subv_mode = search_subv_mode(key, b_shift_value_, design_param_);
   if (subv_mode < 0) {
     throw std::runtime_error("conv2matmul_silu : Invalid subv mode");
   }

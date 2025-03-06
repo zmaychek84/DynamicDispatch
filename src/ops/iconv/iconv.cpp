@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <array>
@@ -20,6 +35,9 @@
 
 // dpu kernel metadata
 #include <utils/dpu_mdata.hpp>
+
+#include <ops/ops_common/coeffs.hpp>
+#include <ops/ops_common/op_util.hpp>
 
 #include <txn_container.hpp>
 #include <utils/instruction_registry.hpp>
@@ -274,6 +292,7 @@ iconv<InT, WtT, OutT>::iconv(const std::string &a_dtype,
   a_dtype_size_ = sizeof(InT);
   b_dtype_size_ = sizeof(WtT);
   c_dtype_size_ = sizeof(OutT);
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
 
   iconv_id_ = iconv_count++;
 
@@ -456,16 +475,61 @@ void iconv<InT, WtT, OutT>::set_params(const std::string &model_name,
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }
 
+// function to calculate qdq params in generic pass flow
+void calculate_qdq(ConstBufferIO &io, const std::vector<Tensor> &const_params,
+                   const std::map<std::string, std::any> &attr,
+                   std::vector<int64_t> &iconv_qdq,
+                   std::vector<int32_t> &iconv_qdq_params) {
+
+  auto weightss = static_cast<uint8_t *>(const_params.at(0).data);
+  auto weights_scale = *(static_cast<float *>(const_params.at(1).data));
+  auto weights_zero_point = *(static_cast<uint8_t *>(const_params.at(2).data));
+
+  auto in_scale = *(static_cast<float *>(const_params.at(3).data));
+  auto in_zero_point = *(static_cast<uint16_t *>(const_params.at(4).data));
+
+  auto out_scale = *(static_cast<float *>(const_params.at(5).data));
+  auto out_zero_point = *(static_cast<uint16_t *>(const_params.at(6).data));
+
+  float bias_scale = 0;
+  int32_t bias_zero_point = 0;
+  std::vector<int32_t> bias;
+
+  if (attr.count("is_bias")) {
+    auto biass = static_cast<int32_t *>(const_params.at(7).data);
+    std::vector<size_t> bias_shape = const_params.at(7).shape;
+    bias.assign(biass, biass + bias_shape[0]);
+    bias_scale = *(static_cast<float *>(const_params.at(8).data));
+    bias_zero_point = *(static_cast<int32_t *>(const_params.at(9).data));
+  }
+
+  std::vector<size_t> kernel_shape = const_params.at(0).shape;
+  std::vector<int64_t> ks(kernel_shape.begin(), kernel_shape.end());
+  int total_shape = (int)kernel_shape[0] * (int)kernel_shape[1] *
+                    (int)kernel_shape[2] * (int)kernel_shape[3];
+  std::vector<uint8_t> w(weightss, weightss + total_shape);
+
+  auto [C0, C1, C2, conv_shift, shft_c2] =
+      OpsFusion::coeffs::dq_uint16A_uint8W_conv_q_param_gen(
+          in_scale, (uint16_t)in_zero_point, w, weights_scale,
+          (uint8_t)weights_zero_point, ks, bias, bias_scale,
+          (int32_t)bias_zero_point, out_scale, (uint16_t)out_zero_point);
+  // iconv_qdq.resize(C0.size());
+  iconv_qdq.assign(C0.begin(), C0.end());
+
+  iconv_qdq_params[2] = static_cast<int32_t>(C1);
+  iconv_qdq_params[3] = static_cast<int32_t>(C2);
+  iconv_qdq_params[8] = static_cast<int32_t>(shft_c2);
+  iconv_qdq_params[9] = static_cast<int32_t>(conv_shift);
+  iconv_qdq_params[10] = (int32_t)weights_zero_point;
+  iconv_qdq_params[11] = (int32_t)in_zero_point;
+}
+
 template <typename InT, typename WtT, typename OutT>
 void iconv<InT, WtT, OutT>::initialize_const_params(
     ConstBufferIO &io, const std::vector<Tensor> &const_params,
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("iconv initialize_const_params(ptr) ...");
-
-  DD_THROW_IF((const_params.size() != 3),
-              OpsFusion::dd_format("Unsupported const spec for iconv\n") +
-                  OpsFusion::dd_format("(Details : #const params == 3 ({})",
-                                       const_params.size()));
 
   auto CO = const_params.at(0).shape.at(0);
   auto CI = const_params.at(0).shape.at(1);
@@ -482,10 +546,32 @@ void iconv<InT, WtT, OutT>::initialize_const_params(
 
   auto CO_padded = CO;
   auto CI_padded = CI;
-  auto weights = (WtT *)const_params.at(0).data;
 
-  auto qdq = (int64_t *)const_params.at(1).data;
-  auto qdq_params = (int32_t *)const_params.at(2).data;
+  int64_t *qdq;
+  int32_t *qdq_params;
+  WtT *weights;
+
+  weights = (WtT *)const_params.at(0).data;
+  iconv_qdq = std::vector<int64_t>(CO, 0);
+  iconv_qdq_params = std::vector<int32_t>(16, 0);
+  if (is_generic_fusion) {
+    DD_THROW_IF((const_params.size() != 10),
+                OpsFusion::dd_format(
+                    "Unsupported const spec for iconv for generic flow\n") +
+                    OpsFusion::dd_format("(Details : #const params == 10 ({})",
+                                         const_params.size()));
+
+    calculate_qdq(io, const_params, attr, iconv_qdq, iconv_qdq_params);
+    qdq = iconv_qdq.data();
+    qdq_params = iconv_qdq_params.data();
+  } else {
+    DD_THROW_IF((const_params.size() != 3),
+                OpsFusion::dd_format("Unsupported const spec for iconv\n") +
+                    OpsFusion::dd_format("(Details : #const params == 3 ({})",
+                                         const_params.size()));
+    qdq = (int64_t *)const_params.at(1).data;
+    qdq_params = (int32_t *)const_params.at(2).data;
+  }
 
   if (strides_[0] == 1 && (CI == 1)) { // DWC
     auto buffer_size = iconv_matrix::DwcWgtTensor<WtT, C_IN_SPLIT_DWC>::size(
@@ -982,8 +1068,9 @@ const std::vector<uint8_t> iconv<InT, WtT, OutT>::get_transaction_bin(
     const std::map<std::string, std::any> &attr) const {
   auto KY = input.at(1).shape.at(2);
   auto KX = input.at(1).shape.at(3);
+  size_t output_idx = is_generic_fusion ? 11 : 4;
   auto [CI, YI, XI] = extract_CYX(input.at(0), input_format_);
-  auto [CO, YO, XO] = extract_CYX(input.at(4), input_format_);
+  auto [CO, YO, XO] = extract_CYX(input.at(output_idx), input_format_);
   std::vector<size_t> input_shape = {CI, YI, XI, CO, YO, XO, KY, KX};
   auto param_shape = map_padded_shape(input_shape);
   std::string txn_key = get_instr_key(txn_fname_prefix_, param_shape);
@@ -994,6 +1081,10 @@ const std::vector<uint8_t> iconv<InT, WtT, OutT>::get_transaction_bin(
   // assume input.at(3) is qdq_params
   auto qdq_param = (int32_t *)input.at(3).data;
   uint32_t zp = uint16_t(qdq_param[qdq_ifm_zp_idx]);
+  if (is_generic_fusion) {
+    float in_zp = std::any_cast<std::vector<float>>(attr.at("input_zp"))[0];
+    zp = (uint32_t)in_zp;
+  }
   uint32_t pad_val = zp | (zp << 16);
   std::vector<uint8_t> txn_w_pad;
   if (design_param_.find("4x4") != std::string::npos) { // mzdk5 4x4 design
@@ -1010,8 +1101,10 @@ const std::vector<uint8_t> iconv<InT, WtT, OutT>::get_super_kernel_params(
     const std::map<std::string, std::any> &attr) const {
   auto KY = input.at(1).shape.at(2);
   auto KX = input.at(1).shape.at(3);
+  size_t output_idx = is_generic_fusion ? 11 : 4;
+
   auto [CI, YI, XI] = extract_CYX(input.at(0), input_format_);
-  auto [CO, YO, XO] = extract_CYX(input.at(4), input_format_);
+  auto [CO, YO, XO] = extract_CYX(input.at(output_idx), input_format_);
   std::vector<size_t> input_shape = {CI, YI, XI, CO, YO, XO, KY, KX};
   auto param_shape = map_padded_shape(input_shape);
   // TODO: Add check to validate tensor shapes
@@ -1027,8 +1120,10 @@ std::vector<CtrlPktPatchInfo> iconv<InT, WtT, OutT>::get_ctrl_pkt_patch_info(
     const std::map<std::string, std::any> &attr) const {
   auto KY = input.at(1).shape.at(2);
   auto KX = input.at(1).shape.at(3);
+  size_t output_idx = is_generic_fusion ? 11 : 4;
+
   auto [CI, YI, XI] = extract_CYX(input.at(0), input_format_);
-  auto [CO, YO, XO] = extract_CYX(input.at(4), input_format_);
+  auto [CO, YO, XO] = extract_CYX(input.at(output_idx), input_format_);
   std::vector<size_t> input_shape = {CI, YI, XI, CO, YO, XO, KY, KX};
   auto ctrl_pkt_shape = map_padded_shape(input_shape);
   // TODO: Add check to validate tensor shapes
@@ -1050,8 +1145,10 @@ std::vector<uint8_t> iconv<InT, WtT, OutT>::get_ctrl_pkts(
     const std::map<std::string, std::any> &attr) const {
   auto KY = input.at(1).shape.at(2);
   auto KX = input.at(1).shape.at(3);
+  size_t output_idx = is_generic_fusion ? 11 : 4;
+
   auto [CI, YI, XI] = extract_CYX(input.at(0), input_format_);
-  auto [CO, YO, XO] = extract_CYX(input.at(4), input_format_);
+  auto [CO, YO, XO] = extract_CYX(input.at(output_idx), input_format_);
   std::vector<size_t> input_shape = {CI, YI, XI, CO, YO, XO, KY, KX};
   auto ctrl_pkt_shape = map_padded_shape(input_shape);
   // TODO: Add check to validate tensor shapes
@@ -1073,8 +1170,10 @@ std::vector<OpArgMap> iconv<InT, WtT, OutT>::get_buffer_reqs(
   // Check if IO buffers have batch.
   auto KY = input.at(1).shape.at(2);
   auto KX = input.at(1).shape.at(3);
+  size_t output_idx = is_generic_fusion ? 11 : 4;
+
   auto [CI, YI, XI] = extract_CYX(input.at(0), input_format_);
-  auto [CO, YO, XO] = extract_CYX(input.at(4), input_format_);
+  auto [CO, YO, XO] = extract_CYX(input.at(output_idx), input_format_);
   std::vector<size_t> input_shape = {CI, YI, XI, CO, YO, XO, KY, KX};
   auto param_shape = map_padded_shape(input_shape);
   CI = param_shape[0];
@@ -1163,7 +1262,7 @@ std::vector<OpArgMap> iconv<InT, WtT, OutT>::get_buffer_reqs(
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 4, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};

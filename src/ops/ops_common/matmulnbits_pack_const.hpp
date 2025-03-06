@@ -1,6 +1,22 @@
-/*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 #include <any>
 #include <assert.h>
 #include <iostream>
@@ -21,11 +37,10 @@
 
 namespace nb = nanobind;
 
-nb::ndarray<nb::numpy, const uint8_t>
-matmulnbits_pack_const_float32(nb::ndarray<> weights, nb::ndarray<> bias,
-                               nb::ndarray<> scale, nb::ndarray<> zeros, int K,
-                               int N, int block_size, bool bias_en,
-                               bool asymmetric_quant) {
+nb::ndarray<nb::numpy, const uint8_t> matmulnbits_pack_const_float32(
+    nb::ndarray<> weights, nb::ndarray<> bias, nb::ndarray<> scale,
+    nb::ndarray<> zeros, int K, int N, int block_size, bool bias_en,
+    bool asymmetric_quant, const std::string &mladf_version) {
 
   const size_t kblks = (K + block_size - 1) / block_size;
   std::vector<float> npu_scales(N * kblks);
@@ -34,15 +49,18 @@ matmulnbits_pack_const_float32(nb::ndarray<> weights, nb::ndarray<> bias,
   std::vector<int8_t> npu_zeros(N * kblks, 0);
   // fill this with zeros for MatMul without bias
   std::vector<float> npu_bias(N, 0);
-
+  int format = 8;
+  if (mladf_version == "v2") {
+    format = 0;
+  }
   // Original weights are in NxK/2 packed as uint8
   // Convert to KXN uint8
   const uint8_t *wts = (const uint8_t *)weights.data();
   for (int64_t i = 0; i < K; i += 2) {
     for (int64_t j = 0; j < N; j++) {
       auto srcv = wts[j * K / 2 + i / 2];
-      auto src0 = (srcv & 0xf) - 8;
-      auto src1 = ((srcv & 0xf0) >> 4) - 8;
+      auto src0 = (srcv & 0xf) - format;
+      auto src1 = ((srcv & 0xf0) >> 4) - format;
       npu_weights[i * N + j] = static_cast<int8_t>(src0);
       npu_weights[(i + 1) * N + j] = static_cast<int8_t>(src1);
     }
@@ -72,10 +90,10 @@ matmulnbits_pack_const_float32(nb::ndarray<> weights, nb::ndarray<> bias,
       // in src, each byte will have (up to) 2 zero points
       for (int j = 0; j < kblks; j = j + 2) {
         auto zpv = zero_pt[(i * (kblks_zp / 2)) + (j / 2)];
-        npu_zeros[j * N + i] = (zpv & 0xf) - 8;
+        npu_zeros[j * N + i] = (zpv & 0xf) - format;
 
         if ((j + 1) < kblks) {
-          npu_zeros[(j + 1) * N + i] = ((zpv & 0xf0) >> 4) - 8;
+          npu_zeros[(j + 1) * N + i] = ((zpv & 0xf0) >> 4) - format;
         }
       }
     }
@@ -102,11 +120,10 @@ matmulnbits_pack_const_float32(nb::ndarray<> weights, nb::ndarray<> bias,
   std::vector<Tensor> constant_tensors = {weight_tensor, bias_tensor,
                                           scales_tensor, zeros_tensor};
 
-  std::string mladf_version_("v1");
   constexpr int kMaxSeqLength = 3072;
 
   std::map<std::string, std::any> attrs;
-  attrs["op_version"] = mladf_version_;
+  attrs["op_version"] = mladf_version;
 
   auto ptr = std::make_unique<
       ryzenai::mladfmatmulbias<uint16_t, int8_t, uint16_t, uint16_t>>(

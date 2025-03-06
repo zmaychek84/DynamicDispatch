@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cmath>
 #include <fstream>
@@ -158,386 +173,38 @@ int test_silu(size_t M, size_t K, bool debug = false,
   return err_count;
 }
 
-// v1
-TEST(LLAMA2_SILU_Testa16, Kernel2048x11008_v1) {
-  int err_count = test_silu<uint16_t, uint16_t>(2048, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1024x11008_v1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1024, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel512x11008_v1) {
-  int err_count = test_silu<uint16_t, uint16_t>(512, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel256x11008_v1) {
-  int err_count = test_silu<uint16_t, uint16_t>(256, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel128x11008_v1) {
-  int err_count = test_silu<uint16_t, uint16_t>(128, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1x11008_v1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
+TEST(LLAMA2_SILU_V1, AutoRunAllTxnShapes) {
+  // Create an instance of the silu operator that will discover supported
+  // shapes.
+  using SiluOp = ryzenai::silu<uint16_t, uint16_t>;
+  SiluOp shapeFinderOp("bfloat16", true, std::map<std::string, std::any>());
 
-// new shapes
+  // Retrieve the discovered shapes.
+  auto shapes = shapeFinderOp.get_supported_shapes();
 
-TEST(LLAMA2_SILU_Testa16, Kernel384x11008) {
-  int err_count = test_silu<uint16_t, uint16_t>(384, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel640x11008) {
-  int err_count = test_silu<uint16_t, uint16_t>(640, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel768x11008) {
-  int err_count = test_silu<uint16_t, uint16_t>(768, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel896x11008) {
-  int err_count = test_silu<uint16_t, uint16_t>(896, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1152x11008) {
-  int err_count = test_silu<uint16_t, uint16_t>(1152, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1280x11008) {
-  int err_count = test_silu<uint16_t, uint16_t>(1280, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1408x11008) {
-  int err_count = test_silu<uint16_t, uint16_t>(1408, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1536x11008) {
-  int err_count = test_silu<uint16_t, uint16_t>(1536, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1664x11008) {
-  int err_count = test_silu<uint16_t, uint16_t>(1664, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1792x11008) {
-  int err_count = test_silu<uint16_t, uint16_t>(1792, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1920x11008) {
-  int err_count = test_silu<uint16_t, uint16_t>(1920, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
+  // Optionally, build and apply a skip set if some shapes need to be excluded.
+  // auto skipSet = buildSkipSet_silu();
+  // shapes.erase(
+  //     std::remove_if(shapes.begin(), shapes.end(), [&](const auto &s) {
+  //       std::string key = shapeToKey(std::get<0>(s), std::get<1>(s));
+  //       return skipSet.find(key) != skipSet.end();
+  //     }),
+  //     shapes.end());
 
-// new shapes V1
+  // Loop over each discovered shape and run the test.
+  for (const auto &s : shapes) {
+    int M = std::get<0>(s);
+    int K = std::get<1>(s);
 
-TEST(LLAMA2_SILU_Testa16, Kernel384x11008_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(384, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel640x11008_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(640, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel768x11008_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(768, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel896x11008_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(896, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1152x11008_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1152, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1280x11008_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1280, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1408x11008_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1408, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1536x11008_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1536, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1664x11008_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1664, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1792x11008_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1792, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1920x11008_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1920, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
+    int err_count = test_silu<uint16_t, uint16_t>(M, K,
+                                                  /*debug=*/false,
+                                                  /*a_dtype=*/"bfloat16",
+                                                  /*c_dtype=*/"bfloat16",
+                                                  /*model_name=*/"LLAMA2",
+                                                  /*op_version=*/"v1",
+                                                  /*use_reference_data=*/false);
 
-// SiLU shapes for X14336
-
-TEST(LLAMA2_SILU_Testa16, Kernel2048x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(2048, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1024x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(1024, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel512x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(512, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel256x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(256, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel128x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(128, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(1, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-// v1
-TEST(LLAMA2_SILU_Testa16, Kernel2048x14336_v1) {
-  int err_count = test_silu<uint16_t, uint16_t>(2048, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1024x14336_v1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1024, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel512x14336_v1) {
-  int err_count = test_silu<uint16_t, uint16_t>(512, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel256x14336_v1) {
-  int err_count = test_silu<uint16_t, uint16_t>(256, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel128x14336_v1) {
-  int err_count = test_silu<uint16_t, uint16_t>(128, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1x14336_v1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-// new shapes
-
-TEST(LLAMA2_SILU_Testa16, Kernel384x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(384, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel640x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(640, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel768x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(768, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel896x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(896, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1152x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(1152, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1280x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(1280, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1408x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(1408, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1536x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(1536, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1664x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(1664, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1792x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(1792, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1920x14336) {
-  int err_count = test_silu<uint16_t, uint16_t>(1920, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-// new shapes V1
-
-TEST(LLAMA2_SILU_Testa16, Kernel384x14336_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(384, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel640x14336_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(640, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel768x14336_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(768, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel896x14336_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(896, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1152x14336_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1152, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1280x14336_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1280, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1408x14336_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1408, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1536x14336_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1536, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1664x14336_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1664, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1792x14336_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1792, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-TEST(LLAMA2_SILU_Testa16, Kernel1920x14336_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(1920, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-// tiling
-TEST(LLAMA2_SILU_Testa16, Kernel4096x11008_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(4096, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_SILU_Testa16, Kernel300) {
-  int err_count = test_silu<uint16_t, uint16_t>(300, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_SILU_Testa16, Kernel600) {
-  int err_count = test_silu<uint16_t, uint16_t>(600, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_SILU_Testa16, Kernel767) {
-  int err_count = test_silu<uint16_t, uint16_t>(767, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_SILU_Testa16, Kernel850) {
-  int err_count = test_silu<uint16_t, uint16_t>(850, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_SILU_Testa16, Kernel2047) {
-  int err_count = test_silu<uint16_t, uint16_t>(2047, 11008, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_SILU_Testa16, Kernel2048x20000_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(2048, 20000, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_SILU_Testa16, Kernel4096x14336_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(4096, 14336, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
-}
-
-TEST(LLAMA2_SILU_Testa16, Kernel4096x28672_V1) {
-  int err_count = test_silu<uint16_t, uint16_t>(4096, 28672, false, "bfloat16",
-                                                "bfloat16", "LLAMA2", "v1");
-  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+    EXPECT_EQ(err_count, 0) << "[test_silu] Error count = " << err_count
+                            << " for shape M=" << M << ", K=" << K;
+  }
 }

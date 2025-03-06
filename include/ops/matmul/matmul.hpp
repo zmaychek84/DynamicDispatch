@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,7 +22,7 @@
 
 #include <ops/op_interface.hpp>
 #include <ops/ops_common.hpp>
-
+#include <ops/ops_common/coeffs.hpp>
 namespace ryzenai {
 
 template <typename InT, typename WtT, typename OutT>
@@ -97,6 +96,8 @@ private:
   std::string txn_fname_prefix_;
   std::string param_fname_prefix_;
   bool is_ctrl_pkt_;
+  bool is_generic_fusion = false;
+  bool is_bias_in_onnx = false;
 
   void set_kernel_shapes();
   void setup_instr_registry();
@@ -104,6 +105,21 @@ private:
                             size_t n) const;
   std::tuple<size_t, size_t, size_t> map_padded_shape(size_t M, size_t K,
                                                       size_t N) const;
+  OpsFusion::coeffs::MatmulQDQParams mqdqparams;
+
+  void
+  calculate_matmul_coeffs(ConstBufferIO &io,
+                          const std::vector<Tensor> &const_params,
+                          const std::map<std::string, std::any> &attr = {});
+
+  void calculate_matmul_bias_coeffs(
+      ConstBufferIO &io, const std::vector<Tensor> &const_params,
+      const std::map<std::string, std::any> &attr = {});
+
+  void
+  calculate_derived_consts(ConstBufferIO &io,
+                           const std::vector<Tensor> &const_params,
+                           const std::map<std::string, std::any> &attr = {});
 
 public:
   matmul(const std::string &a_dtype, const std::string &b_dtype,

@@ -1,6 +1,22 @@
-/*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cfenv>
 #include <cmath>
@@ -95,8 +111,8 @@ static void dumpVectorToTxt(const std::vector<float> &data,
 
 template <typename T>
 int sd_resize_check_result(std::vector<T> cpu_Y, std::vector<T> aie_Y,
-                           float error_tolerance = 0.01,
-                           float pixel_L2_norm_tolerance = 0.01) {
+                           float error_tolerance = 0.01f,
+                           float pixel_L2_norm_tolerance = 0.01f) {
   int fail = 0;
   float max_diff = 0;
   float L2_norm = 0;
@@ -201,7 +217,8 @@ static float py3_round(float x) {
     return x_floor;
   }
 }
-static void initialize_random_float(std::vector<float> &vec, int max, int min) {
+static void initialize_random_float(std::vector<float> &vec, float max,
+                                    float min) {
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_real_distribution<float> dis(min, max);
@@ -234,11 +251,11 @@ int test_sd_resize(const std::vector<int> &a_shape,
                    const std::string &a_type = "bfloat16", // a bo
                    const std::string &c_type = "bfloat16", // c bo
                    const std::string &model_name = "SD_VAE_DEC",
-                   float pixel_L2_norm_tolerance = 0.01,
+                   float pixel_L2_norm_tolerance = 0.01f,
                    bool test_with_golden = false) {
   int quantize_err_count = 0;
   int unquantize_err_count = 0;
-  float error_tolerance = 0.01;
+  float error_tolerance = 0.01f;
   std::map<std::string, std::string> txnbin_a_header = {
       {"bfloat16", "a16bf"}, {"bfp16ebs8", "a16bfp"}};
   std::map<std::string, std::string> txnbin_c_header = {
@@ -265,12 +282,16 @@ int test_sd_resize(const std::vector<int> &a_shape,
   for (int i = 0; i < c_shape.size(); i++) {
     shape_key += "_" + std::to_string(c_shape[i]);
   }
+  std::string xclbin = sd_get_xclbin(model_name);
+  std::string pdi_name =
+      xclbin.empty() ? "DPU" : sd_get_pdi(xclbin, "SDResize");
+  std::cerr << "xclbin: " << xclbin << " pdi_name: " << pdi_name << std::endl;
   if (test_with_golden) {
     ryzenai::sd::resize sd_resize =
         ryzenai::sd::resize<std::uint16_t, std::uint16_t>(a_type, c_type, false,
                                                           attr);
     sd_resize.debug(debug);
-    sd_resize.set_params(model_name, a_shape, c_shape);
+    sd_resize.set_params(xclbin, pdi_name, a_shape, c_shape);
     std::string test_golden_root_dir =
         "tests/cpp/unit_tests/testDataMladf/sd_vae_dec_resize/";
     std::string ifm_path = test_golden_root_dir + shape_key + "_ifm32.txt";
@@ -329,7 +350,7 @@ int test_sd_resize(const std::vector<int> &a_shape,
         ryzenai::sd::resize<std::uint16_t, std::uint16_t>(a_type, c_type, false,
                                                           attr);
     sd_resize.debug(debug);
-    sd_resize.set_params(model_name, a_shape, c_shape);
+    sd_resize.set_params(xclbin, pdi_name, a_shape, c_shape);
     // gen rand
     std::vector<float> raw_a(get_shape_ele_num(a_shape), 0);
     initialize_random_float(raw_a, 2, -2);
@@ -391,42 +412,42 @@ int test_sd_resize(const std::vector<int> &a_shape,
 // TEST(SD_RESIZE_Test, Golden_Layer1) {
 //   int err_count = test_sd_resize<uint16_t, uint16_t>(
 //       {1, 64, 64, 512}, {1, 128, 128, 512}, false, "bfloat16", "bfloat16",
-//       "SD_VAE_DEC", 0.01, true);
+//       "SD_VAE_DEC", 0.01f, true);
 //   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 // }
 
 TEST(SD_RESIZE_Test, Golden_Layer2) {
   int err_count = test_sd_resize<uint16_t, uint16_t>(
       {1, 128, 128, 512}, {1, 256, 256, 512}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_RESIZE_Test, Golden_Layer3) {
   int err_count = test_sd_resize<uint16_t, uint16_t>(
       {1, 256, 256, 256}, {1, 512, 512, 256}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01, true);
+      "SD_VAE_DEC", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // TEST(SD_RESIZE_Test, Golden_Layer4) {
 //   int err_count = test_sd_resize<uint16_t, uint16_t>(
 //       {2, 16, 16, 1280}, {2, 32, 32, 1280}, false, "bfloat16", "bfloat16",
-//       "SD_VAE_DEC", 0.01, true);
+//       "SD_VAE_DEC", 0.01f, true);
 //   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 // }
 
 // TEST(SD_RESIZE_Test, Golden_Layer5) {
 //   int err_count = test_sd_resize<uint16_t, uint16_t>(
 //       {2, 32, 32, 640}, {2, 64, 64, 640}, false, "bfloat16", "bfloat16",
-//       "SD_VAE_DEC", 0.01, true);
+//       "SD_VAE_DEC", 0.01f, true);
 //   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 // }
 
 // TEST(SD_RESIZE_Test, Golden_Layer6) {
 //   int err_count = test_sd_resize<uint16_t, uint16_t>(
 //       {2, 8, 8, 1280}, {2, 16, 16, 1280}, false, "bfloat16", "bfloat16",
-//       "SD_VAE_DEC", 0.01, true);
+//       "SD_VAE_DEC", 0.01f, true);
 //   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 // }
 
@@ -434,71 +455,99 @@ TEST(SD_RESIZE_Test, Golden_Layer3) {
 TEST(SD_RESIZE_Test, Golden_SD3Layer1) {
   int err_count = test_sd_resize<uint16_t, uint16_t>(
       {1, 256, 256, 512}, {1, 512, 512, 512}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD_VAE_DEC", 0.01f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_RESIZE_Test, Golden_SD3Layer2) {
   int err_count = test_sd_resize<uint16_t, uint16_t>(
       {1, 512, 512, 256}, {1, 1024, 1024, 256}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD_VAE_DEC", 0.01f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // Random unittest
-TEST(SD_RESIZE_Test, Random_Layer1) {
+TEST(SD_RESIZE_Test, Random_SD3_VAE512_1) {
   int err_count = test_sd_resize<uint16_t, uint16_t>(
       {1, 64, 64, 512}, {1, 128, 128, 512}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_VAE512", 0.01f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_RESIZE_Test, Random_Layer2) {
+TEST(SD_RESIZE_Test, Random_SD15_VAE_1) {
+  int err_count = test_sd_resize<uint16_t, uint16_t>(
+      {1, 64, 64, 512}, {1, 128, 128, 512}, false, "bfloat16", "bfloat16",
+      "SD15_VAE", 0.01f);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_RESIZE_Test, Random_SD3_VAE1024_Layer1) {
   int err_count = test_sd_resize<uint16_t, uint16_t>(
       {1, 128, 128, 512}, {1, 256, 256, 512}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_RESIZE_Test, Random_Layer3) {
+TEST(SD_RESIZE_Test, Random_SD3_VAE512_2) {
+  int err_count = test_sd_resize<uint16_t, uint16_t>(
+      {1, 128, 128, 512}, {1, 256, 256, 512}, false, "bfloat16", "bfloat16",
+      "SD3_VAE512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_RESIZE_Test, Random_SD15_VAE_2) {
+  int err_count = test_sd_resize<uint16_t, uint16_t>(
+      {1, 128, 128, 512}, {1, 256, 256, 512}, false, "bfloat16", "bfloat16",
+      "SD15_VAE");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_RESIZE_Test, Random_SD3_VAE512_3) {
   int err_count = test_sd_resize<uint16_t, uint16_t>(
       {1, 256, 256, 256}, {1, 512, 512, 256}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_VAE512", 0.01f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_RESIZE_Test, Random_Layer4) {
+TEST(SD_RESIZE_Test, Random_SD15_VAE_3) {
+  int err_count = test_sd_resize<uint16_t, uint16_t>(
+      {1, 256, 256, 256}, {1, 512, 512, 256}, false, "bfloat16", "bfloat16",
+      "SD15_VAE", 0.01f);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_RESIZE_Test, Random_SD15_UNET_2) {
   int err_count = test_sd_resize<uint16_t, uint16_t>(
       {2, 16, 16, 1280}, {2, 32, 32, 1280}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET", 0.01f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_RESIZE_Test, Random_Layer5) {
+TEST(SD_RESIZE_Test, Random_SD15_UNET_3) {
   int err_count = test_sd_resize<uint16_t, uint16_t>(
       {2, 32, 32, 640}, {2, 64, 64, 640}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET", 0.01f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_RESIZE_Test, Random_Layer6) {
+TEST(SD_RESIZE_Test, Random_SD15_UNET_1) {
   int err_count = test_sd_resize<uint16_t, uint16_t>(
       {2, 8, 8, 1280}, {2, 16, 16, 1280}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD15_UNET", 0.01f);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // SD3
-TEST(SD_RESIZE_Test, Random_SD3Layer1) {
+TEST(SD_RESIZE_Test, Random_SD3_VAE1024_Layer2) {
   int err_count = test_sd_resize<uint16_t, uint16_t>(
       {1, 256, 256, 512}, {1, 512, 512, 512}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_RESIZE_Test, Random_SD3Layer2) {
+TEST(SD_RESIZE_Test, Random_SD3_VAE1024_Layer3) {
   int err_count = test_sd_resize<uint16_t, uint16_t>(
       {1, 512, 512, 256}, {1, 1024, 1024, 256}, false, "bfloat16", "bfloat16",
-      "SD_VAE_DEC", 0.01);
+      "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

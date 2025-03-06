@@ -38,11 +38,12 @@ endif()
 
 set(DD_SRC_INCLUDE_DIRS
     ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/transaction/include
+    ${PROJECT_SOURCE_DIR}/pm_package/include
     ${PROJECT_SOURCE_DIR}/xclbin/include ${PROJECT_SOURCE_DIR}/tests
 )
 
 if(MSVC)
-  set(DD_DEFAULT_COMPILE_OPTIONS "/Zc:__cplusplus" "/W3")
+  set(DD_DEFAULT_COMPILE_OPTIONS "/Zc:__cplusplus" "/W3" "/guard:cf")
 
   # set DEFAULT PARALLEL Level
   if(NOT DEFINED ENV{NUMBER_OF_PROCESSORS})
@@ -52,6 +53,8 @@ if(MSVC)
   endif()
 endif()
 
+option(DD_DISABLE_AIEBU "Option to disable building aiebu" OFF)
+
 include(FetchContent)
 if(CMAKE_VERSION VERSION_GREATER "3.24")
   cmake_policy(SET CMP0135 NEW)
@@ -60,6 +63,9 @@ endif()
 find_package(nlohmann_json REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_package(spdlog REQUIRED)
+if(WIN32 AND (NOT DD_DISABLE_AIEBU))
+  find_package(AIEBU REQUIRED)
+endif()
 find_package(xaiengine REQUIRED)
 find_package(XRT REQUIRED)
 include(zlib_dep) # find zlib
@@ -76,8 +82,8 @@ endif()
 option(UNIT_TEST_PERF_EN "Enable Performance checks in unit tests" OFF)
 option(ENABLE_DD_TESTS "Enable tests" OFF)
 option(ENABLE_SIMNOWLITE_BUILD "Build for linux simnowlite testing" OFF)
-option(LOGGING_EN "Enable debug logging" OFF)
-option(PERF_LOGGING_EN "Enable performance logging" OFF)
+option(LOGGING_EN "Enable debug logging" ON)
+option(PERF_LOGGING_EN "Enable performance logging" ON)
 option(ENABLE_DD_PYTHON "Enable building the Python library" OFF)
 option(XRT_RUNLIST_EN "Enable xrt experimental runlist feature" OFF)
 option(DISABLE_LARGE_TXN_OPS "Disable large txn binaries in the package" OFF)
@@ -100,6 +106,11 @@ if(LOGGING_EN)
   message("RYZENAI_TRACE is defined.")
 endif()
 
+if(DD_DISABLE_AIEBU)
+  add_definitions(-DDD_DISABLE_AIEBU)
+  message("DD_DISABLE_AIEBU is defined")
+endif()
+
 if(PERF_LOGGING_EN)
   add_definitions(-DRYZENAI_PERF)
   message("RYZENAI_PERF is defined.")
@@ -118,6 +129,7 @@ endif()
 
 add_subdirectory(src)
 add_subdirectory(transaction)
+add_subdirectory(pm_package)
 add_subdirectory(xclbin)
 
 if(ENABLE_DD_TESTS)

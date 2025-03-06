@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -111,17 +111,18 @@ int test_sd_silu(const std::string &meta_json, size_t B = 2, size_t H = 64,
   cfg.txn_opt = true;
 
   std::string xclbin_fname =
-      Utils::get_env_var("DD_ROOT") + "\\xclbin\\stx\\SDSilu.xclbin";
+      Utils::get_env_var("DD_ROOT") + "\\xclbin\\stx\\SD15_unet_2x4x4.xclbin";
 
   auto xclbin_content = OpsFusion::read_bin_file<char>(xclbin_fname);
   cfg.xclbin_content = &xclbin_content;
+  cfg.model_name = "SD15";
   rt_cmp.compile(meta, "", cfg);
   rt_cmp.save_state("dd_metastate");
   std::cerr << "Compiled" << std::endl;
 
   OpsFusion::FusionRuntime rt(xclbin_fname, xclbin_content);
   rt.load_state("dd_metastate");
-  rt.init(meta);
+  rt.init(meta, "", cfg);
 
   std::vector<float> a_aie_float(B * H * W * C, 0);
   initialize_random_float(a_aie_float, 2, -2);

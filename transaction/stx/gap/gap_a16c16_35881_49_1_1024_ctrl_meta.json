@@ -1,0 +1,61 @@
+{
+  "external_buffers": {
+    "buffer0": {
+      "xrt_id": 0,
+      "size_in_bytes": 128,
+      "name": "coalesed_weights",
+      "coalesed_buffers": [
+        {
+          "logical_id": 0,
+          "offset_in_bytes": 0,
+          "name": "compute_graph.blk0.DS_layers[0].wts_ddr",
+          "control_packet_patch_locations": [
+            {
+              "offset": 5280,
+              "size": 6,
+              "operation": "read_add_write"
+            },
+            {
+              "offset": 5340,
+              "size": 6,
+              "operation": "read_add_write"
+            }
+          ]
+        }
+      ]
+    },
+    "buffer1": {
+      "xrt_id": 1,
+      "logical_id": 1,
+      "size_in_bytes": 100352,
+      "name": "compute_graph.ifm_ddr",
+      "control_packet_patch_locations": [
+        {
+          "offset": 5220,
+          "size": 6,
+          "operation": "read_add_write"
+        }
+      ]
+    },
+    "buffer2": {
+      "xrt_id": 2,
+      "logical_id": 2,
+      "size_in_bytes": 2048,
+      "name": "compute_graph.ofm_ddr",
+      "control_packet_patch_locations": [
+        {
+          "offset": 6708,
+          "size": 6,
+          "operation": "read_add_write"
+        }
+      ]
+    },
+    "buffer3": {
+      "xrt_id": 3,
+      "logical_id": 4294967295,
+      "size_in_bytes": 6816,
+      "ctrl_pkt_buffer": true,
+      "name": "runtime_control_packet"
+    }
+  }
+}

@@ -1,6 +1,23 @@
-/*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 #include <iostream>
 #include <map>
 #include <numeric>
@@ -55,12 +72,17 @@ silu<InT, OutT>::get_instr_key(std::string prefix,
 }
 
 template <typename InT, typename OutT>
-void silu<InT, OutT>::set_params(const std::string &model_name,
+void silu<InT, OutT>::set_params(const std::string &xclbin,
+                                 const std::string &pdi_name,
                                  std::vector<size_t> a_shape) {
   input_shape_ = a_shape;
   output_shape_ = a_shape;
   // kernel or weight here is just fake data to match xrt kernel requirement
   kernel_x_shape_.push_back(128);
+  if (!xclbin.empty()) {
+    XCLBIN_FNAME_ = OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\" + xclbin;
+  }
+  pdi_name_ = pdi_name;
   xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }
@@ -88,11 +110,12 @@ void silu<InT, OutT>::initialize_const_params(
                       std::multiplies<size_t>()) *
       sizeof(OutT);
   b_bo_ = xrt::bo(xrt_ctx_->get_device(), b_bo_size_, XRT_BO_FLAGS_HOST_ONLY,
-                  xrt_ctx_->get_kernel().group_id(0));
+                  xrt_ctx_->get_kernel(pdi_name_).group_id(0));
   a_bo_ = xrt::bo(xrt_ctx_->get_device(), input_bo_size, XRT_BO_FLAGS_HOST_ONLY,
-                  xrt_ctx_->get_kernel().group_id(0));
-  c_bo_ = xrt::bo(xrt_ctx_->get_device(), output_bo_size,
-                  XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(0));
+                  xrt_ctx_->get_kernel(pdi_name_).group_id(0));
+  c_bo_ =
+      xrt::bo(xrt_ctx_->get_device(), output_bo_size, XRT_BO_FLAGS_HOST_ONLY,
+              xrt_ctx_->get_kernel(pdi_name_).group_id(0));
   uint16_t *b_bo_map = b_bo_.map<uint16_t *>();
   auto bo_const = BoConst(b_bo_map);
   initialize_const_params(bo_const, const_params);
@@ -162,6 +185,10 @@ silu<InT, OutT>::silu(const std::string &ifm_dtype,
   default_shapes_["sd_silu_a16bfacc16bf"].push_back({1, 256, 256, 256});
   default_shapes_["sd_silu_a16bfacc16bf"].push_back({1, 512, 512, 256});
   default_shapes_["sd_silu_a16bfacc16bf"].push_back({1, 512, 512, 128});
+  default_shapes_["sd_silu_a16bfacc16bf"].push_back({2, 512, 512, 16});
+  default_shapes_["sd_silu_a16bfacc16bf"].push_back({2, 256, 256, 32});
+  default_shapes_["sd_silu_a16bfacc16bf"].push_back({2, 128, 128, 96});
+  default_shapes_["sd_silu_a16bfacc16bf"].push_back({2, 64, 64, 256});
 
   // sd3.0
   default_shapes_["sd_silu_a16bfacc16bf"].push_back({1, 512, 512, 512});
@@ -206,7 +233,7 @@ void silu<InT, OutT>::execute(std::vector<Tensor> &input,
   size_t instr_bo_words = instr_bo.size() / sizeof(int);
 
   // launch the kernel
-  auto kernel_ = xrt_ctx_->get_kernel();
+  auto kernel_ = xrt_ctx_->get_kernel(pdi_name_);
 
   ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, instr_bo,
                                             instr_bo_words, a_bo_, b_bo_, c_bo_,

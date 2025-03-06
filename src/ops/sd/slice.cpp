@@ -1,6 +1,23 @@
-/*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 #include <iostream>
 #include <map>
 #include <numeric>
@@ -54,7 +71,13 @@ slice<InT, OutT>::get_instr_key(std::string prefix,
   return oss.str();
 }
 
-template <typename InT, typename OutT> void slice<InT, OutT>::set_params() {
+template <typename InT, typename OutT>
+void slice<InT, OutT>::set_params(const std::string &xclbin,
+                                  const std::string &pdi_name) {
+  if (!xclbin.empty()) {
+    XCLBIN_FNAME_ = OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\" + xclbin;
+  }
+  pdi_name_ = pdi_name;
   xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }
@@ -82,11 +105,12 @@ void slice<InT, OutT>::initialize_const_params(
                       std::multiplies<size_t>()) *
       sizeof(OutT);
   b_bo_ = xrt::bo(xrt_ctx_->get_device(), b_bo_size_, XRT_BO_FLAGS_HOST_ONLY,
-                  xrt_ctx_->get_kernel().group_id(0));
+                  xrt_ctx_->get_kernel(pdi_name_).group_id(0));
   a_bo_ = xrt::bo(xrt_ctx_->get_device(), input_bo_size, XRT_BO_FLAGS_HOST_ONLY,
-                  xrt_ctx_->get_kernel().group_id(0));
-  c_bo_ = xrt::bo(xrt_ctx_->get_device(), output_bo_size,
-                  XRT_BO_FLAGS_HOST_ONLY, xrt_ctx_->get_kernel().group_id(0));
+                  xrt_ctx_->get_kernel(pdi_name_).group_id(0));
+  c_bo_ =
+      xrt::bo(xrt_ctx_->get_device(), output_bo_size, XRT_BO_FLAGS_HOST_ONLY,
+              xrt_ctx_->get_kernel(pdi_name_).group_id(0));
   uint16_t *b_bo_map = b_bo_.map<uint16_t *>();
   auto bo_const = BoConst(b_bo_map);
   initialize_const_params(bo_const, const_params);
@@ -148,6 +172,15 @@ slice<InT, OutT>::slice(const std::string &ifm_dtype,
   default_shapes_["sd_slice_a16bfacc16bf"].push_back(
       {2, 4250, 1536, 2, 154, 1536});
 
+  default_shapes_["sd_slice_a16bfacc16bf"].push_back(
+      {2, 1184, 1536, 2, 160, 1536});
+  default_shapes_["sd_slice_a16bfacc16bf"].push_back(
+      {2, 4256, 1536, 2, 160, 1536});
+  default_shapes_["sd_slice_a16bfacc16bf"].push_back(
+      {2, 1184, 1536, 2, 1024, 1536});
+  default_shapes_["sd_slice_a16bfacc16bf"].push_back(
+      {2, 4256, 1536, 2, 4096, 1536});
+
   if (load_xrt) {
     xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
     std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
@@ -185,7 +218,7 @@ void slice<InT, OutT>::execute(std::vector<Tensor> &input,
   size_t instr_bo_words = instr_bo.size() / sizeof(int);
 
   // launch the kernel
-  auto kernel_ = xrt_ctx_->get_kernel();
+  auto kernel_ = xrt_ctx_->get_kernel(pdi_name_);
 
   ryzenai::dynamic_dispatch::execute_kernel(kernel_, 2, instr_bo,
                                             instr_bo_words, a_bo_, b_bo_, c_bo_,

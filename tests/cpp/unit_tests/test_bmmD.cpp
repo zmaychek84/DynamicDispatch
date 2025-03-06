@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include "bmm_helpers.hpp"
 #include "enable_perf.hpp"
@@ -445,6 +460,106 @@ TEST(BMMD_Testa16w16_32_1_128_8_128_4096_Transpose, Kernel8_v1) {
   int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
       1, 128, 4096, 32, 8, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
       TRANS::WTS, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// gemma2 bmm1
+TEST(BMMD_Testa16w16_8_64_256_4_256_64_Transpose, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      64, 256, 64, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::WTS, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(BMMD_Testa16w16_8_128_256_4_256_128_Transpose, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      128, 256, 128, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::WTS, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(BMMD_Testa16w16_8_256_256_4_256_256_Transpose, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      256, 256, 256, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::WTS, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(BMMD_Testa16w16_8_512_256_4_256_512_Transpose, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      512, 256, 512, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::WTS, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(BMMD_Testa16w16_8_1024_256_4_256_1024_Transpose, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      1024, 256, 1024, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::WTS, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(BMMD_Testa16w16_8_2048_256_4_256_2048_Transpose, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      2048, 256, 2048, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::WTS, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(BMMD_Testa16w16_8_3072_256_4_256_3072_Transpose, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      3072, 256, 3072, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::WTS, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// gemma2 bmm2
+TEST(BMMD_Testa16w16_8_64_64_4_64_256, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      64, 64, 256, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::OFM, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(BMMD_Testa16w16_8_128_128_4_128_256, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      128, 128, 256, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::OFM, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(BMMD_Testa16w16_8_256_256_4_256_256, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      256, 256, 256, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::OFM, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(BMMD_Testa16w16_8_512_512_4_512_256, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      512, 512, 256, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::OFM, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(BMMD_Testa16w16_8_1024_1024_4_1024_256, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      1024, 1024, 256, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::OFM, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(BMMD_Testa16w16_8_2048_2048_4_2048_256, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      2048, 2048, 256, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::OFM, "v1");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(BMMD_Testa16w16_8_3072_3072_4_3072_256, Kernel8_v1) {
+  int err_count = test_bmmd<uint16_t, uint16_t, uint16_t>(
+      3072, 3072, 256, 8, 4, false, "bfloat16", "bfloat16", "bfloat16", "BMM1",
+      TRANS::OFM, "v1");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 

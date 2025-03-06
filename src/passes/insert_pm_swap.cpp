@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,40 +29,39 @@
 
 namespace OpsFusion {
 
-Metadata insert_pm_swap_nodes(const Metadata &meta) {
+Metadata insert_pm_swap_nodes(const Metadata &meta, const OpPMMap &op_pm_map,
+                              const OverlayPMMeta &overlay_pm_meta) {
   Metadata pm_swap_meta = meta;
   // clear op_list and rebuild the list by iterating through meta.
   pm_swap_meta.op_list.clear();
-  std::string curr_pm_id = "";
+  std::string prev_pm_fname = "";
+  uint32_t pm_id = 0;
   constexpr bool load_xrt = false;
   ryzenai::pm_load pm_op(load_xrt);
+  pm_op.update_meta(op_pm_map, overlay_pm_meta);
   for (size_t i = 0; i < meta.op_list.size(); ++i) {
     const auto &op = meta.op_list.at(i);
     auto args = OpsFusion::get_op_args(op);
     auto &op_type = op.type;
     auto &op_dtype = meta.tensor_map.at(args[0]).dtype;
-    auto &xclbin_mdata = pm_op.get_op_xclbin_meta(op_type, op_dtype);
-    if (xclbin_mdata.pm_elf_fname != curr_pm_id) {
+    auto curr_pm_fname = pm_op.get_op_pmbin_name(op_type, op_dtype);
+    if (prev_pm_fname != curr_pm_fname) {
       RYZENAI_LOG_TRACE(
           OpsFusion::dd_format("OP: {}, PM ID change from {} to {}", op.type,
-                               curr_pm_id, xclbin_mdata.pm_elf_fname));
-      curr_pm_id = xclbin_mdata.pm_elf_fname;
+                               prev_pm_fname, curr_pm_fname));
+      prev_pm_fname = curr_pm_fname;
 
       std::map<std::string, std::any> attr;
       attr["op_type"] = op_type;
       attr["op_dtype"] = op_dtype;
+      attr["pm_id"] = pm_id++;
       Metadata::OpInfo pm_op_info = {
           "pm_load_" + op.name, "PM_LOAD", {}, {}, {}, {}, {}, attr, op.pdi_id};
       pm_swap_meta.op_list.emplace_back(pm_op_info);
     }
     RYZENAI_LOG_INFO(
-        OpsFusion::dd_format("OP: {}, PM ID: {}", op.type, curr_pm_id));
+        OpsFusion::dd_format("OP: {}, PM ID: {}", op.type, curr_pm_fname));
     pm_swap_meta.op_list.emplace_back(op);
-  }
-
-  std::cout << "Meta after pass" << std::endl;
-  for (auto &op_info : pm_swap_meta.op_list) {
-    std::cout << op_info.name << std::endl;
   }
 
   return pm_swap_meta;

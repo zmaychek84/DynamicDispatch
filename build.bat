@@ -32,7 +32,7 @@ goto :init
 :init
     set "__NAME=%~n0"
     set "__VERSION=1.0"
-    set "__YEAR=2024"
+    set "__YEAR=2025"
 
     set "__BAT_FILE=%~0"
     set "__BAT_PATH=%~dp0"

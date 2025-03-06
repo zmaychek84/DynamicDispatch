@@ -83,11 +83,6 @@ conda env create -f env.yml
 conda activate dynamic_op_dispatch
 ```
 
-Install ext tools
-```powershell
-pip install -e ext\dd_helper
-```
-
 Set XRT Dir and Setup environment (run below commands based on the shell you're using)
 ```powershell
 ## On Command Prompt

@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -52,9 +52,11 @@ void fetch_op_txn_bins(Metadata &meta,
                                       tensors, tensors, op_info.attr);
     auto args_map = DD_INVOKE_OPMETHOD(get_buffer_reqs, op.get(), op_info,
                                        tensors, tensors, op_info.attr);
-    utils::txn_util patched_txn(txn_vec);
-    patched_txn.patch(op_info, meta, args_map);
-    op_info.txn_bin = std::move(patched_txn.to_vector());
+    if (!txn_vec.empty()) {
+      utils::txn_util patched_txn(txn_vec);
+      patched_txn.patch(op_info, meta, args_map);
+      op_info.txn_bin = std::move(patched_txn.to_vector());
+    }
   }
 }
 } // namespace OpsFusion

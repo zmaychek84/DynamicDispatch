@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <array>
@@ -28,7 +43,9 @@
 #include "utils/ctrl_pkt_utils.hpp"
 #include <ops/mhamzdk5/mhamzdk5.hpp>
 #include <ops/op_interface.hpp>
+#include <ops/ops_common/coeffs.hpp>
 #include <ops/ops_common/ctrlpkt.hpp>
+#include <ops/ops_common/op_util.hpp>
 #include <utils/logging.hpp>
 #include <utils/utils.hpp>
 // AIE Driver header
@@ -106,6 +123,13 @@ mhamzdk5<InT, WtT, OutT>::mhamzdk5(
     const std::string &a_dtype, const std::string &b_dtype,
     const std::string &c_dtype, bool load_xrt,
     const std::map<std::string, std::any> &attr) {
+
+  is_generic_pass_in_onnx = OpsFusion::check_generic_fusion(attr);
+
+  if (is_generic_pass_in_onnx) {
+    q_shape_back = std::any_cast<std::vector<int>>(attr.at("q_shape_back"))[0];
+    k_shape_back = std::any_cast<std::vector<int>>(attr.at("k_shape_back"))[0];
+  }
 
   txnbin_a_header = {{"uint16", "a16"}, {"uint8", "a8"}};
 
@@ -244,20 +268,80 @@ void mhamzdk5<InT, WtT, OutT>::set_params(const std::string &model_name,
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }
 
+std::vector<int32_t>
+calculate_qdq_param(const std::vector<Tensor> &const_params,
+                    int64_t q_shape_back, int64_t k_shape_back) {
+  float q_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(0))[0];
+  uint16_t q_zp = OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(1))[0];
+
+  float k_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(2))[0];
+  uint16_t k_zp = OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(3))[0];
+
+  float v_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(4))[0];
+  uint16_t v_zp = OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(5))[0];
+
+  float qkt_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(6))[0];
+  uint16_t qkt_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(7))[0];
+
+  float sm_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(8))[0];
+  uint16_t sm_zp = OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(9))[0];
+
+  float vsm_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(10))[0];
+  uint16_t vsm_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(11))[0];
+
+  float mul_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(13))[0];
+  uint16_t mul_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(14))[0];
+
+  float mul_w = (static_cast<float>(OpsFusion::get_tensor_as_int64_t_vec(
+                     const_params.at(12))[0]) -
+                 mul_zp) *
+                mul_sc;
+
+  auto coeff_qkt = OpsFusion::coeffs::qdq_act_matmul_uint16_uint16_cstm(
+      q_sc, q_zp, q_shape_back, k_sc, k_zp, qkt_sc, qkt_zp);
+
+  auto coeff_smv = OpsFusion::coeffs::qdq_act_matmul_uint16_uint16_cstm(
+      sm_sc, sm_zp, k_shape_back, v_sc, v_zp, vsm_sc, vsm_zp);
+
+  std::vector<int32_t> qdq_params =
+      OpsFusion::coeffs::mha_channel_qdq_params_fill( // in32_t * 96
+          coeff_qkt, coeff_smv,
+          std::make_tuple(OpsFusion::coeffs::float_to_bfloat16(qkt_sc * mul_w *
+                                                               1.442695041f),
+                          (int)qkt_zp),
+          std::make_tuple(OpsFusion::coeffs::float_to_bfloat16(1.0f / sm_sc),
+                          (int)sm_zp),
+          std::make_tuple(0, 0), std::make_tuple(0, 0), 1, 0);
+
+  return qdq_params;
+}
+
 template <typename InT, typename WtT, typename OutT>
 void mhamzdk5<InT, WtT, OutT>::initialize_const_params(
     ConstBufferIO &io, const std::vector<Tensor> &const_params,
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("mhamzdk5 initialize_const_params(ptr) ...");
   DD_THROW_IF(
-      (const_params.size() != 1) || (const_params.at(0).shape.size() != 2),
+      !is_generic_pass_in_onnx && ((const_params.size() != 1) ||
+                                   (const_params.at(0).shape.size() != 2)),
       OpsFusion::dd_format(
           "Unsupported const spec for mhamzdk5\n"
           "(Details : #const params == 1 ({}), Const param1 dim == 2 ({})",
           const_params.size(), const_params.at(0).shape.size()));
   const int qdq_idx = 0;
 
-  auto qdq_param = (int32_t *)const_params.at(qdq_idx).data;
+  int32_t *qdq_param = nullptr;
+  std::vector<int32_t> qdq_param_vec;
+  if (is_generic_pass_in_onnx) {
+    qdq_param_vec =
+        calculate_qdq_param(const_params, q_shape_back, k_shape_back);
+    qdq_param = (int32_t *)qdq_param_vec.data();
+  } else {
+    qdq_param = (int32_t *)const_params.at(qdq_idx).data;
+  }
 
   int size_qdqparam = QDQparam_size * num_qdq_nodes * sizeof(int32_t);
 
@@ -278,20 +362,22 @@ void mhamzdk5<InT, WtT, OutT>::initialize_const_params(
     const std::vector<Tensor> &const_params,
     const std::map<std::string, std::any> &attr) {
   // Check the number of inputs
-  DD_ASSERT((const_params.size() == 1),
-            OpsFusion::dd_format("mhamzdk5 expects one constant. Got {}",
-                                 const_params.size()));
+  size_t expected_const_params_size = is_generic_pass_in_onnx ? 15 : 1;
+  DD_ASSERT(
+      (!is_generic_pass_in_onnx &&
+       const_params.size() == expected_const_params_size),
+      OpsFusion::dd_format("mhamzdk5 got unexpected number of const params {}",
+                           const_params.size()));
 
   int size_qdqparam = QDQparam_size * num_qdq_nodes * sizeof(int32_t);
 
   // Create input/output BOs
-  const size_t A_BO_SIZE =
-      (kernel_x_shape_[0] * kernel_x_shape_[1] * kernel_x_shape_[2] *
-       a_dtype_size_); // TODO:: add batch dimension also
+  const size_t A_BO_SIZE = ((kernel_x_shape_[0] * kernel_x_shape_[2] +
+                             2 * kernel_x_shape_[1] * kernel_x_shape_[2]) *
+                            a_dtype_size_);
   const size_t B_BO_SIZE = size_qdqparam;
   const size_t C_BO_SIZE =
-      (kernel_x_shape_[0] * kernel_x_shape_[1] * kernel_x_shape_[2] *
-       c_dtype_size_ / 3); // TODO: add batch dimension also
+      (kernel_x_shape_[0] * kernel_x_shape_[2] * c_dtype_size_);
 
   RYZENAI_LOG_TRACE("mhamzdk5: A_BO_SIZE:" + std::to_string(A_BO_SIZE) +
                     " B_BO_SIZE:" + std::to_string(B_BO_SIZE) +
@@ -576,15 +662,19 @@ std::vector<OpArgMap> mhamzdk5<InT, WtT, OutT>::get_buffer_reqs(
     std::vector<Tensor> &input, std::vector<Tensor> &output,
     const std::map<std::string, std::any> &attr) const {
   // [QKV, qdq_params]
-  if (input.size() != 5) {
+  if (!is_generic_pass_in_onnx && input.size() != 5) {
+    throw std::runtime_error("mhamzdk5: Incorrect number of tensors received");
+  } else if (is_generic_pass_in_onnx && input.size() != 19) {
     throw std::runtime_error("mhamzdk5: Incorrect number of tensors received");
   }
+
+  size_t out_idx = is_generic_pass_in_onnx ? 18 : 4;
 
   size_t size_qdqparam = QDQparam_size * num_qdq_nodes * sizeof(int32_t);
   auto Q_shape = extract_shape(input.at(0));
   auto K_shape = extract_shape(input.at(1));
   auto V_shape = extract_shape(input.at(2));
-  auto out_shape = extract_shape(input.at(4));
+  auto out_shape = extract_shape(input.at(out_idx));
 
   size_t Q_size = (Q_shape[0] * Q_shape[1] * sizeof(InT));
   size_t K_size = (K_shape[0] * K_shape[1] * sizeof(InT));
@@ -600,7 +690,7 @@ std::vector<OpArgMap> mhamzdk5<InT, WtT, OutT>::get_buffer_reqs(
       {OpArgMap::OpArgType::INPUT, 1, 1, Q_size, K_size},
       {OpArgMap::OpArgType::INPUT, 1, 2, Q_size + K_size, V_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 3, 0, size_qdqparam},
-      {OpArgMap::OpArgType::OUTPUT, 0, 4, 0, out_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, out_idx, 0, out_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};

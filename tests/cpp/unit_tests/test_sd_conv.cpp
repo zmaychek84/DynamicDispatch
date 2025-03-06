@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cfenv>
 #include <cmath>
@@ -52,8 +67,8 @@ static std::vector<uint32_t> read_hex_file(const std::string &filePath) {
 
 template <typename T>
 int sd_conv_check_result(std::vector<T> cpu_Y, std::vector<T> aie_Y,
-                         float error_tolerance = 0.01,
-                         float pixel_L2_norm_tolerance = 0.01) {
+                         float error_tolerance = 0.01f,
+                         float pixel_L2_norm_tolerance = 0.01f) {
   int fail = 0;
   float max_diff = 0;
   float L2_norm = 0;
@@ -245,7 +260,8 @@ std::vector<float> bfp_cpu_kernel_hw(const std::vector<float> &input, int n,
   return output;
 }
 
-static void initialize_random_float(std::vector<float> &vec, int max, int min) {
+static void initialize_random_float(std::vector<float> &vec, float max,
+                                    float min) {
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_real_distribution<float> dis(min, max);
@@ -272,6 +288,15 @@ void torch_conv2d(std::vector<float> ifm, std::vector<float> wts,
       << batch * OC * OH * OW;
   auto torch_input_tensor =
       torch::from_blob(ifm.data(), {batch, IC, IH, IW}, torch::kFloat);
+  if (padding == -1) {
+    // we use value -1 to indicate sd3 vae encoder asymmetric conv padding:
+    // {left, right, top, bottom} = {0, 1, 0, 1}
+    // if this get more complex, we may need to refactor padding to a vector
+    torch::nn::ConstantPad2d pad_layer(
+        torch::nn::ConstantPad2dOptions({0, 1, 0, 1}, 0));
+    torch_input_tensor = pad_layer->forward(torch_input_tensor);
+    padding = 0; // padding already done by pad_layer
+  }
   torch::nn::Conv2d conv_layer(
       torch::nn::Conv2dOptions(IC, OC, kh).stride(strideH).padding(padding));
   // wts nchw
@@ -313,11 +338,11 @@ int test_sd_conv(int IC, int IH, int IW, int OC, int OH, int OW, int kh, int kw,
                  const std::string &wgt_type = "bfloat16", // b bo
                  const std::string &out_type = "bfloat16", // c bo
                  const std::string &model_name = "SD_VAE_DEC", size_t batch = 1,
-                 float pixel_L2_norm_tolerance = 0.01,
+                 float pixel_L2_norm_tolerance = 0.01f,
                  bool test_with_golden = false) {
   int quantize_err_count = 0;
   int unquantize_err_count = 0;
-  float error_tolerance = 0.01;
+  float error_tolerance = 0.01f;
   std::map<std::string, std::string> txnbin_a_header = {
       {"bfloat16", "a16bf"}, {"bfp16ebs8", "a16bfp"}};
   std::map<std::string, std::string> txnbin_b_header = {
@@ -351,6 +376,9 @@ int test_sd_conv(int IC, int IH, int IW, int OC, int OH, int OW, int kh, int kw,
   attr["weight_shape"] = std::vector<int>{OC, kh, kw, IC};
   // std::cout << "OC = " << OC << ", OH = " << OH << ", OW = " << OW << ", IC =
   // " << IC << ", IH = " << IH << ", IW = " << IW << std::endl;
+  std::string xclbin = sd_get_xclbin(model_name);
+  std::string pdi_name = xclbin.empty() ? "DPU" : sd_get_pdi(xclbin, "SDConv");
+  std::cerr << "xclbin: " << xclbin << " pdi_name: " << pdi_name << std::endl;
   if (test_with_golden) {
     const std::string bias_type = "float32";
     ryzenai::sd::conv sd_conv =
@@ -358,7 +386,7 @@ int test_sd_conv(int IC, int IH, int IW, int OC, int OH, int OW, int kh, int kw,
             ifm_type, wgt_type, bias_type, out_type, false, attr);
     sd_conv.debug(debug);
     ryzenai::sd_conv2d_shapes shapes(OCs, ICs, IHs, IWs, OHs, OWs, khs, kws);
-    sd_conv.set_params(model_name, shapes);
+    sd_conv.set_params(xclbin, pdi_name, shapes);
     std::string test_golden_root_dir =
         "tests/cpp/unit_tests/testDataMladf/sd_vae_dec_conv/";
     std::string shape_key =
@@ -410,7 +438,7 @@ int test_sd_conv(int IC, int IH, int IW, int OC, int OH, int OW, int kh, int kw,
             "bfloat16", "float32", "float32", "bfloat16", false, attr);
     sd_conv.debug(debug);
     ryzenai::sd_conv2d_shapes shapes(OCs, ICs, IHs, IWs, OHs, OWs, khs, kws);
-    sd_conv.set_params(model_name, shapes);
+    sd_conv.set_params(xclbin, pdi_name, shapes);
     // gen rand
     std::vector<float> raw_bias(OC, 0);
     initialize_random_float(raw_bias, 2, -2);
@@ -549,16 +577,6 @@ int test_sd_conv(int IC, int IH, int IW, int OC, int OH, int OW, int kh, int kw,
       }
     }
 
-    std::string test_golden_root_dir =
-        "tests/cpp/unit_tests/testDataMladf/sd_vae_dec_conv/";
-    std::string shape_key =
-        txnbin_a_header.at(ifm_type) + txnbin_b_header.at(wgt_type) +
-        txnbin_acc_header.at(out_type) + "_" + std::to_string(OC) + "_" +
-        std::to_string(IC) + "_" + std::to_string(IH) + "_" +
-        std::to_string(IW) + "_" + std::to_string(OH) + "_" +
-        std::to_string(OW) + "_" + std::to_string(kh) + "_" +
-        std::to_string(kw);
-
     std::vector<Tensor> input_Tensor;
     input_Tensor = {{aie_ifm_bf16.data(), a_shape, ifm_type}};
     std::vector<Tensor> output_Tensor;
@@ -588,7 +606,7 @@ int test_sd_conv(int IC, int IH, int IW, int OC, int OH, int OW, int kh, int kw,
 
     std::vector<OuT> bf16_ofm(batch * OC * OH * OW);
     torch_conv2d<OuT>(bf16_ifms, bf16_wts, bf16_bias, bf16_ofm, IC, IH, IW, OC,
-                      OH, OW, kh, kw, strideH, strideW, padding, batch);
+                      OH, OW, kh, kw, strideH, strideW, padding, (int)batch);
     std::cout << "diff with quantized ifm torch conv2d" << std::endl;
     quantize_err_count = sd_conv_check_result<OuT>(
         bf16_ofm, rst_aie_out, error_tolerance, pixel_L2_norm_tolerance);
@@ -596,7 +614,7 @@ int test_sd_conv(int IC, int IH, int IW, int OC, int OH, int OW, int kh, int kw,
     std::cout << "diff with unquantized ifm torch conv2d" << std::endl;
     std::vector<OuT> fp32_ofm(batch * OC * OH * OW);
     torch_conv2d<OuT>(raw_ifms, raw_wts, raw_bias, fp32_ofm, IC, IH, IW, OC, OH,
-                      OW, kh, kw, strideH, strideW, padding, batch);
+                      OW, kh, kw, strideH, strideW, padding, (int)batch);
     unquantize_err_count = sd_conv_check_result<OuT>(
         fp32_ofm, rst_aie_out, error_tolerance, pixel_L2_norm_tolerance);
     std::cout << "out unquantize_err_count " << unquantize_err_count
@@ -609,7 +627,7 @@ int test_sd_conv(int IC, int IH, int IW, int OC, int OH, int OW, int kh, int kw,
 TEST(SD_CONV_Test, Golden_Kernel1) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 512, 8, 128, 512, 8, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -618,7 +636,7 @@ TEST(SD_CONV_Test, Golden_KernelVaelayer10) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 256, 256, 256, 256, 256, 1, 1, 1, 1, 0, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -627,7 +645,7 @@ TEST(SD_CONV_Test, Golden_KernelVaelayer4) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 512, 512, 128, 512, 512, 1, 1, 1, 1, 0, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -637,7 +655,7 @@ TEST(SD_CONV_Test, Golden_KernelVaelayer2) {
   // this case keep high pixel_L2_norm_tolerance for unknown reason
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       128, 512, 512, 3, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 1, 0.11, true);
+      "bfloat16", "SD_VAE_DEC", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -646,7 +664,7 @@ TEST(SD_CONV_Test, Golden_KernelVaelayer5) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 512, 512, 128, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1, true);
+      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -655,16 +673,16 @@ TEST(SD_CONV_Test, Golden_KernelVaelayer3) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 256, 256, 256, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1, true);
+      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Golden_KernelVaelayer6) {
+TEST(SD_CONV_Test, Golden_SD3_VAE1024_Layer1) {
   // layer6_44.99ms, use new ofm ref format
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 512, 512, 256, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1, true);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -673,7 +691,7 @@ TEST(SD_CONV_Test, Golden_KernelVaelayer7) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       4, 64, 64, 4, 64, 64, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -682,16 +700,16 @@ TEST(SD_CONV_Test, Golden_KernelVaelayer8) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       4, 64, 64, 512, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 1, 0.1, true);
+      "bfloat16", "SD_VAE_DEC", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Golden_KernelVaelayer9) {
+TEST(SD_CONV_Test, Golden_SD3_VAE1024_Layer2) {
   // layer9
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 128, 128, 512, 128, 128, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1, true);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -700,16 +718,16 @@ TEST(SD_CONV_Test, Golden_KernelVaelayer11) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 256, 256, 256, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1, true);
+      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Golden_KernelVaelayer12) {
+TEST(SD_CONV_Test, Golden_SD3_VAE1024_Layer3) {
   // layer12
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 256, 256, 512, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1, true);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -719,77 +737,77 @@ TEST(SD_CONV_Test, Golden_KernelVaelayer13) {
   // this case keep high pixel_L2_norm_tolerance for unknown reason
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 64, 64, 512, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 1, 0.13, true);
+      "bfloat16", "SD_VAE_DEC", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONV_Test, Golden_KernelUnetlayer1) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 16, 16, 1280, 16, 16, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.01, true);
+      "bfloat16", "SD_UNet", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONV_Test, Golden_KernelUnetlayer2) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 16, 16, 1280, 16, 16, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.5, true);
+      "bfloat16", "SD_UNet", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONV_Test, Golden_KernelUnetlayer4) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 32, 32, 1280, 32, 32, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.3, true);
+      "bfloat16", "SD_UNet", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONV_Test, Golden_KernelUnetlayer5) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 32, 32, 640, 32, 32, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.01, true);
+      "bfloat16", "SD_UNet", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONV_Test, Golden_KernelUnetlayer6) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 32, 32, 640, 32, 32, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.5, true);
+      "bfloat16", "SD_UNet", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONV_Test, Golden_KernelUnetlayer7) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 8, 8, 1280, 8, 8, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.01, true);
+      "bfloat16", "SD_UNet", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONV_Test, Golden_KernelUnetlayer8) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 8, 8, 1280, 8, 8, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 1, true);
+      "bfloat16", "SD_UNet", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONV_Test, Golden_KernelUnetlayer9) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1920, 16, 16, 1280, 16, 16, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.01, true);
+      "bfloat16", "SD_UNet", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONV_Test, Golden_KernelUnetlayer10) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1920, 16, 16, 1280, 16, 16, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.5, true);
+      "bfloat16", "SD_UNet", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONV_Test, Golden_KernelUnetlayer11) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1920, 32, 32, 640, 32, 32, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.01, true);
+      "bfloat16", "SD_UNet", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -797,14 +815,14 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer13) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       320, 32, 32, 640, 32, 32, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONV_Test, Golden_KernelUnetlayer14) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       2560, 16, 16, 1280, 16, 16, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.5, true);
+      "bfloat16", "SD_UNet", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -812,14 +830,14 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer15) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       320, 64, 64, 320, 64, 64, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_CONV_Test, Golden_KernelUnetlayer16) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       2560, 8, 8, 1280, 8, 8, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 1, true);
+      "bfloat16", "SD_UNet", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -827,7 +845,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer17) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 16, 16, 1280, 16, 16, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -836,7 +854,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer18) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       320, 32, 32, 640, 32, 32, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.2, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -844,7 +862,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer19) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       2560, 8, 8, 1280, 8, 8, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -853,7 +871,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer20) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       320, 64, 64, 320, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.1, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -861,7 +879,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer24) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       2560, 16, 16, 1280, 16, 16, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -870,7 +888,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer25) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 16, 16, 1280, 16, 16, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.3, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -879,7 +897,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer26) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 32, 32, 640, 32, 32, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -888,7 +906,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer27) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 32, 32, 640, 32, 32, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.3, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -897,7 +915,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer29) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 64, 64, 320, 64, 64, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -906,7 +924,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer30) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 64, 64, 320, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.2, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -915,7 +933,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer31) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 64, 64, 640, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.1, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -924,7 +942,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer32) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       960, 32, 32, 640, 32, 32, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -942,7 +960,7 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer34) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       960, 64, 64, 320, 64, 64, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -1007,35 +1025,35 @@ TEST(SD_CONV_Test, Golden_KernelUnetlayer28) {
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, GoldenSD3NewLayer1) {
+TEST(SD_CONV_Test, Golden_SD3_DIT1024_Layer1) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       16, 128, 128, 1536, 64, 64, 2, 2, 2, 2, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01, true);
+      "bfloat16", "SD3_DIT1024", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, GoldenSD3NewLayer2) {
+TEST(SD_CONV_Test, Golden_SD3_VAE1024_Layer4) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 1024, 1024, 256, 1024, 1024, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, GoldenSD3NewLayer3) {
+TEST(SD_CONV_Test, Golden_SD3_VAE1024_Layer5) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 1024, 1024, 128, 1024, 1024, 1, 1, 1, 1, 0, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, GoldenSD3NewLayer4) {
+TEST(SD_CONV_Test, Golden_SD3_VAE1024_Layer6) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       128, 1024, 1024, 3, 1024, 1024, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -1043,31 +1061,31 @@ TEST(SD_CONV_Test, GoldenSD3NewLayer5) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       16, 64, 64, 512, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, GoldenSD3NewLayer6) {
+TEST(SD_CONV_Test, Golden_SD3_VAE1024_Layer7) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 512, 512, 256, 512, 512, 1, 1, 1, 1, 0, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, GoldenSD3NewLayer7) {
+TEST(SD_CONV_Test, Golden_SD3_VAE1024_Layer8) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 512, 512, 512, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, GoldenSD3NewLayer8) {
+TEST(SD_CONV_Test, Golden_SD3_VAE1024_Layer9) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 1024, 1024, 128, 1024, 1024, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -1075,532 +1093,887 @@ TEST(SD_CONV_Test, GoldenSD3NewLayer9) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       16, 64, 64, 1536, 32, 32, 2, 2, 2, 2, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01, true);
+      "bfloat16", "SD_VAE_DEC", 2, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, GoldenSD3NewLayer10) {
+TEST(SD_CONV_Test, Golden_SD3_VAE1024_Layer10) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       16, 128, 128, 512, 128, 128, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, GoldenSD3NewLayer11) {
+TEST(SD_CONV_Test, Golden_SD3_VAE1024_Layer11) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       128, 1024, 1024, 128, 1024, 1024, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, GoldenSD3NewLayer12) {
+TEST(SD_CONV_Test, Golden_SD3_VAE1024_Layer12) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 512, 512, 256, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01, true);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1, 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 // Golden unittest end
 
 // Random unittest start
-TEST(SD_CONV_Test, Random_KernelVaelayer1) {
+TEST(SD_CONV_Test, Random_SD3_VAE512_11) {
   // layer1_10.71ms
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       128, 512, 512, 128, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1);
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelVaelayer10) {
+TEST(SD_CONV_Test, Random_SD15_VAE_12) {
+  // layer1_10.71ms
+  //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      128, 512, 512, 128, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD15_VAE", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAE512_5) {
   // layer10_10.87ms
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 256, 256, 256, 256, 256, 1, 1, 1, 1, 0, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelVaelayer4) {
+TEST(SD_CONV_Test, Random_SD15_VAE_6) {
+  // layer10_10.87ms
+  //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      512, 256, 256, 256, 256, 256, 1, 1, 1, 1, 0, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD15_VAE", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAE512_9) {
   // layer4_23.08ms
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 512, 512, 128, 512, 512, 1, 1, 1, 1, 0, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelVaelayer2) {
+TEST(SD_CONV_Test, Random_SD15_VAE_10) {
+  // layer4_23.08ms
+  //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      256, 512, 512, 128, 512, 512, 1, 1, 1, 1, 0, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD15_VAE", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAE512_12) {
   // layer2_1.87ms
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   // this case keep high pixel_L2_norm_tolerance for unknown reason
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       128, 512, 512, 3, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 1, 0.11);
+      "bfloat16", "SD3_VAE512", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelVaelayer5) {
+TEST(SD_CONV_Test, Random_SD15_VAE_13) {
+  // layer2_1.87ms
+  //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  // this case keep high pixel_L2_norm_tolerance for unknown reason
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      128, 512, 512, 3, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD15_VAE", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAE512_10) {
   // layer5_26.94ms, use new ofm ref format
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 512, 512, 128, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1);
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelVaelayer3) {
+TEST(SD_CONV_Test, Random_SD15_VAE_11) {
+  // layer5_26.94ms, use new ofm ref format
+  //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      256, 512, 512, 128, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD15_VAE", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAE512_7) {
   // layer3_11.31ms, use new ofm ref format
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 256, 256, 256, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1);
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelVaelayer6) {
+TEST(SD_CONV_Test, Random_SD15_VAE_8) {
+  // layer3_11.31ms, use new ofm ref format
+  //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      256, 256, 256, 256, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD15_VAE", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAE1024_Layer1) {
   // layer6_44.99ms, use new ofm ref format
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 512, 512, 256, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelVaelayer7) {
+TEST(SD_CONV_Test, Random_SD3_VAE512_8) {
+  // layer6_44.99ms, use new ofm ref format
+  //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      256, 512, 512, 256, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_VAE_9) {
+  // layer6_44.99ms, use new ofm ref format
+  //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      256, 512, 512, 256, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD15_VAE", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_VAE_1) {
   // layer7_0.047ms, use new ofm ref format
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       4, 64, 64, 4, 64, 64, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfloat16", "SD15_VAE", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelVaelayer8) {
+TEST(SD_CONV_Test, Random_SD15_VAE_2) {
   // layer8_0.64ms, use new ofm ref format
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       4, 64, 64, 512, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 1, 0.1);
+      "bfloat16", "SD15_VAE", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelVaelayer9) {
+TEST(SD_CONV_Test, Random_SD3_VAE1024_Layer2) {
   // layer9
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 128, 128, 512, 128, 128, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelVaelayer11) {
+TEST(SD_CONV_Test, Random_SD3_VAE512_3) {
+  // layer9
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      512, 128, 128, 512, 128, 128, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_VAE_4) {
+  // layer9
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      512, 128, 128, 512, 128, 128, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD15_VAE", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAE512_6) {
   // layer11
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 256, 256, 256, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1);
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelVaelayer12) {
+TEST(SD_CONV_Test, Random_SD15_VAE_7) {
+  // layer11
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      512, 256, 256, 256, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD15_VAE", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAE1024_Layer3) {
   // layer12
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 256, 256, 512, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.1);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelVaelayer13) {
+TEST(SD_CONV_Test, Random_SD3_VAE512_4) {
+  // layer12
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      512, 256, 256, 512, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_VAE_5) {
+  // layer12
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      512, 256, 256, 512, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD15_VAE", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAE512_2) {
   // layer13
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   // this case keep high pixel_L2_norm_tolerance for unknown reason
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 64, 64, 512, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 1, 0.13);
+      "bfloat16", "SD3_VAE512", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer1) {
+TEST(SD_CONV_Test, Random_SD15_VAE_3) {
+  // layer13
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      512, 64, 64, 512, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD15_VAE", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_UNET_13) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 16, 16, 1280, 16, 16, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer2) {
+TEST(SD_CONV_Test, Random_SD15_UNET_12) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 16, 16, 1280, 16, 16, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.5);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer4) {
+TEST(SD_CONV_Test, Random_SD15_UNET_23) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 32, 32, 1280, 32, 32, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.3);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer5) {
+TEST(SD_CONV_Test, Random_SD15_UNET_26) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 32, 32, 640, 32, 32, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer6) {
+TEST(SD_CONV_Test, Random_SD15_UNET_27) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 32, 32, 640, 32, 32, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.5);
+      "bfloat16", "SD15_UNET", 2, 0.5);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer7) {
+TEST(SD_CONV_Test, Random_SD15_UNET_16) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 8, 8, 1280, 8, 8, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer8) {
+TEST(SD_CONV_Test, Random_SD15_UNET_15) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 8, 8, 1280, 8, 8, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 1);
+      "bfloat16", "SD15_UNET", 2, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer9) {
+TEST(SD_CONV_Test, Random_SD15_UNET_21) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1920, 16, 16, 1280, 16, 16, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer10) {
+TEST(SD_CONV_Test, Random_SD15_UNET_22) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1920, 16, 16, 1280, 16, 16, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.5);
+      "bfloat16", "SD15_UNET", 2, 0.5);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer11) {
+TEST(SD_CONV_Test, Random_SD15_UNET_24) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1920, 32, 32, 640, 32, 32, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer13) {
+TEST(SD_CONV_Test, Random_SD15_UNET_5) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       320, 32, 32, 640, 32, 32, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer14) {
+TEST(SD_CONV_Test, Random_SD15_UNET_20) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       2560, 16, 16, 1280, 16, 16, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 0.5);
+      "bfloat16", "SD15_UNET", 2, 0.5);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer15) {
+TEST(SD_CONV_Test, Random_SD15_UNET_3) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       320, 64, 64, 320, 64, 64, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer16) {
+TEST(SD_CONV_Test, Random_SD15_UNET_18) {
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       2560, 8, 8, 1280, 8, 8, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 1);
+      "bfloat16", "SD15_UNET", 2, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer17) {
+TEST(SD_CONV_Test, Random_SD15_UNET_10) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 16, 16, 1280, 16, 16, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer18) {
+TEST(SD_CONV_Test, Random_SD15_UNET_6) {
   // layer18
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       320, 32, 32, 640, 32, 32, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.2);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer19) {
+TEST(SD_CONV_Test, Random_SD15_UNET_17) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       2560, 8, 8, 1280, 8, 8, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer20) {
+TEST(SD_CONV_Test, Random_SD15_UNET_2) {
   // layer20
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       320, 64, 64, 320, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.1);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer24) {
+TEST(SD_CONV_Test, Random_SD15_UNET_19) {
   //  IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       2560, 16, 16, 1280, 16, 16, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer25) {
+TEST(SD_CONV_Test, Random_SD15_UNET_11) {
   // layer25
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 16, 16, 1280, 16, 16, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.3);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer26) {
+TEST(SD_CONV_Test, Random_SD15_UNET_8) {
   // layer26
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 32, 32, 640, 32, 32, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer27) {
+TEST(SD_CONV_Test, Random_SD15_UNET_7) {
   // layer27
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 32, 32, 640, 32, 32, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.3);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer29) {
+TEST(SD_CONV_Test, Random_SD15_UNET_33) {
   // layer29
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 64, 64, 320, 64, 64, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer30) {
+TEST(SD_CONV_Test, Random_SD15_UNET_34) {
   // layer30
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 64, 64, 320, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.2);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer31) {
+TEST(SD_CONV_Test, Random_SD15_UNET_30) {
   // layer31
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 64, 64, 640, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.1);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer32) {
+TEST(SD_CONV_Test, Random_SD15_UNET_28) {
   // layer32
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       960, 32, 32, 640, 32, 32, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer33) {
+TEST(SD_CONV_Test, Random_SD15_UNET_29) {
   // layer33
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       960, 32, 32, 640, 32, 32, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 1);
+      "bfloat16", "SD15_UNET", 2, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer34) {
+TEST(SD_CONV_Test, Random_SD15_UNET_31) {
   // layer34
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       960, 64, 64, 320, 64, 64, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01);
+      "bfloat16", "SD15_UNET", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer35) {
+TEST(SD_CONV_Test, Random_SD15_UNET_32) {
   // layer35
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       960, 64, 64, 320, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 1);
+      "bfloat16", "SD15_UNET", 2, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer3) {
+TEST(SD_CONV_Test, Random_SD15_UNET_14) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1280, 16, 16, 1280, 8, 8, 3, 3, 2, 2, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 1);
+      "bfloat16", "SD15_UNET", 2, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer12) {
+TEST(SD_CONV_Test, Random_SD15_UNET_25) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       1920, 32, 32, 640, 32, 32, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_UNet", 2, 1);
+      "bfloat16", "SD15_UNET", 2, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer21) {
+TEST(SD_CONV_Test, Random_SD15_UNET_4) {
   // layer21
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       320, 64, 64, 320, 32, 32, 3, 3, 2, 2, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 1);
+      "bfloat16", "SD15_UNET", 2, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer22) {
+TEST(SD_CONV_Test, Random_SD15_UNET_35) {
   // layer22
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       320, 64, 64, 4, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 1);
+      "bfloat16", "SD15_UNET", 2, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer23) {
+TEST(SD_CONV_Test, Random_SD15_UNET_1) {
   // layer23
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       4, 64, 64, 320, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 1);
+      "bfloat16", "SD15_UNET", 2, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, Random_KernelUnetlayer28) {
+TEST(SD_CONV_Test, Random_SD15_UNET_9) {
   // layer28
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       640, 32, 32, 640, 16, 16, 3, 3, 2, 2, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 1);
+      "bfloat16", "SD15_UNET", 2, 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, RandomSD3NewLayer1) {
+TEST(SD_CONV_Test, Random_SD3_DIT1024_Layer1) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       16, 128, 128, 1536, 64, 64, 2, 2, 2, 2, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01);
+      "bfloat16", "SD3_DIT1024", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, RandomSD3NewLayer2) {
+TEST(SD_CONV_Test, Random_SD3_VAE1024_Layer4) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 1024, 1024, 256, 1024, 1024, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, RandomSD3NewLayer3) {
+TEST(SD_CONV_Test, Random_SD3_VAE1024_Layer5) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 1024, 1024, 128, 1024, 1024, 1, 1, 1, 1, 0, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, RandomSD3NewLayer4) {
+TEST(SD_CONV_Test, Random_SD3_VAE1024_Layer6) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       128, 1024, 1024, 3, 1024, 1024, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, RandomSD3NewLayer5) {
+TEST(SD_CONV_Test, Random_SD3_VAE512_1) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       16, 64, 64, 512, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfloat16", "SD3_VAE512", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, RandomSD3NewLayer6) {
+TEST(SD_CONV_Test, Random_SD3_VAE1024_Layer7) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 512, 512, 256, 512, 512, 1, 1, 1, 1, 0, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, RandomSD3NewLayer7) {
+TEST(SD_CONV_Test, Random_SD3_VAE1024_Layer8) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 512, 512, 512, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, RandomSD3NewLayer8) {
+TEST(SD_CONV_Test, Random_SD3_VAE1024_Layer9) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       256, 1024, 1024, 128, 1024, 1024, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, RandomSD3NewLayer9) {
+TEST(SD_CONV_Test, Random_SD3_DIT512_1) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       16, 64, 64, 1536, 32, 32, 2, 2, 2, 2, 0, false, "bfloat16", "bfp16ebs8",
-      "bfloat16", "SD_VAE_DEC", 2, 0.01);
+      "bfloat16", "SD3_DIT512", 2);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, RandomSD3NewLayer10) {
+TEST(SD_CONV_Test, Random_SD3_VAE1024_Layer10) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       16, 128, 128, 512, 128, 128, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, RandomSD3NewLayer11) {
+TEST(SD_CONV_Test, Random_SD3_VAE1024_Layer11) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       128, 1024, 1024, 128, 1024, 1024, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_CONV_Test, RandomSD3NewLayer12) {
+TEST(SD_CONV_Test, Random_SD3_VAE1024_Layer12) {
   // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
   int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
       512, 512, 512, 256, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
-      "bfp16ebs8", "bfloat16", "SD_VAE_DEC", 1, 0.01);
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
+
+// sd3.0 vae encoder shapes
+TEST(SD_CONV_Test, Random_SD3_VAEENC1K_1) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      128, 1024, 1024, 128, 512, 512, 3, 3, 2, 2, -1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC512_1) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      128, 512, 512, 128, 256, 256, 3, 3, 2, 2, -1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC1K_2) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  // actual pipeline ic=3, need to pad to 4, and set wts for last channel to 0
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      4, 1024, 1024, 128, 1024, 1024, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC512_2) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  // actual pipeline ic=3, need to pad to 4, and set wts for last channel to 0
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      4, 512, 512, 128, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD3_VAE512", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC512_3) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      128, 256, 256, 256, 256, 256, 1, 1, 1, 1, 0, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC512_4) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      128, 256, 256, 256, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC1K_3) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      128, 512, 512, 256, 512, 512, 1, 1, 1, 1, 0, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC1K_4) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      128, 512, 512, 256, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC512_5) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      256, 256, 256, 256, 128, 128, 3, 3, 2, 2, -1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC1K_5) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      256, 512, 512, 256, 256, 256, 3, 3, 2, 2, -1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC1K_6) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      512, 128, 128, 32, 128, 128, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC512_6) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      512, 64, 64, 32, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD3_VAE512", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC512_7) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      256, 128, 128, 512, 128, 128, 1, 1, 1, 1, 0, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC512_8) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      256, 128, 128, 512, 128, 128, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC1K_7) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      256, 256, 256, 512, 256, 256, 1, 1, 1, 1, 0, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC1K_8) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      256, 256, 256, 512, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC512_9) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      512, 128, 128, 512, 64, 64, 3, 3, 2, 2, -1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE512", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD3_VAEENC1K_9) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      512, 256, 256, 512, 128, 128, 3, 3, 2, 2, -1, false, "bfloat16",
+      "bfp16ebs8", "bfloat16", "SD3_VAE1024", 1);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_CONTROLNET_1) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      16, 512, 512, 16, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD15_UNET", 2);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_CONTROLNET_2) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      4, 512, 512, 16, 512, 512, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD15_UNET", 2);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_CONTROLNET_3) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      96, 128, 128, 256, 64, 64, 3, 3, 2, 2, 1, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD15_UNET", 2);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_CONTROLNET_4) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      256, 64, 64, 320, 64, 64, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD15_UNET", 2);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_CONTROLNET_5) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      320, 32, 32, 320, 32, 32, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD15_UNET", 2);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_CONTROLNET_6) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      16, 512, 512, 32, 256, 256, 3, 3, 2, 2, 1, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD15_UNET", 2);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_CONTROLNET_7) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      32, 256, 256, 32, 256, 256, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD15_UNET", 2);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_CONTROLNET_8) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      640, 16, 16, 640, 16, 16, 1, 1, 1, 1, 0, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD15_UNET", 2);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_CONTROLNET_9) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      32, 256, 256, 96, 128, 128, 3, 3, 2, 2, 1, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD15_UNET", 2);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_CONV_Test, Random_SD15_CONTROLNET_10) {
+  // IC, IH, IW, OC, OH, OW, kh, kw, strideH, strideW, padding
+  int err_count = test_sd_conv<uint16_t, uint8_t, uint16_t>(
+      96, 128, 128, 96, 128, 128, 3, 3, 1, 1, 1, false, "bfloat16", "bfp16ebs8",
+      "bfloat16", "SD15_UNET", 2);
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
 // Random unittest end

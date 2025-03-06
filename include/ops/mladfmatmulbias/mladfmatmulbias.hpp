@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -89,10 +88,30 @@ private:
   int c_dtype_size_;
   size_t max_a_bo_size_;
   size_t max_c_bo_size_;
+  size_t max_cast_ofm_bo_size_;
+  size_t max_cast_int4_ofm_bo_size_;
   size_t max_m_;
   size_t max_k_;
   size_t max_n_;
 
+  /* size for bfp16 gemm+cast*/
+  int M_;
+  int K_;
+  int N_;
+  int sv_K_;
+  int sv_N_;
+  int sv_K_num_;
+  int sv_N_num_;
+  int bfp16_grp_size_ = 128;
+  size_t wts_size_;
+  size_t bias_size_;
+  size_t b_bo_size_;
+  bool is_bfp16_cast_gemm_ = false;
+  size_t sv_size_in_byte_;
+  size_t cast_int4_ofm_bo_size_;
+  size_t cast_ofm_bo_size_;
+  xrt::bo cast_int4_ofm_bo_;
+  xrt::bo cast_ofm_bo_;
   /* variables to store profile data */
   int64_t a_copy_time_;
   int64_t a_sync_time_;
@@ -198,12 +217,16 @@ public:
       std::vector<Tensor> &input, std::vector<Tensor> &output,
       const std::map<std::string, std::any> &attr = {}) const override;
   void set_kernel_shapes_kn_mladf() const;
+  void set_bfp16_kernel_shapes();
   // void initialize_weights_int4_mladf(const std::vector<Tensor>
   // &const_params);
   void set_kernel_shapes_m_mladf(int64_t input_m);
   void run_aie(InT *a, xrt::bo &w_bo, int64_t *input_shape, bool wait = true);
   void run_aie_2(InT *a, xrt::bo &w_bo, int64_t *input_shape, bool wait = true);
   bool create_bo(void *use_ptr, size_t size, int operand_index);
+  void initialize_bfp16_wts(std::vector<uint8_t> &bo_map, int8_t *wts_input,
+                            int8_t *zp_input, float *bias_input,
+                            float *scale_input);
 };
 
 } // namespace ryzenai

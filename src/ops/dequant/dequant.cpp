@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <fstream>
@@ -182,10 +197,12 @@ std::vector<OpArgMap> dequant<InT, OutT>::get_buffer_reqs(
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
   size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
 
+  size_t output_idx = is_generic_fusion ? 3 : 2;
+
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 2, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};
@@ -277,6 +294,8 @@ dequant<InT, OutT>::dequant(const std::string &a_dtype,
   raw_shapes_["dequant_4x4_a16accbf16"].push_back(std::make_tuple(4096, 320));
   raw_shapes_["dequant_4x4_a16accbf16"].push_back(std::make_tuple(4096, 640));
   raw_shapes_["dequant_4x4_a16accbf16"].push_back(std::make_tuple(4096, 2560));
+
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
 
   a_dtype_ = a_dtype;
   c_dtype_ = c_dtype;
@@ -392,17 +411,33 @@ void dequant<InT, OutT>::initialize_const_params(
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("dequant initialize_const_params(ptr) ...");
 
-  DD_THROW_IF((const_params.size() != 1) ||
-                  (const_params.at(0).shape.size() != 1),
+  DD_THROW_IF(!OpsFusion::check_generic_fusion(attr) &&
+                  ((const_params.size() != 1) ||
+                   (const_params.at(0).shape.size() != 1)),
               OpsFusion::dd_format("Unsupported const spec for dequant\n") +
                   OpsFusion::dd_format(
                       "(Details : #const params == 1 ({}), Const param1 dim "
                       "== 1 ({})",
                       const_params.size(), const_params.at(0).shape.size()));
 
-  const int qdq_params_idx = 0;
+  int32_t *qdq_params;
 
-  auto qdq_params = (int32_t *)const_params.at(qdq_params_idx).data;
+  if (is_generic_fusion) {
+    float *in_s = (float *)const_params.at(0).data;
+    uint16_t *in_z = (uint16_t *)const_params.at(1).data;
+
+    auto [a_scale, a_zp] = OpsFusion::coeffs::calc_lrn_coeff(*in_s, *in_z);
+
+    qdq_tensor[0] = a_zp;
+    qdq_tensor[1] = a_scale;
+
+    qdq_params = qdq_tensor;
+
+  } else {
+    const int qdq_params_idx = 0;
+    qdq_params = (int32_t *)const_params.at(qdq_params_idx).data;
+  }
+
   auto qdq_params_size = matmul_matrix::QDQparam_size * sizeof(int32_t);
 
   io.write(0, (void *)qdq_params, qdq_params_size);
@@ -415,7 +450,7 @@ void dequant<InT, OutT>::initialize_const_params(
     const std::vector<Tensor> &const_params,
     const std::map<std::string, std::any> &attr) {
   // Check the number of inputs
-  if (const_params.size() != 1) {
+  if (!is_generic_fusion && const_params.size() != 1) {
     throw std::runtime_error(
         "dequant IPU Wrapper expect to have one constant.");
   }

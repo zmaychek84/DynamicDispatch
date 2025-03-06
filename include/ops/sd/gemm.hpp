@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -93,6 +93,7 @@ private:
   const std::string sd_gemm_key_ = "sd_gemm_";
   std::string txn_fname_prefix_;
   std::string XCLBIN_FNAME_;
+  std::string pdi_name_;
 
   void setup_instr_registry();
   std::string get_key(std::string prefix, const std::vector<size_t> &mat) const;
@@ -111,7 +112,7 @@ public:
   void execute(std::vector<Tensor> &input,
                std::vector<Tensor> &output) override;
   void debug(bool enable);
-  void set_params();
+  void set_params(const std::string &xclbin, const std::string &pdi_name);
   const std::vector<uint8_t> get_transaction_bin(
       std::vector<Tensor> &input, std::vector<Tensor> &output,
       const std::map<std::string, std::any> &attr = {}) const override;

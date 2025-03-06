@@ -84,6 +84,8 @@ message Partition {
   int64 start_idx = 1;
   int64 end_idx = 2;
   int64 pdi_id = 3;
+  optional bool is_cpu = 4;
+  optional int64 next_npu_idx = 5;
 }
 
 message DDConfig {

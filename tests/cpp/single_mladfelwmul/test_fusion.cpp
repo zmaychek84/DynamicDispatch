@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -110,13 +110,14 @@ int test_mladfelwmul(const std::string &meta_json,
 
   std::string xclbin_fname;
   if (a_dtype == "uint16") {
-    xclbin_fname =
-        Utils::get_env_var("DD_ROOT") + MLADF_ELWMUL_A16W16_QDQ_XCLBIN_PATH;
+    xclbin_fname = Utils::get_env_var("DD_ROOT") + "/" +
+                   MLADF_ELWMUL_A16W16_QDQ_XCLBIN_PATH;
   }
   auto meta = OpsFusion::load_meta_json(meta_json);
 
   OpsFusion::FusionRuntime rt_cmp;
   OpsFusion::DDConfig cfg;
+  cfg.enable_preemption = false;
   auto xclbin_content = OpsFusion::read_bin_file<char>(xclbin_fname);
   cfg.xclbin_content = &xclbin_content;
   rt_cmp.compile(meta, "", cfg);

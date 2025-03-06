@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Advanced Micro Devices, Inc
+# Copyright (c) 2025 Advanced Micro Devices, Inc
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of
 # this software and associated documentation files (the "Software"), to deal in
@@ -50,7 +50,7 @@ add_custom_command(
 
 add_library(${LIBRARY_NAME} ${transaction_package_files_list} ${LIB_SRC})
 if(MSVC)
-  target_compile_options(${LIBRARY_NAME} PRIVATE /bigobj)
+  target_compile_options(${LIBRARY_NAME} PRIVATE /bigobj "/guard:cf")
 endif()
 target_link_libraries(${LIBRARY_NAME} PRIVATE ZLIB::ZLIB)
 target_include_directories(

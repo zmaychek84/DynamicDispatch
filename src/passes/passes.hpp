@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,16 +25,24 @@
 
 namespace OpsFusion {
 
-void assign_pdi_id_pass(const OpPDIMap &op_pdi_map, Metadata &meta);
-Metadata insert_pm_swap_nodes(const Metadata &meta);
+void assign_pdi_id_pass(const OpPDIMap &op_pdi_map, const CPUOpList &cpu_ops,
+                        Metadata &meta);
+Metadata insert_pm_swap_nodes(const Metadata &meta, const OpPMMap &op_pm_map,
+                              const OverlayPMMeta &overlay_pm_meta);
+Metadata remove_identity_ops(const Metadata &meta);
+void sync_identity_tensors(Metadata &meta);
+void set_new_offsets(Metadata &org_meta, const Metadata &new_meta);
 Metadata insert_record_timer_nodes(const Metadata &meta,
                                    uint32_t profile_level);
 Metadata insert_preemption_nodes(const Metadata &meta);
 std::pair<std::map<std::string, std::any>, std::map<std::string, std::any>>
 get_record_timer_attr(const std::string &op_name);
-void generate_pdi_partitions_pass(Metadata &meta, bool eager_mode);
+void generate_pdi_partitions_pass(Metadata &meta, bool eager_mode,
+                                  const CPUOpList &cpu_ops);
 void analyze_buffer_reqs(Metadata &meta);
 void optimize_scratch_buffer(Metadata &meta);
+void optimize_scratch_buffer_bucket(Metadata &meta, const std::string &version);
+void optimize_scratch_buffer_contiguous(Metadata &meta);
 bool split_max_partition_pass(
     Metadata &meta, const std::vector<std::vector<uint8_t>> fused_instr_vec,
     size_t limit);

@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <fstream>
@@ -226,20 +241,55 @@ l2_norm<InT, WtT, OutT>::l2_norm(const std::string &a_dtype,
   default_shapes_["l2_norm_4x2_abf16accbf16"] =
       std::vector<std::tuple<int, int>>();
   default_shapes_["l2_norm_4x4_a16acc16"] = std::vector<std::tuple<int, int>>();
+  default_shapes_["l2_norm_4x4_abf16acc16"] =
+      std::vector<std::tuple<int, int>>();
+  default_shapes_["l2_norm_8x4_a16acc16"] = std::vector<std::tuple<int, int>>();
+  default_shapes_["l2_norm_8x4_abf16acc16"] =
+      std::vector<std::tuple<int, int>>();
 
   default_shapes_["l2_norm_4x2_abf16accbf16"].push_back(
       std::make_tuple(1, 768));
   default_shapes_["l2_norm_4x4_a16acc16"].push_back(std::make_tuple(1, 3072));
   default_shapes_["l2_norm_4x4_a16acc16"].push_back(std::make_tuple(64, 3072));
+  default_shapes_["l2_norm_4x4_abf16acc16"].push_back(std::make_tuple(1, 3072));
+  default_shapes_["l2_norm_4x4_abf16acc16"].push_back(
+      std::make_tuple(64, 3072));
+
+  default_shapes_["l2_norm_8x4_a16acc16"].push_back(std::make_tuple(2, 3072));
+  default_shapes_["l2_norm_8x4_a16acc16"].push_back(std::make_tuple(64, 3072));
+  default_shapes_["l2_norm_8x4_abf16acc16"].push_back(std::make_tuple(2, 3072));
+  default_shapes_["l2_norm_8x4_abf16acc16"].push_back(
+      std::make_tuple(64, 3072));
+
+  default_shapes_["l2_norm_8x4_a16acc16"].push_back(std::make_tuple(2, 1536));
+  default_shapes_["l2_norm_8x4_a16acc16"].push_back(std::make_tuple(64, 1536));
+  default_shapes_["l2_norm_8x4_abf16acc16"].push_back(std::make_tuple(2, 1536));
+  default_shapes_["l2_norm_8x4_abf16acc16"].push_back(
+      std::make_tuple(64, 1536));
 
   // raw shape is the actual shape from ONNX, sequence needs to match with
   // default_shape
   raw_shapes_["l2_norm_4x2_abf16accbf16"] = std::vector<std::tuple<int, int>>();
   raw_shapes_["l2_norm_4x4_a16acc16"] = std::vector<std::tuple<int, int>>();
+  raw_shapes_["l2_norm_4x4_abf16acc16"] = std::vector<std::tuple<int, int>>();
+  raw_shapes_["l2_norm_8x4_a16acc16"] = std::vector<std::tuple<int, int>>();
+  raw_shapes_["l2_norm_8x4_abf16acc16"] = std::vector<std::tuple<int, int>>();
 
   raw_shapes_["l2_norm_4x2_abf16accbf16"].push_back(std::make_tuple(1, 768));
   raw_shapes_["l2_norm_4x4_a16acc16"].push_back(std::make_tuple(1, 3072));
   raw_shapes_["l2_norm_4x4_a16acc16"].push_back(std::make_tuple(64, 3072));
+  raw_shapes_["l2_norm_4x4_abf16acc16"].push_back(std::make_tuple(1, 3072));
+  raw_shapes_["l2_norm_4x4_abf16acc16"].push_back(std::make_tuple(64, 3072));
+
+  raw_shapes_["l2_norm_8x4_a16acc16"].push_back(std::make_tuple(1, 3072));
+  raw_shapes_["l2_norm_8x4_a16acc16"].push_back(std::make_tuple(64, 3072));
+  raw_shapes_["l2_norm_8x4_abf16acc16"].push_back(std::make_tuple(1, 3072));
+  raw_shapes_["l2_norm_8x4_abf16acc16"].push_back(std::make_tuple(64, 3072));
+
+  raw_shapes_["l2_norm_8x4_a16acc16"].push_back(std::make_tuple(1, 1536));
+  raw_shapes_["l2_norm_8x4_a16acc16"].push_back(std::make_tuple(64, 1536));
+  raw_shapes_["l2_norm_8x4_abf16acc16"].push_back(std::make_tuple(1, 1536));
+  raw_shapes_["l2_norm_8x4_abf16acc16"].push_back(std::make_tuple(64, 1536));
 
   a_dtype_ = a_dtype;
   b_dtype_ = b_dtype;
@@ -283,12 +333,18 @@ l2_norm<InT, WtT, OutT>::l2_norm(const std::string &a_dtype,
 
   param_fname_prefix_ = "l2_norm_4x2_" + txnbin_a_header.at(a_dtype_) +
                         txnbin_acc_header.at(c_dtype_);
-  // Case for PSU 0/1 models
-  if (a_dtype_ == "uint16") {
+
+  if (design_param_.find("4x4") != std::string::npos) { // 4x4 design
     txn_fname_prefix_ = "l2_norm_4x4_" + txnbin_a_header.at(a_dtype_) +
                         txnbin_acc_header.at(c_dtype_);
 
     param_fname_prefix_ = "l2_norm_4x4_" + txnbin_a_header.at(a_dtype_) +
+                          txnbin_acc_header.at(c_dtype_);
+  } else if (design_param_.find("8x4") != std::string::npos) { // 8x4 design
+    txn_fname_prefix_ = "l2_norm_8x4_" + txnbin_a_header.at(a_dtype_) +
+                        txnbin_acc_header.at(c_dtype_);
+
+    param_fname_prefix_ = "l2_norm_8x4_" + txnbin_a_header.at(a_dtype_) +
                           txnbin_acc_header.at(c_dtype_);
   }
 
@@ -331,22 +387,16 @@ l2_norm<InT, WtT, OutT>::l2_norm(const std::string &a_dtype,
 template <typename InT, typename WtT, typename OutT>
 void l2_norm<InT, WtT, OutT>::set_params(const std::string &model_name,
                                          std::vector<size_t> input_shape) {
-#if 0
-  std::string XCLBIN_FNAME;
-  if (model_name == "mzdk5") {
-    XCLBIN_FNAME =
-        OpInterface::get_dd_base_dir() + ryzenai::mzdk5_A16W8_QDQ_XCLBIN_PATH;
-  } else if (model_name == "4x4mzdk5") {
-    XCLBIN_FNAME =
-        OpInterface::get_dd_base_dir() + ryzenai::mzdk54x4_A16W8_QDQ_XCLBIN_PATH;
-  } else {
-    throw std::invalid_argument("model_name is not supported");
-  }
-#endif
   std::string XCLBIN_FNAME = "";
   if (model_name == "4x4PSU") {
     XCLBIN_FNAME =
         OpInterface::get_dd_base_dir() + ryzenai::PSU_4x4_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "8x4PSU") {
+    XCLBIN_FNAME =
+        OpInterface::get_dd_base_dir() + ryzenai::PSU_8x4_A16W8_QDQ_XCLBIN_PATH;
+  } else if (model_name == "8x4HFDS") {
+    XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
+                   ryzenai::HFDS_8x4_A16W8_QDQ_XCLBIN_PATH;
   } else {
     XCLBIN_FNAME = OpInterface::get_dd_base_dir() +
                    ryzenai::START_TAIL_4x2_MS_SHELL_QDQ_XCLBIN_PATH;
@@ -442,9 +492,8 @@ void l2_norm<InT, WtT, OutT>::initialize_const_params(
   b_bo_.sync(XCL_BO_SYNC_BO_TO_DEVICE);
   auto b_sync_stop = GET_ELAPSED_TIME_NS();
   b_sync_time_ = static_cast<int64_t>(b_sync_stop - b_sync_start);
-  auto M = kernel_x_shape_[0];
-  auto K = kernel_x_shape_[1];
-  auto [Mo, Ko] = map_padded_shape(M, K);
+  auto Mo = kernel_x_shape_[0];
+  auto Ko = kernel_x_shape_[1];
   if (is_ctrl_pkt_) {
     // Based on the mapped_shape to get the meta json file
     std::vector<uint8_t> json_data;

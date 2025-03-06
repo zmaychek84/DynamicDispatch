@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -86,6 +86,7 @@ private:
   std::string XCLBIN_FNAME_;
   std::string txn_fname_prefix_;
   std::string param_fname_prefix_;
+  std::string pdi_name_;
 
   void setup_instr_registry();
   std::string get_key(std::string prefix, const std::vector<int> &a_shape,
@@ -113,7 +114,8 @@ public:
   const std::map<std::string, std::any> &get_attr() const override {
     return attr_;
   }
-  void set_params(const std::string &modelName, const std::vector<int> &a_shape,
+  void set_params(const std::string &xclbin, const std::string &pdi_name,
+                  const std::vector<int> &a_shape,
                   const std::vector<int> &b_shape, const int axis = -1);
   const std::vector<uint8_t> get_super_kernel_params(
       std::vector<Tensor> &input, std::vector<Tensor> &output,

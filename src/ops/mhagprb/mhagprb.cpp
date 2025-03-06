@@ -1,7 +1,22 @@
-/*
- Copyright (C) 2023 - 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <array>
@@ -27,6 +42,8 @@
 
 #include <ops/mhagprb/mhagprb.hpp>
 #include <ops/op_interface.hpp>
+#include <ops/ops_common/coeffs.hpp>
+#include <ops/ops_common/op_util.hpp>
 #include <utils/logging.hpp>
 #include <utils/utils.hpp>
 
@@ -37,6 +54,270 @@
 #include "ops/ops_common/sigmoid_lut_512.h"
 
 namespace ryzenai {
+
+int64_t tensor_to_int64(Tensor t, size_t idx = 0) {
+  if ("uint8" == t.dtype) {
+    return static_cast<int64_t>(((uint8_t *)t.data)[idx]);
+  } else if ("uint16" == t.dtype) {
+    return static_cast<int64_t>(((uint16_t *)t.data)[idx]);
+  } else if ("uint32" == t.dtype) {
+    return static_cast<int64_t>(((uint32_t *)t.data)[idx]);
+  } else {
+    throw std::runtime_error("Unsupported tensor dtype '" + t.dtype +
+                             "' at line " + std::to_string(__LINE__));
+  }
+}
+
+float tensor_to_float(Tensor t, size_t idx = 0) {
+  if ("float" == t.dtype || "float32" == t.dtype) {
+    return static_cast<float>(((float *)t.data)[idx]);
+  } else {
+    throw std::runtime_error("Unsupported tensor dtype '" + t.dtype +
+                             "' at line " + std::to_string(__LINE__));
+  }
+}
+
+template <typename T> std::vector<std::vector<T>> tensor_to_vector2d(Tensor t) {
+  const T *t_data = static_cast<const T *>(t.data);
+  std::vector<std::vector<T>> vec(t.shape[0], std::vector<T>(t.shape[1], 0));
+
+  for (int i = 0; i < t.shape[0]; i++) {
+    for (int j = 0; j < t.shape[1]; j++) {
+      vec[i][j] = t_data[i * t.shape[1] + j];
+    }
+  }
+
+  return vec;
+}
+
+template <typename T> std::vector<T> tensor_to_vector1d(Tensor t) {
+  // Cast the tensor data to a pointer of type T
+  const T *t_data = static_cast<const T *>(t.data);
+
+  // flattened size of tensor
+  uint64_t s = 1;
+  for (auto e : t.shape) {
+    s *= e;
+  }
+
+  // Use the range constructor to initialize the vector
+  std::vector<T> vec(t_data, t_data + s);
+
+  return vec;
+}
+
+std::tuple<int64_t, int32_t, int64_t, int32_t, int32_t, int32_t, int32_t>
+qdq_act_matmul_uint8_uint8_cstm(float a_dq_xscale, int64_t a_dq_xzero_pt,
+                                int64_t weights_in_ch, float w_dq_xscale,
+                                int64_t w_dq_xzero_pt, float a_q_yscale,
+                                int64_t a_q_yzero_pt) {
+  // Ensure the zero points are of type int64_t
+  int64_t a_dq_xzero_pt_i64 = static_cast<int64_t>(a_dq_xzero_pt);
+  int64_t w_dq_xzero_pt_i64 = static_cast<int64_t>(w_dq_xzero_pt);
+  int64_t a_q_yzero_pt_i64 = static_cast<int64_t>(a_q_yzero_pt);
+
+  // Calculate the c2 coefficient
+  float c2_coeff = (a_dq_xscale * w_dq_xscale) / a_q_yscale;
+  int64_t c2_coeff_prime;
+  int32_t shft_c2;
+
+  std::tie(c2_coeff_prime, shft_c2) =
+      OpsFusion::coeffs::find_closest_shifted_int32(c2_coeff, 8388607);
+
+  c2_coeff_prime = static_cast<int64_t>(c2_coeff_prime);
+
+  // Calculate the weight coefficient scale
+  int64_t weight_coeff_scale = -c2_coeff_prime * a_dq_xzero_pt_i64;
+  int32_t weight_coeff_scale_shift = 0;
+
+  if (std::abs(weight_coeff_scale) > 2147483647) { // Max int32 number
+    weight_coeff_scale_shift = static_cast<int32_t>(
+        std::ceil(std::log2(std::abs(weight_coeff_scale))) - 31);
+  } else {
+    weight_coeff_scale_shift = 0;
+  }
+
+  weight_coeff_scale =
+      static_cast<int32_t>(weight_coeff_scale >> weight_coeff_scale_shift);
+
+  // Calculate c1 coefficient
+  int64_t c1_coeff = a_q_yzero_pt_i64 << shft_c2;
+
+  int64_t num_weights_unrolled = weights_in_ch;
+  int32_t c3_coeff_offset =
+      static_cast<int32_t>(-a_dq_xzero_pt_i64 * num_weights_unrolled);
+  int64_t c3_coeff_scale = -c2_coeff_prime * w_dq_xzero_pt_i64;
+  c1_coeff += c3_coeff_scale * static_cast<int64_t>(c3_coeff_offset);
+
+  // Calculate the shift for c3 coefficient scale
+  int32_t c3_coeff_scale_shift = 0;
+  if (std::abs(c3_coeff_scale) > 2147483647) { // Max int32 number
+    c3_coeff_scale_shift = static_cast<int32_t>(
+        std::ceil(std::log2(std::abs(c3_coeff_scale))) - 31);
+  } else {
+    c3_coeff_scale_shift = 0;
+  }
+
+  c3_coeff_scale = static_cast<int32_t>(c3_coeff_scale >> c3_coeff_scale_shift);
+
+  int32_t matmul_shift = 0;
+
+  return std::make_tuple(c1_coeff,                                   // C0
+                         static_cast<int32_t>(c3_coeff_scale),       // C1
+                         static_cast<int64_t>(c2_coeff_prime),       // C2
+                         static_cast<int32_t>(weight_coeff_scale),   // C3
+                         static_cast<int32_t>(c3_coeff_scale_shift), // shift_qb
+                         static_cast<int32_t>(shft_c2), // shift_out
+                         matmul_shift                   // matmul_shift
+  );
+}
+
+std::vector<int32_t>
+mha_qdq_params_fill(const std::tuple<int64_t, int32_t, int64_t, int32_t,
+                                     int32_t, int32_t, int32_t> &coeff_qkt,
+                    const std::tuple<int64_t, int32_t, int64_t, int32_t,
+                                     int32_t, int32_t, int32_t> &coeff_smv,
+                    const std::tuple<uint16_t, int> &sm_qdq_before,
+                    const std::tuple<uint16_t, int> &sm_qdq_after,
+                    int32_t is_qkt_smv_int16) {
+  std::vector<int32_t> qdq_params(96, 0);
+
+  constexpr int32_t qry_subv_rows = 32;
+  //   constexpr int32_t qry_subv_cols = 96;
+  constexpr int32_t key_subv_rows = 64;
+  //   constexpr int32_t key_subv_rows_int16 = 16;
+  //   constexpr int32_t key_subv_cols = 96;
+  //   constexpr int32_t val_subv_rows = 64;
+  constexpr int32_t val_subv_cols = 64;
+  //   constexpr int32_t out_subv_rows = 32;
+  //   constexpr int32_t out_subv_cols = 64;
+
+  // QKT
+  reinterpret_cast<int64_t *>(qdq_params.data())[0] = std::get<0>(coeff_qkt);
+  qdq_params[(16 * 0) + 2] = std::get<1>(coeff_qkt);
+  qdq_params[(16 * 0) + 3] = static_cast<int32_t>(std::get<2>(coeff_qkt));
+  qdq_params[(16 * 0) + 4] = std::get<3>(coeff_qkt);
+  qdq_params[(16 * 0) + 5] = qry_subv_rows;
+  qdq_params[(16 * 0) + 6] = key_subv_rows;
+  qdq_params[(16 * 0) + 7] = std::get<4>(coeff_qkt);
+  qdq_params[(16 * 0) + 8] = std::get<5>(coeff_qkt);
+  qdq_params[(16 * 0) + 9] = std::get<6>(coeff_qkt);
+  qdq_params[(16 * 0) + 10] = is_qkt_smv_int16;
+
+  // SM *V
+  reinterpret_cast<int64_t *>(qdq_params.data())[8] = std::get<0>(coeff_smv);
+  qdq_params[(16 * 1) + 2] = std::get<1>(coeff_smv);
+  qdq_params[(16 * 1) + 3] = (int32_t)std::get<2>(coeff_smv);
+  qdq_params[(16 * 1) + 4] = std::get<3>(coeff_smv);
+  qdq_params[(16 * 1) + 5] = qry_subv_rows;
+  qdq_params[(16 * 1) + 6] = val_subv_cols;
+  qdq_params[(16 * 1) + 7] = std::get<4>(coeff_smv);
+  qdq_params[(16 * 1) + 8] = std::get<5>(coeff_smv);
+  qdq_params[(16 * 1) + 9] = std::get<6>(coeff_smv);
+  qdq_params[(16 * 1) + 10] = is_qkt_smv_int16;
+
+  // DQ before SM
+  qdq_params[(16 * 2) + 0] = std::get<1>(sm_qdq_before);
+  qdq_params[(16 * 2) + 1] = std::get<0>(sm_qdq_before);
+
+  // Q after SM
+  qdq_params[(16 * 3) + 0] = std::get<1>(sm_qdq_after);
+  qdq_params[(16 * 3) + 1] = std::get<0>(sm_qdq_after);
+  qdq_params[(16 * 3) + 2] = is_qkt_smv_int16;
+
+  return qdq_params;
+}
+
+static std::uint32_t convert_float_to_qint(float in_f) {
+  std::uint32_t ret{0};
+  std::memcpy(&ret, &in_f, sizeof(in_f));
+  ret &= 0x7fffffff;
+  return ret;
+}
+
+std::vector<int64_t> grpb_qgprb_vec64_fill(std::vector<int64_t> bias,
+                                           int64_t qk_qdq_c0,
+                                           int64_t smv_qdq_c0) {
+  std::vector<int64_t> gprb_vec64(11, 0);
+
+  for (int i = 0; i < 8; i++) {
+    gprb_vec64[i] = bias[i];
+  }
+
+  gprb_vec64[9] = qk_qdq_c0;
+  gprb_vec64[10] = smv_qdq_c0;
+
+  return gprb_vec64;
+}
+
+std::vector<int32_t>
+gprb_vec32_fill(const std::vector<int64_t> &coeff_grpb, float act_scale,
+                int32_t act_zero_point, float wgt_scale, int32_t wgt_zero_point,
+                const std::vector<uint16_t> &model_a, float model_a_scale,
+                int32_t model_a_zp, uint16_t model_b, float model_b_scale,
+                int32_t model_b_zp, uint16_t model_c, float model_c_scale,
+                int32_t model_c_zp, int32_t is_grpb_int16) {
+
+  std::vector<int32_t> gprb_vec32(32, 0);
+
+  // const int qdq_c0_idx = 0;
+  const int qdq_c1_idx = 2;
+  const int qdq_c2_idx = 3;
+  const int qdq_c3_idx = 4;
+  const int qdq_Mv_idx = 5;
+  const int qdq_Nv_idx = 6;
+  const int qdq_SQb_idx = 7;
+  const int qdq_Sout_idx = 8;
+  const int qdq_Stdm_idx = 9;
+
+  const int gprb_act_scale_idx = 10;
+  const int gprb_act_zero_idx = 11;
+  const int gprb_wgt_scale_idx = 12;
+  const int gprb_wgt_zero_idx = 13;
+  const int gprb_model_a_idx = 14;
+  const int gprb_model_b_idx = 26;
+  const int gprb_model_c_idx = 27;
+  const int gprb_isint16_idx = 28;
+
+  const int num_heads = 12;
+
+  gprb_vec32[qdq_c1_idx] = (int32_t)coeff_grpb[0];
+  gprb_vec32[qdq_c2_idx] = (int32_t)coeff_grpb[1];
+  gprb_vec32[qdq_c3_idx] = 0;
+  gprb_vec32[qdq_Mv_idx] = 32;
+  gprb_vec32[qdq_Nv_idx] = 8;
+  gprb_vec32[qdq_SQb_idx] = (int32_t)coeff_grpb[2];
+  gprb_vec32[qdq_Sout_idx] = (int32_t)coeff_grpb[3];
+  gprb_vec32[qdq_Stdm_idx] = (int32_t)coeff_grpb[4];
+
+  gprb_vec32[gprb_act_scale_idx] =
+      static_cast<int32_t>(OpsFusion::coeffs::float_to_bfloat16(act_scale));
+  gprb_vec32[gprb_act_zero_idx] = act_zero_point;
+  gprb_vec32[gprb_wgt_scale_idx] =
+      static_cast<int32_t>(OpsFusion::coeffs::float_to_bfloat16(wgt_scale));
+  gprb_vec32[gprb_wgt_zero_idx] = wgt_zero_point;
+  gprb_vec32[gprb_isint16_idx] = is_grpb_int16;
+
+  std::vector<float> model_a_bf(num_heads);
+  for (size_t i = 0; i < num_heads; ++i) {
+    model_a_bf[i] =
+        OpsFusion::coeffs::dq<int32_t>(model_a[i], model_a_scale, model_a_zp);
+  }
+
+  for (int h = 0; h < num_heads; ++h) {
+    gprb_vec32[gprb_model_a_idx + h] = static_cast<int32_t>(
+        OpsFusion::coeffs::float_to_bfloat16(model_a_bf[h]));
+  }
+
+  gprb_vec32[gprb_model_b_idx] =
+      static_cast<int32_t>(OpsFusion::coeffs::float_to_bfloat16(
+          OpsFusion::coeffs::dq<int32_t>(model_b, model_b_scale, model_b_zp)));
+  gprb_vec32[gprb_model_c_idx] =
+      static_cast<int32_t>(OpsFusion::coeffs::float_to_bfloat16(
+          OpsFusion::coeffs::dq<int32_t>(model_c, model_c_scale, model_c_zp)));
+
+  return gprb_vec32;
+}
 
 static std::array<size_t, 2> extract_shape(const Tensor &tensor) {
   std::array<size_t, 2> res;
@@ -150,7 +431,10 @@ void mhagrpb<InT, WtT, OutT>::setup_instr_registry() {
 template <typename InT, typename WtT, typename OutT>
 mhagrpb<InT, WtT, OutT>::mhagrpb(const std::string &a_dtype,
                                  const std::string &b_dtype,
-                                 const std::string &c_dtype, bool load_xrt) {
+                                 const std::string &c_dtype, bool load_xrt,
+                                 const std::map<std::string, std::any> attr) {
+
+  is_generic_pass_in_onnx = OpsFusion::check_generic_fusion(attr);
 
   txnbin_a_header = {{"uint16", "a16"}, {"uint8", "a8"}};
 
@@ -272,47 +556,219 @@ void mhagrpb<InT, WtT, OutT>::initialize_const_params(
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("MHAGRPB initialize_const_params(ptr) ...");
 
-  DD_THROW_IF(
-      (const_params.size() != 5) || (const_params.at(0).shape.size() != 2),
-      OpsFusion::dd_format(
-          "Unsupported const spec for MHAGRPB\n"
-          "(Details : #const params == 2 ({}), Const param1 dim == 2 ({})",
-          const_params.size(), const_params.at(0).shape.size()));
+  is_generic_pass_in_onnx = OpsFusion::check_generic_fusion(attr);
 
-  const int weight_idx = 0, gprb_vec64_idx = 1, gprb_vec32_idx = 2,
-            bias_idx = 3, qdq_idx = 4;
+  uint8_t *weights;
+  int64_t *gprb_vec64;
+  int32_t *gprb_vec32;
+  WtT *bias;
+  int32_t *qdq_param;
 
-  auto weights = (uint8_t *)const_params.at(weight_idx).data;
-  std::vector<size_t> weight_shape = const_params.at(weight_idx).shape;
+  std::vector<int64_t> gprb_vec64_vec;
+  std::vector<int32_t> gprb_vec32_vec;
+  std::vector<uint8_t> vec3d;
+  std::vector<int32_t> qdq_params_vec;
 
-  auto gprb_vec64 = (int64_t *)const_params.at(gprb_vec64_idx).data;
+  std::vector<size_t> weight_shape;
+  std::vector<size_t> bias_shape;
 
-  auto gprb_vec32 = (int32_t *)const_params.at(gprb_vec32_idx).data;
+  size_t Q, K, V, pad_Q, pad_K, pad_V, padded_size_bias, size_bias;
 
-  auto bias = (WtT *)const_params.at(bias_idx).data;
-  std::vector<size_t> bias_shape = const_params.at(bias_idx).shape;
+  std::vector<size_t> padded_bias_shape;
 
-  size_t Q = bias_shape.at(1);
-  size_t K = bias_shape.at(2);
-  size_t V = weight_shape.at(0) * weight_shape.at(1);
+  std::vector<uint8_t> padded_bias;
 
-  auto [pad_Q, pad_K, pad_V] = map_padded_shape(Q, K, V);
-  std::vector<size_t> padded_bias_shape = {
-      bias_shape.at(0), static_cast<size_t>(pad_Q), static_cast<size_t>(pad_K)};
+  if (is_generic_pass_in_onnx) {
 
-  size_t padded_size_bias =
-      std::accumulate(padded_bias_shape.begin(), padded_bias_shape.end(),
-                      size_t{1}, std::multiplies{}) *
-      b_dtype_size_;
-  std::vector<uint8_t> padded_bias(padded_size_bias, 0);
-  pad_bias((WtT *)padded_bias.data(), padded_bias_shape, (WtT *)bias,
-           bias_shape);
+    float query_sc = tensor_to_float(const_params.at(1));
+    int64_t query_zp = tensor_to_int64(const_params.at(2));
 
-  bias = (WtT *)padded_bias.data();
-  bias_shape = padded_bias_shape;
-  size_t size_bias = padded_size_bias;
+    float key_sc = tensor_to_float(const_params.at(3));
+    int64_t key_zp = tensor_to_int64(const_params.at(4));
 
-  auto qdq_param = (int32_t *)const_params.at(qdq_idx).data;
+    float qkt_sc = tensor_to_float(const_params.at(5));
+    int64_t qkt_zp = tensor_to_int64(const_params.at(6));
+
+    float sm_sc = tensor_to_float(const_params.at(7));
+    int64_t sm_zp = tensor_to_int64(const_params.at(8));
+
+    float v_sc = tensor_to_float(const_params.at(9));
+    int64_t v_zp = tensor_to_int64(const_params.at(10));
+
+    float vsm_sc = tensor_to_float(const_params.at(11));
+    int64_t vsm_zp = tensor_to_int64(const_params.at(12));
+
+    std::vector<std::vector<uint8_t>> grpb_w =
+        tensor_to_vector2d<uint8_t>(const_params.at(13));
+    float grpb_w_sc = tensor_to_float(const_params.at(14));
+    int64_t grpb_w_zp = tensor_to_int64(const_params.at(15));
+
+    auto temp_grpb_b = tensor_to_vector1d<uint8_t>(const_params.at(16));
+    std::vector<uint16_t> grpb_b(temp_grpb_b.size());
+    std::transform(temp_grpb_b.begin(), temp_grpb_b.end(), grpb_b.begin(),
+                   [](uint8_t value) { return static_cast<uint16_t>(value); });
+
+    float grpb_b_sc = tensor_to_float(const_params.at(17));
+    int64_t grpb_b_zp = tensor_to_int64(const_params.at(18));
+
+    float grpb_sc = tensor_to_float(const_params.at(19));
+    int64_t grpb_zp = tensor_to_int64(const_params.at(20));
+
+    int64_t div_w = tensor_to_int64(const_params.at(21));
+    float div_w_sc = tensor_to_float(const_params.at(22));
+    int64_t div_w_zp = tensor_to_int64(const_params.at(23));
+
+    auto temp_mul_1_w = tensor_to_vector1d<uint8_t>(const_params.at(24));
+    std::vector<uint16_t> mul_1_w(temp_mul_1_w.size());
+    std::transform(temp_mul_1_w.begin(), temp_mul_1_w.end(), mul_1_w.begin(),
+                   [](uint8_t value) { return static_cast<uint16_t>(value); });
+
+    float mul_1_w_sc = tensor_to_float(const_params.at(25));
+    int64_t mul_1_w_zp = tensor_to_int64(const_params.at(26));
+
+    auto mul_3_w = tensor_to_vector1d<uint8_t>(const_params.at(27));
+    float mul_3_w_sc = tensor_to_float(const_params.at(28));
+    int64_t mul_3_w_zp = tensor_to_int64(const_params.at(29));
+
+    int64_t add_w = tensor_to_int64(const_params.at(30));
+    float add_sc = tensor_to_float(const_params.at(31));
+    int64_t add_zp = tensor_to_int64(const_params.at(32));
+
+    int64_t sub_w = tensor_to_int64(const_params.at(33));
+    float sub_sc = tensor_to_float(const_params.at(34));
+    int64_t sub_zp = tensor_to_int64(const_params.at(35));
+
+    int is_qkt_smv_int16 = 0;
+    int is_grpb_int16 = 0;
+
+    auto coeff_qkt = qdq_act_matmul_uint8_uint8_cstm(
+        query_sc, query_zp, 96, key_sc, key_zp, qkt_sc, qkt_zp);
+
+    auto coeff_smv = qdq_act_matmul_uint8_uint8_cstm(sm_sc, sm_zp, 512, v_sc,
+                                                     v_zp, vsm_sc, vsm_zp);
+
+    qdq_params_vec = mha_qdq_params_fill( // in32_t * 96
+        coeff_qkt, coeff_smv,
+        std::make_tuple(OpsFusion::coeffs::float_to_bfloat16(
+                            qkt_sc / ((div_w - div_w_zp) * div_w_sc)),
+                        (int)qkt_zp),
+        std::make_tuple(OpsFusion::coeffs::float_to_bfloat16(1.0f / sm_sc),
+                        (int)sm_zp),
+        is_qkt_smv_int16);
+
+    // Extracting index 0 of mul_3_w
+    uint64_t mul3_w_size0 = 1;
+    for (auto e : const_params.at(27).shape) {
+      mul3_w_size0 *= e;
+    }
+    mul3_w_size0 /= const_params.at(27).shape[0];
+
+    vec3d = std::vector<uint8_t>(mul3_w_size0);
+    for (uint64_t i = 0; i < mul3_w_size0; i++) {
+      vec3d[i] = mul_3_w[i];
+    }
+
+    auto [c0_gate_linear, c1_gate_linear, c2_gate_linear, shift_qb_gate_linear,
+          shift_out_gate_linear, matmul_shift_gate_linear] =
+        OpsFusion::coeffs::compute_qdq_coeff_matmul_bias(
+            query_sc, (uint8_t)query_zp, grpb_w, grpb_w_sc, (uint8_t)grpb_w_zp,
+            grpb_b, grpb_b_sc, (uint8_t)grpb_b_zp, grpb_sc, (uint8_t)grpb_zp);
+
+    gprb_vec64_vec = grpb_qgprb_vec64_fill( // int64_t * 11
+        c0_gate_linear, std::get<0>(coeff_qkt), std::get<0>(coeff_smv));
+
+    gprb_vec32_vec = gprb_vec32_fill( // int32_t * 32
+        {
+            c1_gate_linear,
+            c2_gate_linear,
+            shift_qb_gate_linear,
+            shift_out_gate_linear,
+            matmul_shift_gate_linear,
+        },
+        grpb_sc, (int32_t)grpb_zp, mul_3_w_sc, (int32_t)mul_3_w_zp, mul_1_w,
+        mul_1_w_sc, (int32_t)mul_1_w_zp, (uint16_t)sub_w, sub_sc,
+        (int32_t)sub_zp, (uint16_t)add_w, add_sc, (int32_t)add_zp,
+        is_grpb_int16);
+
+    weights = (uint8_t *)const_params.at(0).data;
+    gprb_vec64 = gprb_vec64_vec.data();
+    gprb_vec32 = gprb_vec32_vec.data();
+    bias = (WtT *)vec3d.data();
+    qdq_param = qdq_params_vec.data();
+
+    bias_shape = {const_params.at(27).shape[1], const_params.at(27).shape[2],
+                  const_params.at(27).shape[3]};
+
+    weight_shape = const_params.at(0).shape;
+
+    Q = bias_shape.at(1);
+    K = bias_shape.at(2);
+    V = weight_shape.at(0) * weight_shape.at(1);
+
+    std::tie(pad_Q, pad_K, pad_V) = map_padded_shape(Q, K, V);
+
+    padded_bias_shape = {bias_shape.at(0), static_cast<size_t>(pad_Q),
+                         static_cast<size_t>(pad_K)};
+
+    padded_size_bias =
+        std::accumulate(padded_bias_shape.begin(), padded_bias_shape.end(),
+                        size_t{1}, std::multiplies{}) *
+        b_dtype_size_;
+
+    padded_bias = std::vector<uint8_t>(padded_size_bias, 0);
+
+    pad_bias((WtT *)padded_bias.data(), padded_bias_shape, (WtT *)bias,
+             bias_shape);
+
+    size_bias = padded_size_bias;
+
+  } else {
+
+    DD_THROW_IF(
+        (const_params.size() != 5) || (const_params.at(0).shape.size() != 2),
+        OpsFusion::dd_format(
+            "Unsupported const spec for MHAGRPB\n"
+            "(Details : #const params == 2 ({}), Const param1 dim == 2 ({})",
+            const_params.size(), const_params.at(0).shape.size()));
+
+    const int weight_idx = 0, gprb_vec64_idx = 1, gprb_vec32_idx = 2,
+              bias_idx = 3, qdq_idx = 4;
+
+    weights = (uint8_t *)const_params.at(weight_idx).data;
+    weight_shape = const_params.at(weight_idx).shape;
+
+    gprb_vec64 = (int64_t *)const_params.at(gprb_vec64_idx).data;
+
+    gprb_vec32 = (int32_t *)const_params.at(gprb_vec32_idx).data;
+
+    bias = (WtT *)const_params.at(bias_idx).data;
+    bias_shape = const_params.at(bias_idx).shape;
+
+    Q = bias_shape.at(1);
+    K = bias_shape.at(2);
+    V = weight_shape.at(0) * weight_shape.at(1);
+
+    std::tie(pad_Q, pad_K, pad_V) = map_padded_shape(Q, K, V);
+
+    padded_bias_shape = {bias_shape.at(0), static_cast<size_t>(pad_Q),
+                         static_cast<size_t>(pad_K)};
+
+    padded_size_bias =
+        std::accumulate(padded_bias_shape.begin(), padded_bias_shape.end(),
+                        size_t{1}, std::multiplies{}) *
+        b_dtype_size_;
+
+    padded_bias = std::vector<uint8_t>(padded_size_bias, 0);
+
+    pad_bias((WtT *)padded_bias.data(), padded_bias_shape, (WtT *)bias,
+             bias_shape);
+
+    bias = (WtT *)padded_bias.data();
+    bias_shape = padded_bias_shape;
+    size_bias = padded_size_bias;
+
+    qdq_param = (int32_t *)const_params.at(qdq_idx).data;
+  }
 
   size_t H = bias_shape[0];
   size_t St = bias_shape[1];
@@ -684,23 +1140,32 @@ std::vector<OpArgMap> mhagrpb<InT, WtT, OutT>::get_buffer_reqs(
     const std::map<std::string, std::any> &attr) const {
 
   // [Q, K, V, mask, wgt, bias, out]
-  if (input.size() != 10) {
-    throw std::runtime_error("MHA : Incorrect number of tensors received");
+  if (input.size() != int(is_generic_pass_in_onnx ? 41 : 10)) {
+    throw std::runtime_error(
+        "MHA : Incorrect number of tensors received, " +
+        std::to_string(input.size()) + " v/s " +
+        std::to_string(int(is_generic_pass_in_onnx ? 41 : 10)));
   }
 
   auto Q_shape = extract_shape(input.at(0));
   auto K_shape = extract_shape(input.at(1));
   auto V_shape = extract_shape(input.at(2));
   auto mask_shape = extract_shape(input.at(3));
-  auto orig_bias_shape = extract_shape(input.at(7));
-  auto out_shape = extract_shape(input.at(9));
+  auto orig_bias_shape =
+      extract_shape(input.at(is_generic_pass_in_onnx ? 31 : 7));
+  auto out_shape = extract_shape(input.at(is_generic_pass_in_onnx ? 40 : 9));
 
   // Update shapes as per Kernel default shape
   auto [Q_pad, K_pad, V_pad] =
       map_padded_shape(Q_shape[0], K_shape[0], V_shape[1]);
-  std::vector<size_t> bias_shape = {input.at(7).shape.at(0),
-                                    static_cast<size_t>(Q_pad),
-                                    static_cast<size_t>(K_pad)};
+  std::vector<size_t> bias_shape;
+  if (is_generic_pass_in_onnx) {
+    bias_shape = {input.at(31).shape.at(1), static_cast<size_t>(Q_pad),
+                  static_cast<size_t>(K_pad)};
+  } else {
+    bias_shape = {input.at(7).shape.at(0), static_cast<size_t>(Q_pad),
+                  static_cast<size_t>(K_pad)};
+  }
   out_shape[0] = Q_pad;
   mask_shape.back() = Q_pad;
 
@@ -720,6 +1185,8 @@ std::vector<OpArgMap> mhagrpb<InT, WtT, OutT>::get_buffer_reqs(
   int const lnr_lut_ab_size = sizeof(lnr_lutab);
   int const lnr_lut_cd_size = sizeof(lnr_lutcd);
 
+  size_t out_index = is_generic_pass_in_onnx ? 40 : 9;
+
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, Q_size},
       {OpArgMap::OpArgType::INPUT, 1, 1, Q_size, K_size},
@@ -728,7 +1195,7 @@ std::vector<OpArgMap> mhagrpb<InT, WtT, OutT>::get_buffer_reqs(
       {OpArgMap::OpArgType::CONST_INPUT, 2, 4, 0,
        bias_size + size_mhaparam + lnr_lut_ab_size + lnr_lut_cd_size +
            size_qdqparam},
-      {OpArgMap::OpArgType::OUTPUT, 0, 9, 0, out_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, out_index, 0, out_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size}};
   return arg_map;
@@ -766,8 +1233,8 @@ void mhagrpb<InT, WtT, OutT>::initialize_inputs(
     auto &mask_tensor = input.at(3);
     const auto iq_params =
         std::any_cast<std::vector<float>>(MAP_AT(attr, "input_q_params"));
-    float scale = ARRAY_AT(iq_params, 6);
-    float zp = ARRAY_AT(iq_params, 7);
+    float scale = ARRAY_AT(iq_params, 6); // TODO: set based on if generic
+    float zp = ARRAY_AT(iq_params, 7);    // TODO: set based on if generic
     if (mask_tensor.dtype == "bfloat16") {
       float value = (float)((-zp) * (scale));
       auto res = float_to_bfloat16_1(value);

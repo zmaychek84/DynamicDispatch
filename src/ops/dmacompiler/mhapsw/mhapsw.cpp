@@ -1,6 +1,22 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <array>
@@ -104,6 +120,16 @@ mhapsw<InT, WtT, OutT>::mhapsw(const std::string &a_dtype,
                                const std::string &b_dtype,
                                const std::string &c_dtype, bool load_xrt,
                                const std::map<std::string, std::any> &attr) {
+
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
+  if (is_generic_fusion) {
+    std::vector<std::string> vecStr =
+        std::any_cast<std::vector<std::string>>(attr.at("input_shapes"));
+    std::vector<std::vector<int64_t>> shapes =
+        OpsFusion::stringsToVector2d(vecStr);
+    q_shape_back = shapes[0].back();
+    k_shape_back = shapes[1].back();
+  }
 
   txnbin_a_header = {{"uint16", "a16"}, {"uint8", "a8"}};
 
@@ -229,20 +255,126 @@ void mhapsw<InT, WtT, OutT>::set_params(const std::string &model_name,
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }
 
+std::vector<int32_t>
+qdmha_calculate_qdq_coeffs(const std::vector<Tensor> &const_params,
+                           int64_t q_shape_back, int64_t k_shape_back) {
+  int idx = 0;
+
+  float q_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t q_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  float k_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t k_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  float v_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t v_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  float qkt_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t qkt_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  float sm_inp_sc =
+      OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t sm_inp_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  float sm_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t sm_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  float vsm_sc = OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t vsm_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  float pos_con_add_inp_2_sc =
+      OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t pos_con_add_inp_2_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  float pos_con_add_inp_1_sc =
+      OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t pos_con_add_inp_1_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  float pos_con_add_out_sc =
+      OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t pos_con_add_out_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  float att_add_input_1_sc =
+      OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t att_add_input_1_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  float att_add_input_sc =
+      OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t att_add_input_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  float att_add_output_sc =
+      OpsFusion::get_tensor_as_float_vec(const_params.at(idx++))[0];
+  uint16_t att_add_output_zp =
+      OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(idx++))[0];
+
+  auto coeff_qkt = OpsFusion::coeffs::qdq_act_matmul_uint16_uint16_cstm(
+      q_sc, q_zp, q_shape_back, k_sc, k_zp, qkt_sc, qkt_zp);
+
+  auto coeff_smv = OpsFusion::coeffs::qdq_act_matmul_uint16_uint16_cstm(
+      sm_sc, sm_zp, k_shape_back, v_sc, v_zp, vsm_sc, vsm_zp);
+
+  auto pos_con_qdq_param = std::make_tuple(
+      pos_con_add_inp_1_sc, pos_con_add_inp_1_zp, pos_con_add_inp_2_sc,
+      pos_con_add_inp_2_zp, pos_con_add_out_sc, pos_con_add_out_zp);
+
+  auto att_add_qdq_param =
+      std::make_tuple(att_add_input_1_sc, att_add_input_1_zp, att_add_input_sc,
+                      att_add_input_zp, att_add_output_sc, att_add_output_zp);
+
+  std::vector<int32_t> qdq_param_vec =
+      OpsFusion::coeffs::DeMHA_qdq_param_fill( // in32_t * 96
+          coeff_qkt, coeff_smv,
+          std::make_tuple(OpsFusion::coeffs::float_to_bfloat16(sm_inp_sc),
+                          (int)sm_inp_zp),
+          std::make_tuple(OpsFusion::coeffs::float_to_bfloat16(1.0f / sm_sc),
+                          (int)sm_zp),
+          pos_con_qdq_param, att_add_qdq_param, 1, 0);
+
+  return qdq_param_vec;
+}
+
 template <typename InT, typename WtT, typename OutT>
 void mhapsw<InT, WtT, OutT>::initialize_const_params(
     ConstBufferIO &io, const std::vector<Tensor> &const_params,
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("mhapsw initialize_const_params(ptr) ...");
-  DD_THROW_IF(
-      (const_params.size() != 1) || (const_params.at(0).shape.size() != 2),
-      OpsFusion::dd_format(
-          "Unsupported const spec for mhapsw\n"
-          "(Details : #const params == 1 ({}), Const param1 dim == 2 ({})",
-          const_params.size(), const_params.at(0).shape.size()));
-  const int qdq_idx = 0;
 
-  auto qdq_param = (int32_t *)const_params.at(qdq_idx).data;
+  int32_t *qdq_param = nullptr;
+  std::vector<int32_t> qdq_param_vec;
+
+  if (is_generic_fusion) {
+    DD_THROW_IF((const_params.size() != 26),
+                OpsFusion::dd_format("Unsupported const spec for mhapsw\n"
+                                     "(Details : #const params == 26 ({})",
+                                     const_params.size()));
+
+    qdq_param_vec =
+        qdmha_calculate_qdq_coeffs(const_params, q_shape_back, k_shape_back);
+
+    qdq_param = qdq_param_vec.data();
+
+  } else {
+    DD_THROW_IF(
+        (const_params.size() != 1) || (const_params.at(0).shape.size() != 2),
+        OpsFusion::dd_format(
+            "Unsupported const spec for mhapsw\n"
+            "(Details : #const params == 1 ({}), Const param1 dim == 2 ({})",
+            const_params.size(), const_params.at(0).shape.size()));
+    const int qdq_idx = 0;
+    qdq_param = (int32_t *)const_params.at(qdq_idx).data;
+  }
 
   int size_qdqparam = QDQparam_size * num_qdq_nodes * sizeof(int32_t);
 
@@ -583,7 +715,9 @@ std::vector<OpArgMap> mhapsw<InT, WtT, OutT>::get_buffer_reqs(
     const std::map<std::string, std::any> &attr) const {
   // [QKV, qdq_params]
 
-  if (input.size() != 7) {
+  size_t expected_input_size = is_generic_fusion ? 32 : 7;
+
+  if (input.size() != expected_input_size) {
     throw std::runtime_error("mhapsw: Incorrect number of tensors received");
   }
 
@@ -592,9 +726,14 @@ std::vector<OpArgMap> mhapsw<InT, WtT, OutT>::get_buffer_reqs(
   auto K_shape = extract_shape(input.at(1));
   auto V_shape = extract_shape(input.at(2));
 
+  // q_shape_back = input.at(0).shape.back();
+  // k_shape_back = input.at(1).shape.back();
+
+  size_t out_idx = expected_input_size - 1;
+
   auto add_before_attn_add_shape = extract_shape(input.at(3));
   auto attn_add_shape = extract_shape(input.at(4));
-  auto out_shape = extract_shape(input.at(6));
+  auto out_shape = extract_shape(input.at(out_idx));
 
   size_t Q_size = (Q_shape[0] * Q_shape[1] * sizeof(InT));
   size_t K_size = (K_shape[0] * K_shape[1] * sizeof(InT));
@@ -619,7 +758,7 @@ std::vector<OpArgMap> mhapsw<InT, WtT, OutT>::get_buffer_reqs(
       {OpArgMap::OpArgType::INPUT, 1, 4,
        Q_size + K_size + V_size + add_before_attn_add_size, attn_add_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 5, 0, size_qdqparam},
-      {OpArgMap::OpArgType::OUTPUT, 0, 6, 0, out_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, out_idx, 0, out_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};

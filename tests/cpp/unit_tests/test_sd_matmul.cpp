@@ -1,6 +1,22 @@
-/*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cfenv>
 #include <cmath>
@@ -202,13 +218,14 @@ int test_matmul(int B, int M, int K, int N, bool debug = false,
   attr["input_shape"] = std::vector<int>{B, M, K};
   attr["output_shape"] = std::vector<int>{B, M, N};
   attr["weight_shape"] = std::vector<int>{K, N};
+  std::string xclbin = "SDMatmul.xclbin";
   if (test_with_golden) {
     ryzenai::sd::matmul sd_matmul =
         ryzenai::sd::matmul<std::uint16_t, std::uint16_t, std::uint16_t>(
             a_dtype, b_dtype, c_dtype, false, attr);
     sd_matmul.debug(debug);
     std::vector<size_t> shapes = {Bs, Ms, Ks, Ns};
-    sd_matmul.set_params(model_name, shapes);
+    sd_matmul.set_params(xclbin, shapes);
     std::string test_golden_root_dir =
         "tests/cpp/unit_tests/testDataMladf/sd_vae_dec_matmul/";
     std::string shape_key = "a16bfw16bfacc16bf_" + std::to_string(Bs) + "_" +
@@ -254,7 +271,7 @@ int test_matmul(int B, int M, int K, int N, bool debug = false,
             a_dtype, b_dtype, c_dtype, false, attr);
     sd_matmul.debug(debug);
     std::vector<size_t> shapes = {Bs, Ms, Ks, Ns};
-    sd_matmul.set_params(model_name, shapes);
+    sd_matmul.set_params(xclbin, shapes);
     // gen rand
 
     std::vector<float> raw_wts(Ks * Ns, 0);

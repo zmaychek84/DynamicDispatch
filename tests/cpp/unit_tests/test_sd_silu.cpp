@@ -1,6 +1,22 @@
-/*
- * Copyright � 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <cfenv>
 #include <cmath>
@@ -156,7 +172,8 @@ static float py3_round(float x) {
   }
 }
 
-static void initialize_random_float(std::vector<float> &vec, int max, int min) {
+static void initialize_random_float(std::vector<float> &vec, float max,
+                                    float min) {
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_real_distribution<float> dis(min, max);
@@ -183,7 +200,7 @@ int test_sd_silu(std::vector<size_t> shape, bool debug = false,
                  float pixel_L2_norm_tolerance = 0.01,
                  bool test_with_golden = false) {
   int err_count = 0;
-  float error_tolerance = 0.01;
+  float error_tolerance = 0.01f;
   std::map<std::string, std::string> txnbin_a_header = {{"bfloat16", "a16bf"}};
   std::map<std::string, std::string> txnbin_acc_header = {
       {"bfloat16", "acc16bf"}};
@@ -197,13 +214,15 @@ int test_sd_silu(std::vector<size_t> shape, bool debug = false,
   std::vector<int> a_shape_int(a_shape.begin(), a_shape.end());
   attr["input_shape"] = a_shape_int;
   attr["output_shape"] = a_shape_int;
-
+  std::string xclbin = sd_get_xclbin(model_name);
+  std::string pdi_name = xclbin.empty() ? "DPU" : sd_get_pdi(xclbin, "SDSilu");
+  std::cerr << "xclbin: " << xclbin << " pdi_name: " << pdi_name << std::endl;
   if (test_with_golden) {
 
     ryzenai::sd::silu sd_silu = ryzenai::sd::silu<std::uint16_t, std::uint16_t>(
         ifm_type, out_type, false, attr);
     sd_silu.debug(debug);
-    sd_silu.set_params(model_name, a_shape);
+    sd_silu.set_params(xclbin, pdi_name, a_shape);
     std::string test_golden_root_dir =
         "tests/cpp/unit_tests/testDataMladf/sd_vae_dec_silu/";
 
@@ -254,7 +273,7 @@ int test_sd_silu(std::vector<size_t> shape, bool debug = false,
     ryzenai::sd::silu sd_silu = ryzenai::sd::silu<std::uint16_t, std::uint16_t>(
         ifm_type, out_type, false, attr);
     sd_silu.debug(debug);
-    sd_silu.set_params(model_name, a_shape);
+    sd_silu.set_params(xclbin, pdi_name, a_shape);
     std::vector<float> raw_ifms(a_size, 0);
     initialize_random_float(raw_ifms, 2, -2);
     auto bf16_ifms = float2bf16_vec(raw_ifms);
@@ -308,147 +327,147 @@ int test_sd_silu(std::vector<size_t> shape, bool debug = false,
 TEST(SD_SILU_Test, Golden_KernelShape1) {
   std::vector<size_t> shape = {2, 64, 64, 320};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape2) {
   std::vector<size_t> shape = {1, 64, 64, 512};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape3) {
   std::vector<size_t> shape = {1, 128, 128, 512};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape4) {
   std::vector<size_t> shape = {1, 256, 256, 256};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape5) {
   std::vector<size_t> shape = {1, 256, 256, 512};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape6) {
   std::vector<size_t> shape = {1, 512, 512, 128};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape7) {
   std::vector<size_t> shape = {1, 512, 512, 256};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape8) {
   std::vector<size_t> shape = {2, 8, 8, 1280};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape9) {
   std::vector<size_t> shape = {2, 8, 8, 2560};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape10) {
   std::vector<size_t> shape = {2, 16, 16, 640};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape11) {
   std::vector<size_t> shape = {2, 16, 16, 1280};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape12) {
   std::vector<size_t> shape = {2, 16, 16, 1920};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape13) {
   std::vector<size_t> shape = {2, 16, 16, 2560};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape14) {
   std::vector<size_t> shape = {2, 32, 32, 320};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape15) {
   std::vector<size_t> shape = {2, 32, 32, 640};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape16) {
   std::vector<size_t> shape = {2, 32, 32, 960};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape17) {
   std::vector<size_t> shape = {2, 32, 32, 1280};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape18) {
   std::vector<size_t> shape = {2, 32, 32, 1920};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape19) {
   std::vector<size_t> shape = {2, 64, 64, 640};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape20) {
   std::vector<size_t> shape = {2, 64, 64, 960};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_KernelShape21) {
   std::vector<size_t> shape = {2, 1280};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
@@ -456,203 +475,316 @@ TEST(SD_SILU_Test, Golden_KernelShape21) {
 TEST(SD_SILU_Test, Golden_SD3KernelShape1) {
   std::vector<size_t> shape = {1, 512, 512, 512};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_Dec", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_Dec", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_SD3KernelShape2) {
   std::vector<size_t> shape = {1, 1024, 1024, 128};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_Dec", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_Dec", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_SD3KernelShape3) {
   std::vector<size_t> shape = {1, 1024, 1024, 256};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_Dec", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_Dec", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 TEST(SD_SILU_Test, Golden_SD3KernelShape4) {
   std::vector<size_t> shape = {2, 1536};
   int err_count = test_sd_silu<uint16_t, uint16_t>(
-      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.1, true);
+      shape, false, "bfloat16", "bfloat16", "SD_UNet", 0.01f, true);
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape1) {
+TEST(SD_SILU_Test, Random_SD15_UNET_2) {
   std::vector<size_t> shape = {2, 64, 64, 320};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape2) {
+TEST(SD_SILU_Test, Random_SD3_VAE512_1) {
   std::vector<size_t> shape = {1, 64, 64, 512};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape3) {
+TEST(SD_SILU_Test, Random_SD15_VAE_1) {
+  std::vector<size_t> shape = {1, 64, 64, 512};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD15_VAE");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD3_VAE1024_3) {
   std::vector<size_t> shape = {1, 128, 128, 512};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape4) {
+TEST(SD_SILU_Test, Random_SD3_VAE512_2) {
+  std::vector<size_t> shape = {1, 128, 128, 512};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD3_VAE512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD15_VAE_2) {
+  std::vector<size_t> shape = {1, 128, 128, 512};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD15_VAE");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD3_VAE512_4) {
   std::vector<size_t> shape = {1, 256, 256, 256};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape5) {
+TEST(SD_SILU_Test, Random_SD15_VAE_4) {
+  std::vector<size_t> shape = {1, 256, 256, 256};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD15_VAE");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD3_VAE1024_4) {
   std::vector<size_t> shape = {1, 256, 256, 512};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape6) {
+TEST(SD_SILU_Test, Random_SD3_VAE512_3) {
+  std::vector<size_t> shape = {1, 256, 256, 512};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD3_VAE512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD15_VAE_3) {
+  std::vector<size_t> shape = {1, 256, 256, 512};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD15_VAE");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD3_VAE512_6) {
   std::vector<size_t> shape = {1, 512, 512, 128};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD3_VAE512");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape7) {
+TEST(SD_SILU_Test, Random_SD15_VAE_6) {
+  std::vector<size_t> shape = {1, 512, 512, 128};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD15_VAE");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD3_VAE1024_5) {
   std::vector<size_t> shape = {1, 512, 512, 256};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape8) {
+TEST(SD_SILU_Test, Random_SD3_VAE512_5) {
+  std::vector<size_t> shape = {1, 512, 512, 256};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD3_VAE512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD15_VAE_5) {
+  std::vector<size_t> shape = {1, 512, 512, 256};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD15_VAE");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD15_UNET_7) {
   std::vector<size_t> shape = {2, 8, 8, 1280};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape9) {
+TEST(SD_SILU_Test, Random_SD15_UNET_8) {
   std::vector<size_t> shape = {2, 8, 8, 2560};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape10) {
+TEST(SD_SILU_Test, Random_SD15_UNET_5) {
   std::vector<size_t> shape = {2, 16, 16, 640};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape11) {
+TEST(SD_SILU_Test, Random_SD15_UNET_6) {
   std::vector<size_t> shape = {2, 16, 16, 1280};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape12) {
+TEST(SD_SILU_Test, Random_SD15_UNET_10) {
   std::vector<size_t> shape = {2, 16, 16, 1920};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape13) {
+TEST(SD_SILU_Test, Random_SD15_UNET_9) {
   std::vector<size_t> shape = {2, 16, 16, 2560};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape14) {
+TEST(SD_SILU_Test, Random_SD15_UNET_3) {
   std::vector<size_t> shape = {2, 32, 32, 320};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape15) {
+TEST(SD_SILU_Test, Random_SD15_UNET_4) {
   std::vector<size_t> shape = {2, 32, 32, 640};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape16) {
+TEST(SD_SILU_Test, Random_SD15_UNET_13) {
   std::vector<size_t> shape = {2, 32, 32, 960};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape17) {
+TEST(SD_SILU_Test, Random_SD15_UNET_12) {
   std::vector<size_t> shape = {2, 32, 32, 1280};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape18) {
+TEST(SD_SILU_Test, Random_SD15_UNET_11) {
   std::vector<size_t> shape = {2, 32, 32, 1920};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape19) {
+TEST(SD_SILU_Test, Random_SD15_UNET_15) {
   std::vector<size_t> shape = {2, 64, 64, 640};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape20) {
+TEST(SD_SILU_Test, Random_SD15_UNET_14) {
   std::vector<size_t> shape = {2, 64, 64, 960};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_KernelShape21) {
+TEST(SD_SILU_Test, Random_SD15_UNET_1) {
   std::vector<size_t> shape = {2, 1280};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
 // sd3.0
-TEST(SD_SILU_Test, Random_SD3KernelShape1) {
+TEST(SD_SILU_Test, Random_SD3_VAE1024_6) {
   std::vector<size_t> shape = {1, 512, 512, 512};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_Dec", 0.1);
+                                                   "bfloat16", "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_SD3KernelShape2) {
+TEST(SD_SILU_Test, Random_SD3_VAE1024_1) {
   std::vector<size_t> shape = {1, 1024, 1024, 128};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_Dec", 0.1);
+                                                   "bfloat16", "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_SD3KernelShape3) {
+TEST(SD_SILU_Test, Random_SD3_VAE1024_2) {
   std::vector<size_t> shape = {1, 1024, 1024, 256};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_Dec", 0.1);
+                                                   "bfloat16", "SD3_VAE1024");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }
 
-TEST(SD_SILU_Test, Random_SD3KernelShape4) {
+TEST(SD_SILU_Test, Random_SD3_DIT1024_1) {
   std::vector<size_t> shape = {2, 1536};
   int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
-                                                   "bfloat16", "SD_UNet", 0.1);
+                                                   "bfloat16", "SD3_DIT1024");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD3_DIT512_1) {
+  std::vector<size_t> shape = {2, 1536};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD3_DIT512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD3_VAEENC512_1) {
+  std::vector<size_t> shape = {1, 128, 128, 256};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD3_VAE512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD3_VAEENC512_2) {
+  std::vector<size_t> shape = {1, 256, 256, 128};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD3_VAE512");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+// https://confluence.amd.com/display/XAEC/SD15+controlnet+preprocess
+TEST(SD_SILU_Test, Random_SD15_CONTROLNET_1) {
+  std::vector<size_t> shape = {2, 64, 64, 256};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD15_CONTROLNET_2) {
+  std::vector<size_t> shape = {2, 128, 128, 96};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD15_CONTROLNET_3) {
+  std::vector<size_t> shape = {2, 256, 256, 32};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD15_UNET");
+  EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
+}
+
+TEST(SD_SILU_Test, Random_SD15_CONTROLNET_4) {
+  std::vector<size_t> shape = {2, 512, 512, 16};
+  int err_count = test_sd_silu<uint16_t, uint16_t>(shape, false, "bfloat16",
+                                                   "bfloat16", "SD15_UNET");
   EXPECT_TRUE(err_count == 0) << "Error Count = " << err_count;
 }

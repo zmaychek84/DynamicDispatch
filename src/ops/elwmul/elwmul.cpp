@@ -1,7 +1,23 @@
-/*
- Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
- Licensed under the MIT License.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 #include <iostream>
 #include <map>
 #include <sstream>
@@ -41,6 +57,8 @@ namespace {
 std::string getXCLBinName(std::string op_version) {
   if (op_version == "v1") {
     return LLAMA2_MLADF_2x4x4_V1_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
+  } else if (op_version == "v2") {
+    return LLAMA2_MLADF_2x4x4_V2_GEMMBFP16_SILU_MUL_MHA_RMS_ROPE_XCLBIN_NAME;
   } else if (op_version == "flat") {
     return LLAMA2_MLADF_2x4x4_BFP16_GEMM_SILU_MUL_FLAT_RMS_XCLBIN_NAME;
   } else {
@@ -143,6 +161,12 @@ void elw_mul<LhsT, RhsT, OutT>::setup_supported_shapes() {
 }
 
 template <typename LhsT, typename RhsT, typename OutT>
+std::vector<std::tuple<int, int>>
+elw_mul<LhsT, RhsT, OutT>::get_supported_shapes() {
+  return supported_shapes_;
+}
+
+template <typename LhsT, typename RhsT, typename OutT>
 elw_mul<LhsT, RhsT, OutT>::elw_mul(
     const std::string &operand_dtype, bool load_xrt,
     const std::map<std::string, std::any> &attr) {
@@ -158,7 +182,7 @@ elw_mul<LhsT, RhsT, OutT>::elw_mul(
   op_version_ = "v1";
   if (attr.find("op_version") != attr.end()) {
     op_version_ = std::any_cast<std::string>(attr.find("op_version")->second);
-    if (op_version_ != "v1" && op_version_ != "flat") {
+    if (op_version_ != "v1" && op_version_ != "v2" && op_version_ != "flat") {
       throw std::runtime_error("The selected op version does not exist");
     }
   }

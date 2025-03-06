@@ -24,7 +24,7 @@ static int test_gelu(const std::string &meta_json, size_t B, size_t M, size_t N,
   dd::initialize_random_bfloat16(x, 4);
 
   const std::string xclbin_fname =
-      Utils::get_env_var("DD_ROOT") + "\\xclbin\\stx\\SDGelu.xclbin";
+      Utils::get_env_var("DD_ROOT") + "\\xclbin\\stx\\SD15_unet_2x4x4.xclbin";
 
   std::cout << xclbin_fname << "\n";
   auto meta = OpsFusion::load_meta_json(meta_json);
@@ -33,6 +33,7 @@ static int test_gelu(const std::string &meta_json, size_t B, size_t M, size_t N,
   OpsFusion::DDConfig cfg;
   auto xclbin_content = OpsFusion::read_bin_file<char>(xclbin_fname);
   cfg.xclbin_content = &xclbin_content;
+  cfg.model_name = "SD15";
   std::cout << "compile \n";
   rt_cmp.compile(meta, "", cfg);
   rt_cmp.save_state("dd_metastate");
@@ -41,7 +42,7 @@ static int test_gelu(const std::string &meta_json, size_t B, size_t M, size_t N,
   rt.load_state("dd_metastate");
 
   std::cout << "init \n";
-  rt.init(meta);
+  rt.init(meta, "", cfg);
 
   std::vector<Tensor> input_Tensors;
   input_Tensors = {{x.data(), x_shape, x_dtype}};

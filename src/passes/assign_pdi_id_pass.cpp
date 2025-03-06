@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,13 +28,14 @@
 
 namespace OpsFusion {
 
-void assign_pdi_id_pass(const OpPDIMap &op_pdi_map, Metadata &meta) {
+void assign_pdi_id_pass(const OpPDIMap &op_pdi_map, const CPUOpList &cpu_ops,
+                        Metadata &meta) {
 
   std::set<std::uint8_t> unique_pdi_ids;
 
   for (size_t i = 0; i < meta.op_list.size(); ++i) {
     auto &op = meta.op_list.at(i);
-    std::uint8_t pdi_id = OpsFusion::get_pdi_id(op_pdi_map, op.type);
+    std::uint8_t pdi_id = OpsFusion::get_pdi_id(op_pdi_map, cpu_ops, op.type);
     op.pdi_id = pdi_id;
     unique_pdi_ids.insert(pdi_id);
   }

@@ -1,5 +1,4 @@
-// Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// Licensed under the MIT License.
+// Copyright (c) 2025 Advanced Micro Devices, Inc
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -140,6 +139,7 @@ public:
   void initialize_const_params(
       const std::vector<Tensor> &const_params,
       const std::map<std::string, std::any> &attr = {}) override {}
+  std::vector<std::tuple<int, int>> get_supported_shapes();
 };
 
 } // namespace ryzenai

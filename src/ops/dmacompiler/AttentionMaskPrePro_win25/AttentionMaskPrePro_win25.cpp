@@ -1,6 +1,22 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <fstream>
@@ -140,10 +156,12 @@ AttentionMaskPrePro_win25<InT, WtT, OutT>::get_buffer_reqs(
   size_t super_kernel_size = get_super_kernel_params(input, output).size();
   size_t ctrl_pkt_size = get_ctrl_pkts(input, output).size();
 
+  size_t output_idx = is_generic_fusion ? 11 : 2;
+
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, input_bo_size},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, const_params_bo_size},
-      {OpArgMap::OpArgType::OUTPUT, 0, 2, 0, output_bo_size},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, output_bo_size},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};
@@ -200,6 +218,8 @@ AttentionMaskPrePro_win25<InT, WtT, OutT>::AttentionMaskPrePro_win25(
 
   raw_shapes_["AttentionMaskPrePro_win25_4x4_a16acc16"].push_back(
       std::make_tuple(1, 64));
+
+  is_generic_fusion = OpsFusion::check_generic_fusion(attr);
 
   a_dtype_ = a_dtype;
   b_dtype_ = b_dtype;
@@ -303,8 +323,9 @@ void AttentionMaskPrePro_win25<InT, WtT, OutT>::initialize_const_params(
   RYZENAI_LOG_TRACE(
       "AttentionMaskPrePro_win25 initialize_const_params(ptr) ...");
 
-  DD_THROW_IF((const_params.size() != 1) ||
-                  (const_params.at(0).shape.size() != 1),
+  DD_THROW_IF(!OpsFusion::check_generic_fusion(attr) &&
+                  ((const_params.size() != 1) ||
+                   (const_params.at(0).shape.size() != 1)),
               OpsFusion::dd_format(
                   "Unsupported const spec for AttentionMaskPrePro_win25\n") +
                   OpsFusion::dd_format(
@@ -312,9 +333,48 @@ void AttentionMaskPrePro_win25<InT, WtT, OutT>::initialize_const_params(
                       "== 1 ({})",
                       const_params.size(), const_params.at(0).shape.size()));
 
-  const int qdq_params_idx = 0;
+  int16_t *qdq_params;
 
-  auto qdq_params = (int16_t *)const_params.at(qdq_params_idx).data;
+  if (is_generic_fusion) {
+    float *mul_const_scale = (float *)const_params.at(1).data;
+    uint16_t *mul_const_zp = (uint16_t *)const_params.at(0).data;
+
+    uint16_t dq_const_mul =
+        OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(5))[0];
+    float *dq_mul_const_scale = (float *)const_params.at(6).data;
+    uint16_t *dq_mul_const_zp = (uint16_t *)const_params.at(7).data;
+    std::vector<uint16_t> mul_vec_in{dq_const_mul};
+    auto gamma1 = OpsFusion::coeffs::dq_vec_to_bf16<uint16_t>(
+        mul_vec_in, *dq_mul_const_scale, *dq_mul_const_zp);
+
+    uint16_t dq_const_sub =
+        OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(2))[0];
+    float *dq_sub_const_scale = (float *)const_params.at(3).data;
+    uint16_t *dq_sub_const_zp = (uint16_t *)const_params.at(4).data;
+    std::vector<uint16_t> sub_vec_in{dq_const_sub};
+    auto gamma = OpsFusion::coeffs::dq_vec_to_bf16<uint16_t>(
+        sub_vec_in, *dq_sub_const_scale, *dq_sub_const_zp);
+
+    float *last_mul_const_scale = (float *)const_params.at(8).data;
+    uint16_t *last_mul_const_zp = (uint16_t *)const_params.at(9).data;
+
+    auto bf_mul_const_scale =
+        OpsFusion::coeffs::float_to_bfloat16(*mul_const_scale);
+    auto bf_last_mul_const_scale = OpsFusion::coeffs::float_to_bfloat16(
+        (float)1.0 / *last_mul_const_scale);
+
+    qdq_tensor[0] = (int32_t)*mul_const_zp;
+    qdq_tensor[1] = (int32_t)bf_mul_const_scale;
+    qdq_tensor[2] = (int32_t)*last_mul_const_zp;
+    qdq_tensor[3] = (int32_t)bf_last_mul_const_scale;
+    qdq_tensor[4] = (int32_t)gamma[0];
+    qdq_tensor[5] = (int32_t)gamma1[0];
+
+    qdq_params = reinterpret_cast<int16_t *>(qdq_tensor);
+  } else {
+    const int qdq_params_idx = 0;
+    qdq_params = (int16_t *)const_params.at(qdq_params_idx).data;
+  }
 
   // SW convert scale to 1/scale and bfloat16 for Q
 
@@ -331,7 +391,7 @@ void AttentionMaskPrePro_win25<InT, WtT, OutT>::initialize_const_params(
     const std::vector<Tensor> &const_params,
     const std::map<std::string, std::any> &attr) {
   // Check the number of inputs
-  if (const_params.size() != 1) {
+  if (!is_generic_fusion && const_params.size() != 1) {
     throw std::runtime_error(
         "AttentionMaskPrePro_win25 IPU Wrapper expect to have one constant.");
   }

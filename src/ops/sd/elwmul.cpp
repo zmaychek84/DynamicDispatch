@@ -1,6 +1,22 @@
-/*
- * Copyright © 2024 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <fstream>
 #include <iostream>
@@ -133,6 +149,11 @@ elwmul<InT, WtT, OutT>::elwmul(const std::string &a_dtype,
       std::vector<int>{2, 4096, 1536}, std::vector<int>{2, 1, 1536}));
   default_shapes_[txn_fname_prefix_].emplace_back(std::make_pair(
       std::vector<int>{2, 333, 1536}, std::vector<int>{2, 1, 1536}));
+
+  // bf16-160 shapes
+  default_shapes_[txn_fname_prefix_].emplace_back(std::make_pair(
+      std::vector<int>{2, 160, 1536}, std::vector<int>{2, 1, 1536}));
+
   if (load_xrt) {
     xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
     std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
@@ -242,11 +263,11 @@ void elwmul<InT, WtT, OutT>::initialize_const_params(
                     " OFM_BO_SIZE:" + std::to_string(OFM_BO_SIZE));
 
   a_bo_ = xrt::bo(xrt_ctx_->get_device(), IFM_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
-                  xrt_ctx_->get_kernel().group_id(0));
+                  xrt_ctx_->get_kernel(pdi_name_).group_id(0));
   b_bo_ = xrt::bo(xrt_ctx_->get_device(), CONST_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
-                  xrt_ctx_->get_kernel().group_id(0));
+                  xrt_ctx_->get_kernel(pdi_name_).group_id(0));
   c_bo_ = xrt::bo(xrt_ctx_->get_device(), OFM_BO_SIZE, XRT_BO_FLAGS_HOST_ONLY,
-                  xrt_ctx_->get_kernel().group_id(0));
+                  xrt_ctx_->get_kernel(pdi_name_).group_id(0));
 
   if (is_bias_cal_) {
     b_copy_time_ = 0;
@@ -296,7 +317,7 @@ void elwmul<InT, WtT, OutT>::execute(std::vector<Tensor> &input,
   auto instr_bo = xrt_ctx_->get_registry().get_instr_bo(instr_bo_key);
   size_t instr_bo_words = instr_bo.size() / sizeof(int);
 
-  auto kernel_ = xrt_ctx_->get_kernel();
+  auto kernel_ = xrt_ctx_->get_kernel(pdi_name_);
 
   auto run_aie_start = GET_ELAPSED_TIME_NS();
   // TODO: figure out the Bo order
@@ -338,7 +359,8 @@ const std::vector<uint8_t> elwmul<InT, WtT, OutT>::get_transaction_bin(
 }
 
 template <typename InT, typename WtT, typename OutT>
-void elwmul<InT, WtT, OutT>::set_params(const std::string &modelName,
+void elwmul<InT, WtT, OutT>::set_params(const std::string &xclbin,
+                                        const std::string &pdi_name,
                                         const std::vector<int> &a_shape,
                                         const std::vector<int> &b_shape) {
   a_shape_ = a_shape;
@@ -357,6 +379,10 @@ void elwmul<InT, WtT, OutT>::set_params(const std::string &modelName,
     is_bias_cal_ = true;
   }
   DD_ASSERT(c_shape_.size() > 0, "SD_ELWMUL illegal shape");
+  if (!xclbin.empty()) {
+    XCLBIN_FNAME_ = OpInterface::get_dd_base_dir() + "\\xclbin\\stx\\" + xclbin;
+  }
+  pdi_name_ = pdi_name;
   xrt_ctx_ = dynamic_dispatch::xrt_context::get_instance(XCLBIN_FNAME_);
   std::call_once(instr_reg_flag_, [this]() { setup_instr_registry(); });
 }

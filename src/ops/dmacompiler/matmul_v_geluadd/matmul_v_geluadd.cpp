@@ -1,6 +1,22 @@
-/*
- * Copyright © 2023 Advanced Micro Devices, Inc. All rights reserved.
- */
+// Copyright (c) 2025 Advanced Micro Devices, Inc
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #include <any>
 #include <iostream>
@@ -25,7 +41,9 @@
 
 #include <ops/dmacompiler/matmul_v_geluadd/matmul_v_geluadd.hpp>
 #include <ops/op_interface.hpp>
+#include <ops/ops_common/coeffs.hpp>
 #include <ops/ops_common/ctrlpkt.hpp>
+#include <ops/ops_common/op_util.hpp>
 #include <utils/logging.hpp>
 #include <utils/utils.hpp>
 
@@ -135,6 +153,12 @@ matmul_v_geluadd<InT, WtT, OutT>::matmul_v_geluadd(
     const std::string &a_dtype, const std::string &b_dtype,
     const std::string &c_dtype, bool load_xrt,
     const std::map<std::string, std::any> &attr) {
+
+  is_generic_pass = OpsFusion::check_generic_fusion(attr);
+
+  if (is_generic_pass) {
+    transB = std::any_cast<std::vector<int>>(attr.at("transB_Gemm_0"))[0];
+  }
 
   txnbin_a_header = {{"uint16", "a16"}, {"uint8", "a8"}};
 
@@ -295,16 +319,6 @@ void matmul_v_geluadd<InT, WtT, OutT>::initialize_const_params(
     const std::map<std::string, std::any> &attr) {
   RYZENAI_LOG_TRACE("Matmulgelu initialize_const_params(ptr) ...");
 
-  DD_THROW_IF(
-      (const_params.size() != 4) || (const_params.at(0).shape.size() != 2) ||
-          (const_params.at(1).shape.size() != 1),
-      OpsFusion::dd_format("Unsupported const spec for Matmulgelu\n") +
-          OpsFusion::dd_format(
-              "(Details : #const params == 2 ({}), Const param1 dim == 2 ({}), "
-              "Const param2 dim == 1 ({})",
-              const_params.size(), const_params.at(0).shape.size(),
-              const_params.at(1).shape.size()));
-
   const int w_idx = 0, qdq_idx = 1, qdq_param_idx = 2, gelu_qdq_param_idx = 3;
   // The first data is Weight
   auto weights = (WtT *)const_params.at(w_idx).data;
@@ -313,12 +327,104 @@ void matmul_v_geluadd<InT, WtT, OutT>::initialize_const_params(
   w_shape_[1] = shape[1];
   set_kernel_shapes();
 
-  auto qdq = (int64_t *)const_params.at(qdq_idx).data;
-  // std::vector<size_t> qdq_shape = const_params.at(qdq_idx).shape;
+  //----here
+  gelu_coeffs = std::vector<int32_t>(16, 0);
+  int64_t *qdq;
+  int32_t *qdq_params;
+  int32_t *gelu_qdq_params;
 
-  auto qdq_params = (int32_t *)const_params.at(qdq_param_idx).data;
-  auto gelu_qdq_params = (int32_t *)const_params.at(gelu_qdq_param_idx).data;
+  if (is_generic_pass) {
 
+    float a_s = OpsFusion::get_tensor_as_float_vec(const_params.at(11))[0];
+    uint16_t a_z =
+        OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(12))[0];
+
+    float w_s = OpsFusion::get_tensor_as_float_vec(const_params.at(4))[0];
+    uint16_t w_z = OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(5))[0];
+
+    float b_s = OpsFusion::get_tensor_as_float_vec(const_params.at(2))[0];
+    uint16_t b_z = OpsFusion::get_tensor_as_int32_vec(const_params.at(3))[0];
+
+    float q2_s = OpsFusion::get_tensor_as_float_vec(const_params.at(13))[0];
+    uint16_t q2_z =
+        OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(14))[0];
+
+    float q3_s = OpsFusion::get_tensor_as_float_vec(const_params.at(17))[0];
+    uint16_t q3_z =
+        OpsFusion::get_tensor_as_uint16_t_vec(const_params.at(18))[0];
+
+    auto w_data = OpsFusion::get_tensor_as_uint8_t_vec(const_params.at(0));
+    int32_t rows = (int32_t)const_params.at(0).shape[0];
+    int32_t cols = (int32_t)const_params.at(0).shape[1];
+
+    auto b_data = OpsFusion::get_tensor_as_int32_vec(const_params.at(1));
+
+    const auto &out_dtype =
+        std::any_cast<const std::vector<std::string> &>(attr.at("out_dtypes"));
+
+    std::vector<std::vector<uint8_t>> vec_wts(cols, std::vector<uint8_t>(rows));
+
+    for (size_t i = 0; i < cols; ++i) {
+      for (size_t j = 0; j < rows; ++j) {
+        if (transB) {
+          // std::cout<<"yes in side tranb"<<std::endl;
+          vec_wts[j][i] = w_data[i * rows + j];
+        } else {
+          vec_wts[i][j] = w_data[i * rows + j];
+        }
+      }
+    }
+    if (out_dtype[0] == "uint8") {
+      _qdq_params =
+          OpsFusion::coeffs::calculate_matmuladd_qdq_params_uint8_uint8_b32(
+              OpsFusion::fold2D<uint8_t>(const_params.at(0)), b_data, a_s, a_z,
+              w_s, w_z, b_s, b_z, q2_s, q2_z);
+    } else if (out_dtype[0] == "uint16") {
+      _qdq_params =
+          OpsFusion::coeffs::calculate_matmuladd_qdq_params_uint16_uint8_b32(
+              vec_wts, b_data, a_s, a_z, w_s, w_z, b_s, b_z, q2_s, q2_z);
+    } else {
+      RYZENAI_LOG_TRACE("Unknown Data Type");
+    }
+    qdq = _qdq_params.c0_coeffs.data();
+    qdq_params = _qdq_params.qdq_params.data();
+
+    auto [c0_sc_a, c0_zp_a, c0_sc_b, c0_zp_b] =
+        OpsFusion::coeffs::calc_eltwise_coeff(q2_s, q2_z, (float)1.0 / q3_s,
+                                              q3_z);
+
+    // GELU CALC
+    gelu_coeffs[0] = c0_zp_a;
+    gelu_coeffs[1] = c0_sc_a;
+    gelu_coeffs[2] = c0_zp_b;
+    gelu_coeffs[3] = c0_sc_b;
+    gelu_coeffs[4] = (out_dtype[0] == "uint8") ? 0 : 1;
+    gelu_qdq_params = gelu_coeffs.data();
+
+    std::vector<WtT> transposed_weights(shape[0] * shape[1]);
+    for (size_t i = 0; i < shape[0]; ++i) {
+      for (size_t j = 0; j < shape[1]; ++j) {
+        transposed_weights[j * shape[0] + i] = weights[i * shape[1] + j];
+      }
+    }
+
+    std::copy(transposed_weights.begin(), transposed_weights.end(), weights);
+    std::swap(w_shape_[0], w_shape_[1]);
+  } else {
+    DD_THROW_IF(
+        (const_params.size() != 4) || (const_params.at(0).shape.size() != 2) ||
+            (const_params.at(1).shape.size() != 1),
+        OpsFusion::dd_format("Unsupported const spec for Matmulgelu\n") +
+            OpsFusion::dd_format("(Details : #const params == 2 ({}), Const "
+                                 "param1 dim == 2 ({}), "
+                                 "Const param2 dim == 1 ({})",
+                                 const_params.size(),
+                                 const_params.at(0).shape.size(),
+                                 const_params.at(1).shape.size()));
+    qdq = (int64_t *)const_params.at(qdq_idx).data;
+    qdq_params = (int32_t *)const_params.at(qdq_param_idx).data;
+    gelu_qdq_params = (int32_t *)const_params.at(gelu_qdq_param_idx).data;
+  }
   int const size_lutab = sizeof(lnr_lutab);
   int const size_lutcd = sizeof(lnr_lutcd);
 
@@ -732,9 +838,11 @@ std::vector<OpArgMap> matmul_v_geluadd<InT, WtT, OutT>::get_buffer_reqs(
     const std::map<std::string, std::any> &attr) const {
   // input --> [input, weights, bias, output]
 
-  if (input.size() != 6) {
-    throw std::runtime_error(
-        "matmul_v_geluadd : Incorrect number of tensors received");
+  if (!is_generic_pass) {
+    if (input.size() != 6) {
+      throw std::runtime_error(
+          "matmul_v_geluadd : Incorrect number of tensors received");
+    }
   }
   auto [M, K, N] = extract_MKN(input);
   auto [Mo, Ko] = map_padded_shape(M, K);
@@ -748,7 +856,7 @@ std::vector<OpArgMap> matmul_v_geluadd<InT, WtT, OutT>::get_buffer_reqs(
 
   size_t size_interleaved_qdq = Ko * N / Ksubv * sizeof(int64_t);
   size_interleaved_qdq += 2 * matmul_matrix::QDQparam_size * sizeof(int32_t);
-
+  size_t output_idx = is_generic_pass ? 20 : 5;
   size_t const size_lutab = sizeof(lnr_lutab);
   size_t const size_lutcd = sizeof(lnr_lutcd);
 
@@ -763,7 +871,7 @@ std::vector<OpArgMap> matmul_v_geluadd<InT, WtT, OutT>::get_buffer_reqs(
   std::vector<OpArgMap> arg_map{
       {OpArgMap::OpArgType::INPUT, 1, 0, 0, A_BO_SIZE},
       {OpArgMap::OpArgType::CONST_INPUT, 2, 1, 0, B_BO_SIZE},
-      {OpArgMap::OpArgType::OUTPUT, 0, 5, 0, C_BO_SIZE},
+      {OpArgMap::OpArgType::OUTPUT, 0, output_idx, 0, C_BO_SIZE},
       {OpArgMap::OpArgType::CONST_KERNEL_PARAM_INPUT, 3, 0, 0,
        super_kernel_size},
       {OpArgMap::OpArgType::CTRL_PKT_BIN, 4, 0, 0, ctrl_pkt_size}};
